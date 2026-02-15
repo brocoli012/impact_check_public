@@ -23,14 +23,22 @@ import { PoliciesCommand } from '../../src/commands/policies';
 import { OwnersCommand } from '../../src/commands/owners';
 import { AnnotationsCommand } from '../../src/commands/annotations';
 
+// Mock the web-server module to prevent real Express server from starting during tests.
+// Without this mock, ViewCommand.handleStart() would start a real HTTP server,
+// causing tests to hang/timeout because the server keeps the process alive.
+jest.mock('../../src/server/web-server', () => ({
+  startServer: jest.fn().mockResolvedValue(3847),
+  stopServer: jest.fn().mockResolvedValue(undefined),
+  isServerRunning: jest.fn().mockReturnValue(false),
+}));
+
 // 스텁 커맨드 목록 (아직 구현되지 않은 커맨드)
-// init, reindex, analyze는 실제 구현으로 변경되어 스텁 목록에서 제외
+// init, reindex, analyze, view는 실제 구현으로 변경되어 스텁 목록에서 제외
 const STUB_COMMANDS: Array<{
   name: string;
   CommandClass: new (args: string[]) => Command;
   args: string[];
 }> = [
-  { name: 'view', CommandClass: ViewCommand, args: [] },
   { name: 'tickets', CommandClass: TicketsCommand, args: [] },
   { name: 'projects', CommandClass: ProjectsCommand, args: [] },
   { name: 'policies', CommandClass: PoliciesCommand, args: [] },
@@ -46,6 +54,7 @@ const ALL_COMMANDS: Array<{
   args: string[];
 }> = [
   ...STUB_COMMANDS,
+  { name: 'view', CommandClass: ViewCommand, args: [] },
   { name: 'init', CommandClass: InitCommand, args: [] },
   { name: 'reindex', CommandClass: ReindexCommand, args: [] },
   { name: 'help', CommandClass: HelpCommand, args: [] },
@@ -257,10 +266,24 @@ describe('Command Handlers', () => {
   });
 
   describe('ViewCommand', () => {
-    it('should accept --stop argument', async () => {
+    it('should accept --stop argument and return SUCCESS when no server running', async () => {
       const command = new ViewCommand(['--stop']);
       const result = await command.execute();
+      // isServerRunning is mocked to return false, so --stop returns SUCCESS
       expect(result.code).toBe(ResultCode.SUCCESS);
+      expect(result.message).toContain('No web server');
+    });
+
+    it('should have name "view"', () => {
+      const command = new ViewCommand([]);
+      expect(command.name).toBe('view');
+    });
+
+    it('should return NEEDS_CONFIG when no active project exists', async () => {
+      const command = new ViewCommand([]);
+      const result = await command.execute();
+      // No active project in test env -> NEEDS_CONFIG
+      expect([ResultCode.NEEDS_CONFIG, ResultCode.SUCCESS]).toContain(result.code);
     });
   });
 

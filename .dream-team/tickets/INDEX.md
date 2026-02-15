@@ -4,7 +4,7 @@
 
 | 상태 | 개수 |
 |------|------|
-| Done | 3 |
+| Done | 4 |
 | In Progress | 0 |
 | Backlog | 0 |
 
@@ -28,8 +28,8 @@
 | Phase 1 | Foundation (프로젝트 구조, 타입, CLI, Config) | ✅ Done | 267 pass | 4/10 (R1-R2) | PASS |
 | Phase 2 | Code Indexing (스캐너, 파서, 그래프, 정책, 인덱서) | ✅ Done | 353 pass | 7/10 (R1-R5) | PASS |
 | Phase 3 | Impact Analysis Engine (파싱, 매칭, 분석, 점수, 신뢰도) | ✅ Done | 472 pass | 7/10 (R1-R5) | PASS |
-| Phase 4 | Visualization Web (React SPA, React Flow, Dashboard) | 🔧 개발 대기 | - | - | - |
-| Phase 5 | Ticket Generation & Polish | ⏳ 대기 | - | - | - |
+| Phase 4 | Visualization Web (React SPA, React Flow, Dashboard) | ✅ Done | 529 pass (481+48) | 7/10 (R1-R2) | PASS |
+| Phase 5 | Ticket Generation & Polish | 🔧 개발 대기 | - | - | - |
 
 ## 문서 승인 현황
 
