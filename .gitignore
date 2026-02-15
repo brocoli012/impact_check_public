@@ -2,7 +2,7 @@
 node_modules/
 
 # Build output
-dist/
+# dist/ - 플러그인 배포를 위해 포함
 
 # Runtime data
 .impact/
@@ -32,3 +32,12 @@ npm-debug.log*
 # Temp files
 *.tmp
 *.temp
+
+# Dream Team (local workflow)
+.dream-team/
+
+# Obsidian
+.obsidian/
+
+# Claude Code local settings
+.claude/settings.local.json

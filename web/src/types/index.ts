@@ -162,6 +162,8 @@ export interface ResultSummary {
   grade: string;
   affectedScreenCount: number;
   taskCount: number;
+  /** 데모/목업 데이터 여부 */
+  isDemo?: boolean;
 }
 
 /** 체크리스트 항목 */

@@ -1,0 +1,362 @@
+"use strict";
+/**
+ * @module server/web-server
+ * @description Express.js 웹 서버 - React SPA 정적 파일 서빙 및 API 엔드포인트
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createApp = createApp;
+exports.startServer = startServer;
+exports.stopServer = stopServer;
+exports.isServerRunning = isServerRunning;
+const express_1 = __importDefault(require("express"));
+const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const net = __importStar(require("net"));
+const result_manager_1 = require("../core/analysis/result-manager");
+const config_manager_1 = require("../config/config-manager");
+const logger_1 = require("../utils/logger");
+const file_1 = require("../utils/file");
+/** Express 라우트 파라미터에서 안전하게 문자열을 추출 */
+function getParam(params, key) {
+    const value = params[key];
+    if (Array.isArray(value))
+        return value[0] || '';
+    return value || '';
+}
+/** ID 파라미터 안전성 검증 (영숫자, 하이픈, 언더스코어만 허용) */
+function isValidId(id) {
+    return /^[a-zA-Z0-9_-]+$/.test(id);
+}
+/** 서버 인스턴스 관리를 위한 변수 */
+let serverInstance = null;
+/** 캐시된 활성 프로젝트 경로 (서버 시작 시 1회 로드) */
+let cachedProjectPath = null;
+/**
+ * 포트가 사용 가능한지 확인
+ * @param port - 확인할 포트 번호
+ * @returns 사용 가능 여부
+ */
+function isPortAvailable(port) {
+    return new Promise((resolve) => {
+        const server = net.createServer();
+        server.once('error', () => resolve(false));
+        server.once('listening', () => {
+            server.close();
+            resolve(true);
+        });
+        server.listen(port, '127.0.0.1');
+    });
+}
+/**
+ * 사용 가능한 포트를 찾기
+ * @param startPort - 시작 포트 (기본: 3847)
+ * @param maxAttempts - 최대 시도 횟수 (기본: 10)
+ * @returns 사용 가능한 포트 번호
+ */
+async function findAvailablePort(startPort = 3847, maxAttempts = 10) {
+    for (let i = 0; i < maxAttempts; i++) {
+        const port = startPort + i;
+        if (await isPortAvailable(port)) {
+            return port;
+        }
+    }
+    throw new Error(`No available port found (tried ${startPort}-${startPort + maxAttempts - 1})`);
+}
+/**
+ * 체크리스트 파일 경로를 반환
+ */
+function getChecklistPath(basePath, projectId, resultId) {
+    const impactBase = basePath || process.env.HOME || process.env.USERPROFILE || '.';
+    return path.join(impactBase, '.impact', 'projects', projectId, 'checklists', `${resultId}.json`);
+}
+/**
+ * Express 앱을 생성하고 설정
+ * @param basePath - 데이터 저장 기본 경로
+ * @returns Express Application
+ */
+function createApp(basePath) {
+    const app = (0, express_1.default)();
+    const resultManager = new result_manager_1.ResultManager(basePath);
+    const configManager = new config_manager_1.ConfigManager(basePath);
+    /** 캐시된 프로젝트 ID를 반환하거나, 미로드 시 1회 로드 후 캐시 */
+    async function getProjectId() {
+        if (cachedProjectPath !== null)
+            return cachedProjectPath || null;
+        await configManager.load();
+        cachedProjectPath = configManager.getActiveProject() || '';
+        return cachedProjectPath || null;
+    }
+    app.use(express_1.default.json());
+    // ============================================================
+    // API 엔드포인트
+    // ============================================================
+    /**
+     * GET /api/results - 분석 결과 목록 조회
+     */
+    app.get('/api/results', async (_req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.json({ results: [], message: 'No active project' });
+                return;
+            }
+            const results = await resultManager.list(projectId);
+            res.json({ results });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to list results:', error);
+            res.status(500).json({ error: 'Failed to list results' });
+        }
+    });
+    /**
+     * GET /api/results/latest - 최신 분석 결과 조회
+     */
+    app.get('/api/results/latest', async (_req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.json({ result: null, message: 'No active project' });
+                return;
+            }
+            const result = await resultManager.getLatest(projectId);
+            if (!result) {
+                res.json({ result: null, message: 'No analysis results found' });
+                return;
+            }
+            res.json({ result });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get latest result:', error);
+            res.status(500).json({ error: 'Failed to get latest result' });
+        }
+    });
+    /**
+     * GET /api/results/:id - 특정 분석 결과 조회
+     */
+    app.get('/api/results/:id', async (req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.status(404).json({ error: 'No active project' });
+                return;
+            }
+            const resultId = getParam(req.params, 'id');
+            if (!isValidId(resultId)) {
+                res.status(400).json({ error: 'Invalid result ID' });
+                return;
+            }
+            const result = await resultManager.getById(projectId, resultId);
+            if (!result) {
+                res.status(404).json({ error: 'Result not found' });
+                return;
+            }
+            res.json({ result });
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to get result ${getParam(req.params, 'id')}:`, error);
+            res.status(500).json({ error: 'Failed to get result' });
+        }
+    });
+    /**
+     * GET /api/checklist/:resultId - 체크리스트 상태 조회
+     */
+    app.get('/api/checklist/:resultId', async (req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.status(404).json({ error: 'No active project' });
+                return;
+            }
+            const resultIdParam = getParam(req.params, 'resultId');
+            if (!isValidId(resultIdParam)) {
+                res.status(400).json({ error: 'Invalid result ID' });
+                return;
+            }
+            const checklistPath = getChecklistPath(basePath, projectId, resultIdParam);
+            const checklist = (0, file_1.readJsonFile)(checklistPath);
+            res.json({ checklist: checklist || { resultId: resultIdParam, items: [] } });
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to get checklist for ${getParam(req.params, 'resultId')}:`, error);
+            res.status(500).json({ error: 'Failed to get checklist' });
+        }
+    });
+    /**
+     * PATCH /api/checklist/:resultId/:itemId - 체크리스트 항목 상태 업데이트
+     */
+    app.patch('/api/checklist/:resultId/:itemId', async (req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.status(404).json({ error: 'No active project' });
+                return;
+            }
+            const resultId = getParam(req.params, 'resultId');
+            const itemId = getParam(req.params, 'itemId');
+            if (!isValidId(resultId) || !isValidId(itemId)) {
+                res.status(400).json({ error: 'Invalid ID parameter' });
+                return;
+            }
+            const { checked } = req.body;
+            if (typeof checked !== 'boolean') {
+                res.status(400).json({ error: 'checked field must be a boolean' });
+                return;
+            }
+            const checklistPath = getChecklistPath(basePath, projectId, resultId);
+            const existing = (0, file_1.readJsonFile)(checklistPath);
+            const checklist = existing || { resultId, items: [] };
+            const existingIndex = checklist.items.findIndex(item => item.itemId === itemId);
+            const updatedItem = {
+                itemId,
+                checked,
+                updatedAt: new Date().toISOString(),
+            };
+            if (existingIndex >= 0) {
+                checklist.items[existingIndex] = updatedItem;
+            }
+            else {
+                checklist.items.push(updatedItem);
+            }
+            (0, file_1.ensureDir)(path.dirname(checklistPath));
+            (0, file_1.writeJsonFile)(checklistPath, checklist);
+            res.json({ item: updatedItem });
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to update checklist item:`, error);
+            res.status(500).json({ error: 'Failed to update checklist item' });
+        }
+    });
+    // ============================================================
+    // API 404 핸들러 (SPA 폴백보다 먼저 등록해야 API 요청이 index.html로 빠지지 않음)
+    // ============================================================
+    app.use('/api', (_req, res) => {
+        res.status(404).json({ error: 'API endpoint not found' });
+    });
+    // ============================================================
+    // 정적 파일 서빙 + SPA 폴백
+    // ============================================================
+    const webDistPath = path.join(__dirname, '..', '..', 'web', 'dist');
+    if (fs.existsSync(webDistPath)) {
+        app.use(express_1.default.static(webDistPath));
+        // SPA 폴백: API가 아닌 모든 요청에 index.html 반환
+        // Express v5 requires named wildcard params
+        app.get('{*splat}', (_req, res) => {
+            const indexPath = path.join(webDistPath, 'index.html');
+            if (fs.existsSync(indexPath)) {
+                res.sendFile(indexPath);
+            }
+            else {
+                res.status(404).json({ error: 'Web UI not built. Run: cd web && npm run build' });
+            }
+        });
+    }
+    else {
+        app.get('{*splat}', (req, res) => {
+            if (!req.path.startsWith('/api')) {
+                res.status(404).json({
+                    error: 'Web UI not built',
+                    message: 'Run: cd web && npm run build',
+                });
+            }
+        });
+    }
+    return app;
+}
+/**
+ * 웹 서버를 시작
+ * @param basePath - 데이터 저장 기본 경로
+ * @param preferredPort - 선호 포트 (기본: 3847)
+ * @returns 실제 사용된 포트 번호
+ */
+async function startServer(basePath, preferredPort = 3847) {
+    if (serverInstance) {
+        logger_1.logger.warn('Web server is already running.');
+        const addr = serverInstance.address();
+        if (addr && typeof addr !== 'string') {
+            return addr.port;
+        }
+        return preferredPort;
+    }
+    const port = await findAvailablePort(preferredPort);
+    // 서버 시작 전 config를 1회 로드하여 캐시
+    const configManager = new config_manager_1.ConfigManager(basePath);
+    await configManager.load();
+    cachedProjectPath = configManager.getActiveProject() || '';
+    const app = createApp(basePath);
+    return new Promise((resolve, reject) => {
+        serverInstance = app.listen(port, '127.0.0.1', () => {
+            logger_1.logger.info(`Web server started at http://localhost:${port}`);
+            resolve(port);
+        });
+        serverInstance.on('error', (err) => {
+            logger_1.logger.error('Failed to start web server:', err);
+            serverInstance = null;
+            reject(err);
+        });
+    });
+}
+/**
+ * 웹 서버를 중지
+ */
+async function stopServer() {
+    if (!serverInstance) {
+        logger_1.logger.warn('No web server is running.');
+        return;
+    }
+    return new Promise((resolve, reject) => {
+        serverInstance.close((err) => {
+            if (err) {
+                logger_1.logger.error('Failed to stop web server:', err);
+                reject(err);
+            }
+            else {
+                logger_1.logger.info('Web server stopped.');
+                serverInstance = null;
+                resolve();
+            }
+        });
+    });
+}
+/**
+ * 서버 실행 상태 확인
+ */
+function isServerRunning() {
+    return serverInstance !== null;
+}
+//# sourceMappingURL=web-server.js.map

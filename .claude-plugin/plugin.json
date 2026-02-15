@@ -1,0 +1,12 @@
+{
+  "name": "kic",
+  "version": "1.0.0",
+  "description": "기획서 기반 코드 영향도 분석 도구 (KIC) - 영향 범위, 난이도 점수, 작업 티켓 자동 생성",
+  "author": {
+    "name": "brocoli012"
+  },
+  "homepage": "https://github.com/brocoli012/impact_checker",
+  "repository": "https://github.com/brocoli012/impact_checker",
+  "license": "MIT",
+  "keywords": ["impact-analysis", "code-analysis", "spec-analysis", "ticket-generation"]
+}

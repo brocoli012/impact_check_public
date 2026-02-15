@@ -1,0 +1,256 @@
+"use strict";
+/**
+ * @module core/indexing/graph-builder
+ * @description 의존성 그래프 빌더 - 파싱된 파일들로부터 의존성 그래프 구축
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DependencyGraphBuilder = void 0;
+const path = __importStar(require("path"));
+const logger_1 = require("../../utils/logger");
+/**
+ * DependencyGraphBuilder - 파싱된 파일들의 의존성 관계를 그래프로 구축
+ *
+ * 기능:
+ *   - import 기반 의존성 그래프 생성
+ *   - 영향 받는 노드 탐색 (1-hop)
+ *   - API 호출 관계 매핑 (FE -> BE)
+ */
+class DependencyGraphBuilder {
+    /**
+     * 파싱된 파일들로부터 의존성 그래프 구축
+     * @param parsedFiles - 파싱된 파일 목록
+     * @returns 의존성 그래프
+     */
+    build(parsedFiles) {
+        const nodes = [];
+        const edges = [];
+        const nodeMap = new Map();
+        // 1. 노드 생성 (파일 단위)
+        for (const file of parsedFiles) {
+            const nodeId = this.normalizeFilePath(file.filePath);
+            const nodeType = this.determineNodeType(file);
+            const node = {
+                id: nodeId,
+                type: nodeType,
+                name: path.basename(file.filePath, path.extname(file.filePath)),
+            };
+            nodes.push(node);
+            nodeMap.set(nodeId, node);
+        }
+        // 2. 엣지 생성 (import 관계)
+        for (const file of parsedFiles) {
+            const sourceId = this.normalizeFilePath(file.filePath);
+            for (const imp of file.imports) {
+                const resolvedTarget = this.resolveImportPath(file.filePath, imp.source);
+                if (resolvedTarget && nodeMap.has(resolvedTarget)) {
+                    edges.push({
+                        from: sourceId,
+                        to: resolvedTarget,
+                        type: 'import',
+                    });
+                }
+            }
+            // API 호출 엣지
+            for (const apiCall of file.apiCalls) {
+                const apiNodeId = `api:${apiCall.method}:${apiCall.url}`;
+                if (!nodeMap.has(apiNodeId)) {
+                    const apiNode = {
+                        id: apiNodeId,
+                        type: 'api',
+                        name: `${apiCall.method} ${apiCall.url}`,
+                    };
+                    nodes.push(apiNode);
+                    nodeMap.set(apiNodeId, apiNode);
+                }
+                edges.push({
+                    from: sourceId,
+                    to: apiNodeId,
+                    type: 'api-call',
+                });
+            }
+            // 라우트 정의 엣지
+            for (const route of file.routeDefinitions) {
+                const routeNodeId = `route:${route.path}`;
+                if (!nodeMap.has(routeNodeId)) {
+                    const routeNode = {
+                        id: routeNodeId,
+                        type: 'screen',
+                        name: route.path,
+                    };
+                    nodes.push(routeNode);
+                    nodeMap.set(routeNodeId, routeNode);
+                }
+                edges.push({
+                    from: sourceId,
+                    to: routeNodeId,
+                    type: 'route',
+                });
+            }
+        }
+        logger_1.logger.debug(`Graph built: ${nodes.length} nodes, ${edges.length} edges`);
+        return {
+            graph: { nodes, edges },
+        };
+    }
+    /**
+     * 특정 노드의 영향 받는 노드 탐색 (1-hop)
+     * @param nodeId - 대상 노드 ID
+     * @param graph - 의존성 그래프
+     * @returns 영향 받는 노드 ID 목록
+     */
+    getAffectedNodes(nodeId, graph) {
+        const affected = new Set();
+        // 이 노드를 import하는 파일 (역방향 탐색)
+        for (const edge of graph.graph.edges) {
+            if (edge.to === nodeId) {
+                affected.add(edge.from);
+            }
+        }
+        // 이 노드가 import하는 파일 (순방향 탐색)
+        for (const edge of graph.graph.edges) {
+            if (edge.from === nodeId) {
+                affected.add(edge.to);
+            }
+        }
+        return [...affected];
+    }
+    /**
+     * API 호출 관계 매핑 (FE -> BE)
+     * @param parsedFiles - 파싱된 파일 목록
+     * @returns API 호출 그래프
+     */
+    buildApiCallGraph(parsedFiles) {
+        const callers = [];
+        const endpointMap = new Map();
+        for (const file of parsedFiles) {
+            if (file.apiCalls.length === 0)
+                continue;
+            // 함수별 API 호출 그룹핑
+            const functionCalls = new Map();
+            for (const call of file.apiCalls) {
+                const existing = functionCalls.get(call.callerFunction) || [];
+                existing.push(call);
+                functionCalls.set(call.callerFunction, existing);
+            }
+            for (const [funcName, calls] of functionCalls) {
+                callers.push({
+                    filePath: file.filePath,
+                    functionName: funcName,
+                    calls,
+                });
+                // 엔드포인트 매핑
+                for (const call of calls) {
+                    const key = `${call.method}:${call.url}`;
+                    const existing = endpointMap.get(key);
+                    if (existing) {
+                        if (!existing.calledBy.includes(file.filePath)) {
+                            existing.calledBy.push(file.filePath);
+                        }
+                    }
+                    else {
+                        endpointMap.set(key, {
+                            method: call.method,
+                            url: call.url,
+                            calledBy: [file.filePath],
+                        });
+                    }
+                }
+            }
+        }
+        return {
+            callers,
+            endpoints: [...endpointMap.values()],
+        };
+    }
+    /**
+     * 파일 경로 정규화
+     */
+    normalizeFilePath(filePath) {
+        // 확장자 제거 및 정규화
+        return filePath.replace(/\\/g, '/');
+    }
+    /**
+     * import 경로를 실제 파일 경로로 해석
+     */
+    resolveImportPath(sourceFile, importSource) {
+        // node_modules 패키지는 건너뛰기
+        if (!importSource.startsWith('.') && !importSource.startsWith('/')) {
+            return null;
+        }
+        const sourceDir = path.dirname(sourceFile);
+        let resolvedPath = path.join(sourceDir, importSource);
+        // 확장자 자동 추가 시도
+        const extensions = ['.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+        for (const ext of extensions) {
+            const candidate = resolvedPath + ext;
+            // 실제 파일 시스템을 확인하지 않고 경로만 정규화
+            if (!resolvedPath.match(/\.\w+$/)) {
+                return this.normalizeFilePath(candidate);
+            }
+        }
+        return this.normalizeFilePath(resolvedPath);
+    }
+    /**
+     * 파일의 노드 유형 판별
+     */
+    determineNodeType(file) {
+        // 컴포넌트가 있으면 component
+        if (file.components.length > 0) {
+            return 'component';
+        }
+        // 라우트 정의가 있으면 screen
+        if (file.routeDefinitions.length > 0) {
+            return 'screen';
+        }
+        // API 관련 패턴이 있으면 api
+        const filePath = file.filePath.toLowerCase();
+        if (filePath.includes('/api/') ||
+            filePath.includes('/routes/') ||
+            filePath.includes('/controllers/') ||
+            filePath.includes('/handlers/')) {
+            return 'api';
+        }
+        // model 패턴
+        if (filePath.includes('/models/') ||
+            filePath.includes('/entities/') ||
+            filePath.includes('/schemas/')) {
+            return 'model';
+        }
+        return 'module';
+    }
+}
+exports.DependencyGraphBuilder = DependencyGraphBuilder;
+//# sourceMappingURL=graph-builder.js.map

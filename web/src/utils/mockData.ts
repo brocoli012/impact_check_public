@@ -3,7 +3,7 @@
  * @description 모의 데이터 - 실제 분석 결과가 없을 때 대시보드에 표시할 데모 데이터
  */
 
-import type { AnalysisResult } from '../types';
+import type { AnalysisResult, ResultSummary } from '../types';
 
 /**
  * 모의 분석 결과를 반환
@@ -409,5 +409,21 @@ export function getMockResult(): AnalysisResult {
         action: '주문팀 담당자 리뷰 필수',
       },
     ],
+  };
+}
+
+/**
+ * 모의 분석 결과의 요약 정보를 반환 (LNB용)
+ */
+export function getMockResultSummary(): ResultSummary {
+  return {
+    id: 'demo-analysis-001',
+    specTitle: '장바구니 리뉴얼 기획서',
+    analyzedAt: new Date().toISOString(),
+    totalScore: 45,
+    grade: 'High',
+    affectedScreenCount: 4,
+    taskCount: 6,
+    isDemo: true,
   };
 }

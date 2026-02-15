@@ -1,0 +1,18 @@
+{
+  "name": "kic-marketplace",
+  "owner": {
+    "name": "brocoli012"
+  },
+  "metadata": {
+    "description": "Kurly Impact Checker - 기획서 기반 코드 영향도 분석 플러그인",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "kic",
+      "source": ".",
+      "description": "기획서 기반 코드 영향도 분석 도구",
+      "version": "1.0.0"
+    }
+  ]
+}

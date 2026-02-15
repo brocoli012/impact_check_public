@@ -1,0 +1,22 @@
+/**
+ * @module commands/reindex
+ * @description Reindex 명령어 핸들러 - 코드 인덱스를 수동으로 갱신
+ */
+import { Command, CommandResult } from '../types/common';
+/**
+ * ReindexCommand - 인덱스 갱신 명령어
+ *
+ * 사용법: /impact reindex [--full]
+ * 기능:
+ *   - 증분 인덱스 업데이트 (기본)
+ *   - --full 옵션으로 전체 재인덱싱
+ *   - 인덱싱 진행률 출력
+ */
+export declare class ReindexCommand implements Command {
+    readonly name = "reindex";
+    readonly description = "\uCF54\uB4DC \uC778\uB371\uC2A4\uB97C \uC218\uB3D9\uC73C\uB85C \uAC31\uC2E0\uD569\uB2C8\uB2E4.";
+    private readonly args;
+    constructor(args: string[]);
+    execute(): Promise<CommandResult>;
+}
+//# sourceMappingURL=reindex.d.ts.map
