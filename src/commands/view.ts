@@ -102,8 +102,7 @@ export class ViewCommand implements Command {
     const results = await resultManager.list(projectId);
 
     if (results.length === 0) {
-      console.log('\n분석 결과가 없습니다.');
-      console.log('먼저 분석을 실행해주세요: /impact analyze <spec-file>');
+      console.log('\n📊 분석 결과가 없습니다. 먼저 /impact analyze를 실행하세요.');
       console.log('\n결과 없이 대시보드를 확인하시려면 데모 데이터로 표시합니다.');
     }
 

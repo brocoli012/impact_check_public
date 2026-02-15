@@ -59,7 +59,12 @@ export class SpecParser {
       return await this.parseWithLLM(text);
     } catch (err) {
       if (err instanceof NoProviderConfiguredError) {
-        logger.warn('LLM not configured. Using fallback keyword-based parsing.');
+        logger.warn('⚠️ AI 분석에 실패했습니다. 규칙 기반 분석으로 대체합니다.');
+        return this.fallbackParse(text);
+      }
+      // LLM 호출 실패 시에도 규칙 기반으로 폴백
+      if (err instanceof Error && (err.message.includes('rate limit') || err.message.includes('timeout') || err.message.includes('ECONNREFUSED'))) {
+        logger.warn('⚠️ AI 분석에 실패했습니다. 규칙 기반 분석으로 대체합니다.');
         return this.fallbackParse(text);
       }
       throw err;

@@ -59,7 +59,7 @@ export class InitCommand implements Command {
       logger.error(`경로가 존재하지 않습니다: ${resolvedPath}`);
       return {
         code: ResultCode.FAILURE,
-        message: `Path does not exist: ${resolvedPath}`,
+        message: `❌ 경로가 존재하지 않습니다: ${resolvedPath}`,
       };
     }
 

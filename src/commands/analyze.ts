@@ -9,8 +9,6 @@ import { Command, CommandResult, ResultCode } from '../types/common';
 import { LLMRouter, ProviderRegistry } from '../llm/router';
 import { AnalysisPipeline } from '../core/analysis/pipeline';
 import { SpecInput } from '../core/spec/spec-parser';
-import { readJsonFile } from '../utils/file';
-import { ProjectsConfig } from '../types/index';
 import { logger } from '../utils/logger';
 import { ConfigManager } from '../config/config-manager';
 import { AnthropicProvider } from '../llm/anthropic';
@@ -48,23 +46,26 @@ export class AnalyzeCommand implements Command {
       if (!specInput) {
         return {
           code: ResultCode.FAILURE,
-          message: '기획서 입력을 준비할 수 없습니다. --file 옵션으로 파일을 지정하세요.',
+          message: '📄 기획서 파일을 지정해주세요: /impact analyze --file <파일경로>',
         };
       }
 
-      // 활성 프로젝트 결정
-      const activeProjectId = projectId || this.getActiveProjectId();
+      // 설정 관리자 로드 (HOME 환경변수 우선 사용)
+      const homePath = process.env.HOME || process.env.USERPROFILE;
+      const configManager = new ConfigManager(homePath || undefined);
+      await configManager.load();
+
+      // 활성 프로젝트 결정 (ConfigManager에 위임)
+      const activeProjectId = projectId || configManager.getActiveProject();
       if (!activeProjectId) {
         return {
           code: ResultCode.NEEDS_CONFIG,
-          message: '활성 프로젝트가 없습니다. "init" 명령어로 프로젝트를 등록하세요.',
+          message: '📂 먼저 프로젝트를 초기화하세요: /impact init <프로젝트경로>',
         };
       }
 
       // LLM 라우터 설정 (저장된 설정에서 프로바이더 로드)
       const registry = new ProviderRegistry();
-      const configManager = new ConfigManager();
-      await configManager.load();
       const appConfig = configManager.getConfig();
 
       // 설정된 프로바이더 등록
@@ -158,7 +159,7 @@ export class AnalyzeCommand implements Command {
     if (filePath) {
       const absPath = path.resolve(filePath);
       if (!fs.existsSync(absPath)) {
-        console.log(`  파일을 찾을 수 없습니다: ${absPath}`);
+        console.log(`  ❌ 파일을 찾을 수 없습니다: ${absPath}`);
         return null;
       }
 
@@ -185,21 +186,6 @@ export class AnalyzeCommand implements Command {
     console.log('    /impact analyze --file <기획서.pdf>');
     console.log('');
     return null;
-  }
-
-  /**
-   * 활성 프로젝트 ID 가져오기
-   */
-  private getActiveProjectId(): string | null {
-    const home = process.env.HOME || process.env.USERPROFILE || '.';
-    const projectsPath = path.join(home, '.impact', 'projects.json');
-
-    if (!fs.existsSync(projectsPath)) {
-      return null;
-    }
-
-    const config = readJsonFile<ProjectsConfig>(projectsPath);
-    return config?.activeProject || null;
   }
 
   /**

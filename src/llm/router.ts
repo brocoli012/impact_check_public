@@ -3,8 +3,9 @@
  * @description LLM 라우터 - 용도별 최적 프로바이더 자동 선택
  */
 
-import { LLMProvider, LLMTask, ProviderInfo } from '../types/llm';
+import { LLMProvider, LLMTask, LLMResponse, Message, LLMOptions, ProviderInfo } from '../types/llm';
 import { logger } from '../utils/logger';
+import { retryWithBackoff, RetryOptions } from '../utils/retry';
 
 /** 프로바이더를 찾을 수 없는 에러 */
 export class ProviderNotFoundError extends Error {
@@ -129,6 +130,37 @@ export class LLMRouter {
    */
   getRoutingTable(): Record<LLMTask, string> {
     return { ...this.routingTable };
+  }
+
+  /**
+   * 작업 유형에 맞는 프로바이더를 선택하고 재시도 로직을 적용한 chat 호출
+   *
+   * Rate limit, 타임아웃 등 일시적 에러 발생 시
+   * 지수 백오프(1초->2초->4초)로 최대 3회 재시도합니다.
+   *
+   * @param task - LLM 작업 유형
+   * @param messages - 메시지 목록
+   * @param options - LLM 호출 옵션
+   * @param retryOpts - 재시도 옵션 (선택)
+   * @returns LLM 응답
+   */
+  async chatWithRetry(
+    task: LLMTask,
+    messages: Message[],
+    options?: LLMOptions,
+    retryOpts?: RetryOptions,
+  ): Promise<LLMResponse> {
+    const provider = this.route(task);
+
+    return retryWithBackoff(
+      () => provider.chat(messages, options),
+      {
+        maxRetries: 3,
+        initialDelayMs: 1000,
+        backoffMultiplier: 2,
+        ...retryOpts,
+      },
+    );
   }
 
   /**

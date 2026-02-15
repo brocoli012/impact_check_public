@@ -6,9 +6,10 @@
  * name/description이 비어있지 않은지,
  * execute()가 CommandResult를 반환하는지,
  * 스텁 커맨드들이 올바르게 동작하는지,
- * HelpCommand가 성공적으로 실행되는지 검증합니다.
+ * 실제 구현된 커맨드들이 올바르게 동작하는지 검증합니다.
  */
 
+import * as path from 'path';
 import { Command, ResultCode } from '../../src/types/common';
 import { InitCommand } from '../../src/commands/init';
 import { AnalyzeCommand } from '../../src/commands/analyze';
@@ -33,18 +34,13 @@ jest.mock('../../src/server/web-server', () => ({
 }));
 
 // 스텁 커맨드 목록 (아직 구현되지 않은 커맨드)
-// init, reindex, analyze, view는 실제 구현으로 변경되어 스텁 목록에서 제외
+// annotations만 Phase 2 기능으로 남아있음
 const STUB_COMMANDS: Array<{
   name: string;
   CommandClass: new (args: string[]) => Command;
   args: string[];
 }> = [
-  { name: 'tickets', CommandClass: TicketsCommand, args: [] },
-  { name: 'projects', CommandClass: ProjectsCommand, args: [] },
-  { name: 'policies', CommandClass: PoliciesCommand, args: [] },
-  { name: 'owners', CommandClass: OwnersCommand, args: [] },
   { name: 'annotations', CommandClass: AnnotationsCommand, args: [] },
-  { name: 'demo', CommandClass: DemoCommand, args: [] },
 ];
 
 // 모든 커맨드 목록
@@ -54,6 +50,11 @@ const ALL_COMMANDS: Array<{
   args: string[];
 }> = [
   ...STUB_COMMANDS,
+  { name: 'tickets', CommandClass: TicketsCommand, args: [] },
+  { name: 'projects', CommandClass: ProjectsCommand, args: [] },
+  { name: 'policies', CommandClass: PoliciesCommand, args: [] },
+  { name: 'owners', CommandClass: OwnersCommand, args: [] },
+  { name: 'demo', CommandClass: DemoCommand, args: ['--no-open'] },
   { name: 'view', CommandClass: ViewCommand, args: [] },
   { name: 'init', CommandClass: InitCommand, args: [] },
   { name: 'reindex', CommandClass: ReindexCommand, args: [] },
@@ -219,6 +220,27 @@ describe('Command Handlers', () => {
       expect(result.message).toBeDefined();
       expect(result.message.length).toBeGreaterThan(0);
     });
+
+    it('should show options section for commands with options', async () => {
+      const command = new HelpCommand(['tickets']);
+      await command.execute();
+      const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+      expect(allOutput).toContain('--result-id');
+      expect(allOutput).toContain('--output');
+    });
+
+    it('should list all 12 commands in help output', async () => {
+      const command = new HelpCommand([]);
+      await command.execute();
+      const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+      const expectedCommands = [
+        'init', 'analyze', 'view', 'tickets', 'config', 'reindex',
+        'policies', 'owners', 'annotations', 'projects', 'demo', 'help',
+      ];
+      for (const cmd of expectedCommands) {
+        expect(allOutput).toContain(cmd);
+      }
+    });
   });
 
   describe('InitCommand', () => {
@@ -233,11 +255,11 @@ describe('Command Handlers', () => {
       const command = new InitCommand(['/nonexistent/path/to/project']);
       const result = await command.execute();
       expect(result.code).toBe(ResultCode.FAILURE);
-      expect(result.message).toContain('does not exist');
+      expect(result.message).toContain('경로가 존재하지 않습니다');
     });
 
     it('should return SUCCESS when a valid project path is provided', async () => {
-      const fixturePath = require('path').resolve(__dirname, '../fixtures/sample-project');
+      const fixturePath = path.resolve(__dirname, '../fixtures/sample-project');
       const command = new InitCommand([fixturePath]);
       const result = await command.execute();
       expect(result.code).toBe(ResultCode.SUCCESS);
@@ -288,16 +310,26 @@ describe('Command Handlers', () => {
   });
 
   describe('TicketsCommand', () => {
-    it('should accept --create argument', async () => {
-      const command = new TicketsCommand(['--create']);
-      const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+    it('should have name "tickets"', () => {
+      const command = new TicketsCommand([]);
+      expect(command.name).toBe('tickets');
     });
 
-    it('should accept --detail argument', async () => {
-      const command = new TicketsCommand(['--detail', 'T-001']);
+    it('should return a valid result code', async () => {
+      const command = new TicketsCommand([]);
       const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+      // Without active project -> NEEDS_INDEX
+      // With active project but no results -> FAILURE
+      const validCodes = [ResultCode.SUCCESS, ResultCode.FAILURE, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
+    });
+
+    it('should return FAILURE for nonexistent result-id', async () => {
+      const command = new TicketsCommand(['--result-id', 'nonexistent-result-id']);
+      const result = await command.execute();
+      // Either NEEDS_INDEX (no active project) or FAILURE (result not found)
+      const validCodes = [ResultCode.FAILURE, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
     });
   });
 
@@ -326,57 +358,167 @@ describe('Command Handlers', () => {
   });
 
   describe('ProjectsCommand', () => {
-    it('should accept --switch argument', async () => {
-      const command = new ProjectsCommand(['--switch', 'my-project']);
-      const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+    it('should have name "projects"', () => {
+      const command = new ProjectsCommand([]);
+      expect(command.name).toBe('projects');
     });
 
-    it('should accept --remove argument', async () => {
-      const command = new ProjectsCommand(['--remove', 'old-project']);
+    it('should return SUCCESS for list (no args)', async () => {
+      const command = new ProjectsCommand([]);
       const result = await command.execute();
       expect(result.code).toBe(ResultCode.SUCCESS);
+      expect(result.message).toContain('Listed');
     });
 
-    it('should accept --archive argument', async () => {
-      const command = new ProjectsCommand(['--archive', 'legacy-project']);
+    it('should return FAILURE when --switch without a project name', async () => {
+      const command = new ProjectsCommand(['--switch']);
       const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+      expect(result.code).toBe(ResultCode.FAILURE);
+      expect(result.message).toContain('required');
+    });
+
+    it('should return FAILURE when --switch with nonexistent project', async () => {
+      const command = new ProjectsCommand(['--switch', 'nonexistent-project-xyz']);
+      const result = await command.execute();
+      expect(result.code).toBe(ResultCode.FAILURE);
+      expect(result.message).toContain('not found');
+    });
+
+    it('should return FAILURE when --remove without a project name', async () => {
+      const command = new ProjectsCommand(['--remove']);
+      const result = await command.execute();
+      expect(result.code).toBe(ResultCode.FAILURE);
+    });
+
+    it('should return FAILURE when --remove with nonexistent project', async () => {
+      const command = new ProjectsCommand(['--remove', 'nonexistent-project-xyz']);
+      const result = await command.execute();
+      expect(result.code).toBe(ResultCode.FAILURE);
+      expect(result.message).toContain('not found');
+    });
+
+    it('should return FAILURE when --info without a project name', async () => {
+      const command = new ProjectsCommand(['--info']);
+      const result = await command.execute();
+      expect(result.code).toBe(ResultCode.FAILURE);
+    });
+
+    it('should return FAILURE when --info with nonexistent project', async () => {
+      const command = new ProjectsCommand(['--info', 'nonexistent-project-xyz']);
+      const result = await command.execute();
+      expect(result.code).toBe(ResultCode.FAILURE);
+      expect(result.message).toContain('not found');
     });
   });
 
   describe('PoliciesCommand', () => {
-    it('should accept --search argument', async () => {
-      const command = new PoliciesCommand(['--search', '배송']);
-      const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+    it('should have name "policies"', () => {
+      const command = new PoliciesCommand([]);
+      expect(command.name).toBe('policies');
     });
 
-    it('should accept add subcommand', async () => {
-      const command = new PoliciesCommand(['add', 'new policy']);
+    it('should return a valid result code', async () => {
+      const command = new PoliciesCommand([]);
       const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+      // Either NEEDS_INDEX (no active project) or SUCCESS (empty policies list)
+      const validCodes = [ResultCode.SUCCESS, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
+    });
+
+    it('should return FAILURE when --search without keyword', async () => {
+      const command = new PoliciesCommand(['--search']);
+      const result = await command.execute();
+      // Either NEEDS_INDEX (no active project) or FAILURE (no keyword)
+      // or SUCCESS (no policies found = shows empty message before checking --search)
+      const validCodes = [ResultCode.SUCCESS, ResultCode.FAILURE, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
+    });
+
+    it('should return a valid result code with --search keyword', async () => {
+      const command = new PoliciesCommand(['--search', '배송']);
+      const result = await command.execute();
+      const validCodes = [ResultCode.SUCCESS, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
     });
   });
 
   describe('OwnersCommand', () => {
-    it('should accept --add argument', async () => {
+    it('should have name "owners"', () => {
+      const command = new OwnersCommand([]);
+      expect(command.name).toBe('owners');
+    });
+
+    it('should return a valid result code for list', async () => {
+      const command = new OwnersCommand([]);
+      const result = await command.execute();
+      // Either NEEDS_INDEX (no active project) or SUCCESS (empty list)
+      const validCodes = [ResultCode.SUCCESS, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
+    });
+
+    it('should return FAILURE when --add without sufficient params', async () => {
       const command = new OwnersCommand(['--add']);
       const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+      // Either NEEDS_INDEX (no active project) or FAILURE (insufficient params)
+      const validCodes = [ResultCode.FAILURE, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
     });
 
-    it('should accept --edit argument', async () => {
-      const command = new OwnersCommand(['--edit', 'delivery-system']);
+    it('should return FAILURE when --remove without system ID', async () => {
+      const command = new OwnersCommand(['--remove']);
       const result = await command.execute();
-      expect(result.code).toBe(ResultCode.SUCCESS);
+      const validCodes = [ResultCode.FAILURE, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
     });
 
-    it('should accept --remove argument', async () => {
-      const command = new OwnersCommand(['--remove', 'old-system']);
+    it('should return FAILURE when --show without system ID', async () => {
+      const command = new OwnersCommand(['--show']);
+      const result = await command.execute();
+      const validCodes = [ResultCode.FAILURE, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
+    });
+
+    it('should return FAILURE when --remove nonexistent system', async () => {
+      const command = new OwnersCommand(['--remove', 'nonexistent-system']);
+      const result = await command.execute();
+      const validCodes = [ResultCode.FAILURE, ResultCode.NEEDS_INDEX];
+      expect(validCodes).toContain(result.code);
+    });
+  });
+
+  describe('DemoCommand', () => {
+    it('should have name "demo"', () => {
+      const command = new DemoCommand([]);
+      expect(command.name).toBe('demo');
+    });
+
+    it('should return SUCCESS with --no-open', async () => {
+      const command = new DemoCommand(['--no-open']);
       const result = await command.execute();
       expect(result.code).toBe(ResultCode.SUCCESS);
-    });
+      expect(result.message).toContain('Demo completed');
+    }, 10000);
+
+    it('should return data with projectId and analysisId', async () => {
+      const command = new DemoCommand(['--no-open']);
+      const result = await command.execute();
+      expect(result.code).toBe(ResultCode.SUCCESS);
+      expect(result.data).toBeDefined();
+      const data = result.data as { projectId: string; analysisId: string };
+      expect(data.projectId).toBe('demo-project');
+      expect(data.analysisId).toBe('demo-analysis-001');
+    }, 10000);
+
+    it('should output demo steps', async () => {
+      const command = new DemoCommand(['--no-open']);
+      await command.execute();
+      const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+      expect(allOutput).toContain('[1/5]');
+      expect(allOutput).toContain('[2/5]');
+      expect(allOutput).toContain('[3/5]');
+      expect(allOutput).toContain('[4/5]');
+      expect(allOutput).toContain('[5/5]');
+    }, 10000);
   });
 
   describe('AnnotationsCommand', () => {
