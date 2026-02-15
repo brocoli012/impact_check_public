@@ -213,7 +213,7 @@ function createDemoResult() {
                     layer1Structure: { score: 80, weight: 0.25, details: '구조 분석 완료' },
                     layer2Dependency: { score: 75, weight: 0.25, details: '의존성 그래프 분석 완료' },
                     layer3Policy: { score: 60, weight: 0.20, details: '정책 매칭 완료' },
-                    layer4LLM: { score: 70, weight: 0.30, details: '규칙 기반 분석' },
+                    layer4Analysis: { score: 70, weight: 0.30, details: '규칙 기반 분석' },
                 },
                 warnings: ['보강 주석 미적용'],
                 recommendations: ['보강 주석을 추가하면 신뢰도가 향상됩니다.'],

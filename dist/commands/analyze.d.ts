@@ -10,7 +10,7 @@ import { Command, CommandResult } from '../types/common';
  * 기능:
  *   - 기획서 파싱
  *   - 인덱스 매칭
- *   - LLM 영향도 분석
+ *   - 규칙 기반 영향도 분석
  *   - 점수 산출
  *   - 결과 저장
  */
@@ -28,12 +28,5 @@ export declare class AnalyzeCommand implements Command {
      * 옵션 값 가져오기
      */
     private getOption;
-    /**
-     * 프로바이더 이름으로 LLM 프로바이더 인스턴스 생성
-     * @param providerName - 프로바이더 이름 (anthropic, openai, google)
-     * @param apiKey - 복호화된 API 키
-     * @returns LLM 프로바이더 인스턴스 또는 null
-     */
-    private createProvider;
 }
 //# sourceMappingURL=analyze.d.ts.map

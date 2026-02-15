@@ -8,7 +8,7 @@ import { Command, CommandResult } from '../types/common';
  *
  * 사용법: /impact annotations [generate [path]] [view [path]]
  * 기능:
- *   - LLM 기반 보강 주석 생성
+ *   - 보강 주석 생성
  *   - 기존 보강 주석 조회
  *   - 보강 주석 상태 요약
  */

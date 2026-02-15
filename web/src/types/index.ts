@@ -108,7 +108,7 @@ export interface AnalysisResult {
   analysisId: string;
   analyzedAt: string;
   specTitle: string;
-  analysisMethod?: 'llm' | 'rule-based';
+  analysisMethod: 'rule-based';
   affectedScreens: ScreenImpact[];
   tasks: Task[];
   planningChecks: Check[];

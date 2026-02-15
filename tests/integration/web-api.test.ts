@@ -122,8 +122,7 @@ async function setupTestData(): Promise<void> {
   // config.json 생성
   writeJsonFile(path.join(impactDir, 'config.json'), {
     version: 1,
-    llm: { defaultProvider: 'anthropic', providers: {}, routing: {} },
-    general: { autoReindex: true, webPort: 3847, logLevel: 'info', llmDataConsent: false },
+    general: { autoReindex: true, webPort: 3847, logLevel: 'info' },
   });
 
   // 분석 결과 저장

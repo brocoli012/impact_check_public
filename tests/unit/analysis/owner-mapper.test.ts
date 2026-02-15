@@ -50,6 +50,7 @@ function createImpactResult(tasks: Task[]): ImpactResult {
     tasks,
     planningChecks: [],
     policyChanges: [],
+    analysisMethod: 'rule-based' as const,
   };
 }
 

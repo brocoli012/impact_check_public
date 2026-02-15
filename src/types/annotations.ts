@@ -1,6 +1,6 @@
 /**
  * @module types/annotations
- * @description 보강 주석 타입 정의 - LLM 기반 코드 보강 주석 시스템
+ * @description 보강 주석 타입 정의 - 코드 보강 주석 시스템
  */
 
 import { ISODateString } from './common';
@@ -21,8 +21,8 @@ export interface AnnotationFile {
   sourceHash: string;
   /** 분석 엔진 버전 */
   analyzerVersion: string;
-  /** 분석에 사용된 LLM 모델 */
-  llmModel: string;
+  /** 분석 모델 정보 */
+  model: string;
   /** 파일 요약 */
   fileSummary: {
     /** 파일 전체 요약 */
@@ -54,7 +54,7 @@ export interface FunctionAnnotation {
   signature: string;
   /** 원본 주석 (없으면 null) */
   original_comment: string | null;
-  /** LLM이 생성한 보강 주석 */
+  /** 자동 생성된 보강 주석 */
   enriched_comment: string;
   /** 신뢰도 (0.0~1.0) */
   confidence: number;

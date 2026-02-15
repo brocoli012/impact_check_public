@@ -421,9 +421,9 @@ describe('Session Resume', () => {
   describe('recordFailure', () => {
     it('should record error message', () => {
       const session = sessionManager.startSession('test-project');
-      sessionManager.recordFailure(session, 'LLM API 호출 실패');
+      sessionManager.recordFailure(session, '외부 서비스 호출 실패');
 
-      expect(session.errorMessage).toBe('LLM API 호출 실패');
+      expect(session.errorMessage).toBe('외부 서비스 호출 실패');
     });
   });
 
@@ -474,16 +474,3 @@ describe('Session Resume', () => {
   });
 });
 
-// ============================================================
-// 4. LLM Router Retry Tests
-// ============================================================
-
-describe('LLM Router Retry', () => {
-  it('should have chatWithRetry method', () => {
-    const { LLMRouter, ProviderRegistry } = require('@/llm/router');
-    const registry = new ProviderRegistry();
-    const router = new LLMRouter(registry);
-
-    expect(typeof router.chatWithRetry).toBe('function');
-  });
-});

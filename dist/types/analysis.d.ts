@@ -98,8 +98,8 @@ export interface ImpactResult {
     analyzedAt: ISODateString;
     /** 기획서 제목 */
     specTitle: string;
-    /** 분석 방법 (LLM 또는 규칙 기반) */
-    analysisMethod?: 'llm' | 'rule-based';
+    /** 분석 방법 (규칙 기반) */
+    analysisMethod: 'rule-based';
     /** 영향 받는 화면 목록 */
     affectedScreens: ScreenImpact[];
     /** 작업 목록 */

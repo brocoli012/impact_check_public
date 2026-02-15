@@ -6,14 +6,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Command, CommandResult, ResultCode } from '../types/common';
-import { LLMRouter, ProviderRegistry } from '../llm/router';
 import { AnalysisPipeline } from '../core/analysis/pipeline';
 import { SpecInput } from '../core/spec/spec-parser';
 import { logger } from '../utils/logger';
 import { ConfigManager } from '../config/config-manager';
-import { AnthropicProvider } from '../llm/anthropic';
-import { OpenAIProvider } from '../llm/openai';
-import { GoogleProvider } from '../llm/google';
 
 /**
  * AnalyzeCommand - 영향도 분석 명령어
@@ -22,7 +18,7 @@ import { GoogleProvider } from '../llm/google';
  * 기능:
  *   - 기획서 파싱
  *   - 인덱스 매칭
- *   - LLM 영향도 분석
+ *   - 규칙 기반 영향도 분석
  *   - 점수 산출
  *   - 결과 저장
  */
@@ -64,35 +60,8 @@ export class AnalyzeCommand implements Command {
         };
       }
 
-      // LLM 라우터 설정 (저장된 설정에서 프로바이더 로드)
-      const registry = new ProviderRegistry();
-      const appConfig = configManager.getConfig();
-
-      // 설정된 프로바이더 등록
-      for (const [providerName, providerConfig] of Object.entries(appConfig.llm.providers)) {
-        if (providerConfig.enabled && providerConfig.apiKey) {
-          const apiKey = configManager.getApiKey(providerName);
-          if (apiKey) {
-            const provider = this.createProvider(providerName, apiKey);
-            if (provider) {
-              registry.register(provider);
-              logger.debug(`Loaded LLM provider from config: ${providerName}`);
-            }
-          }
-        }
-      }
-
-      const llmRouter = new LLMRouter(registry);
-
-      // 설정된 라우팅 테이블 적용
-      if (appConfig.llm.routing) {
-        for (const [task, provider] of Object.entries(appConfig.llm.routing)) {
-          llmRouter.setRoute(task as any, provider);
-        }
-      }
-
       // 파이프라인 실행
-      const pipeline = new AnalysisPipeline(llmRouter);
+      const pipeline = new AnalysisPipeline();
       pipeline.setProgressCallback((step, total, message) => {
         const percent = Math.round((step / total) * 100);
         console.log(`  [${step}/${total}] (${percent}%) ${message}`);
@@ -199,23 +168,4 @@ export class AnalyzeCommand implements Command {
     return undefined;
   }
 
-  /**
-   * 프로바이더 이름으로 LLM 프로바이더 인스턴스 생성
-   * @param providerName - 프로바이더 이름 (anthropic, openai, google)
-   * @param apiKey - 복호화된 API 키
-   * @returns LLM 프로바이더 인스턴스 또는 null
-   */
-  private createProvider(providerName: string, apiKey: string): AnthropicProvider | OpenAIProvider | GoogleProvider | null {
-    switch (providerName) {
-      case 'anthropic':
-        return new AnthropicProvider(apiKey);
-      case 'openai':
-        return new OpenAIProvider(apiKey);
-      case 'google':
-        return new GoogleProvider(apiKey);
-      default:
-        logger.warn(`Unknown LLM provider: ${providerName}`);
-        return null;
-    }
-  }
 }

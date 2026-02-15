@@ -2,7 +2,6 @@
  * @module core/analysis/pipeline
  * @description 분석 파이프라인 오케스트레이터 - 전체 분석 파이프라인 실행
  */
-import { LLMRouter } from '../../llm/router';
 import { ConfidenceEnrichedResult } from '../../types/analysis';
 import { SpecInput } from '../spec/spec-parser';
 /** 파이프라인 진행 콜백 */
@@ -28,7 +27,7 @@ export declare class AnalysisPipeline {
     private readonly resultManager;
     private readonly indexer;
     private onProgress?;
-    constructor(llmRouter: LLMRouter, basePath?: string);
+    constructor(basePath?: string);
     /**
      * 진행률 콜백 설정
      */

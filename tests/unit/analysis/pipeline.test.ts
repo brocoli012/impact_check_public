@@ -1,13 +1,12 @@
 /**
  * @module tests/unit/analysis/pipeline
- * @description AnalysisPipeline 통합 테스트 (LLM 모킹)
+ * @description AnalysisPipeline 통합 테스트
  */
 
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { AnalysisPipeline } from '../../../src/core/analysis/pipeline';
-import { LLMRouter, ProviderRegistry } from '../../../src/llm/router';
 import { CodeIndex } from '../../../src/types/index';
 import { SpecInput } from '../../../src/core/spec/spec-parser';
 import { ensureDir, writeJsonFile } from '../../../src/utils/file';
@@ -191,10 +190,8 @@ describe('AnalysisPipeline', () => {
   });
 
   describe('run', () => {
-    it('should run full pipeline with fallback (no LLM)', async () => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      const pipeline = new AnalysisPipeline(router, tmpDir);
+    it('should run full pipeline (rule-based)', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
 
       const input: SpecInput = {
         type: 'text',
@@ -214,7 +211,7 @@ describe('AnalysisPipeline', () => {
       expect(['Low', 'Medium', 'High', 'Critical']).toContain(result.grade);
       expect(result.recommendation).toBeTruthy();
 
-      // Fallback parser may or may not match screens depending on keyword extraction
+      // Rule-based parser may or may not match screens depending on keyword extraction
       expect(Array.isArray(result.affectedScreens)).toBe(true);
 
       // 점수 확인
@@ -235,9 +232,7 @@ describe('AnalysisPipeline', () => {
     });
 
     it('should report progress', async () => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      const pipeline = new AnalysisPipeline(router, tmpDir);
+      const pipeline = new AnalysisPipeline(tmpDir);
 
       const progressSteps: number[] = [];
       pipeline.setProgressCallback((step, _total, _message) => {
@@ -256,9 +251,7 @@ describe('AnalysisPipeline', () => {
     });
 
     it('should throw error when index not found', async () => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      const pipeline = new AnalysisPipeline(router, tmpDir);
+      const pipeline = new AnalysisPipeline(tmpDir);
 
       const input: SpecInput = {
         type: 'text',
@@ -273,9 +266,7 @@ describe('AnalysisPipeline', () => {
 
   describe('saveResult', () => {
     it('should save and load result', async () => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      const pipeline = new AnalysisPipeline(router, tmpDir);
+      const pipeline = new AnalysisPipeline(tmpDir);
 
       const input: SpecInput = {
         type: 'text',

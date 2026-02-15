@@ -60,16 +60,10 @@ const COMMAND_HELP: Record<
     ],
   },
   config: {
-    usage: '/impact config [--provider <name>] [--key <api_key>]',
-    description: 'LLM 프로바이더 및 API 키를 설정합니다.',
-    options: [
-      '--provider <name>  LLM 프로바이더 이름 (anthropic, openai, google)',
-      '--key <api_key>    API 키 (암호화되어 저장)',
-    ],
-    examples: [
-      '/impact config',
-      '/impact config --provider anthropic --key sk-ant-xxxxx',
-    ],
+    usage: '/impact config',
+    description: '프로젝트 설정을 확인합니다.',
+    options: [],
+    examples: ['/impact config'],
   },
   reindex: {
     usage: '/impact reindex [--full]',

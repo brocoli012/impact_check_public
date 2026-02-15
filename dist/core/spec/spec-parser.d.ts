@@ -2,7 +2,6 @@
  * @module core/spec/spec-parser
  * @description 기획서 파서 - 기획서를 파싱하여 구조화된 결과 반환
  */
-import { LLMRouter } from '../../llm/router';
 import { ParsedSpec } from '../../types/analysis';
 /** 기획서 입력 타입 */
 export interface SpecInput {
@@ -16,16 +15,10 @@ export interface SpecInput {
 /**
  * SpecParser - 기획서를 파싱하여 구조화된 결과 반환
  *
- * LLM을 사용하여 기획서를 ParsedSpec 타입으로 구조화.
- * LLM 미설정 시 키워드 기반 폴백 모드로 동작.
+ * 키워드 기반 규칙 파싱으로 기획서를 ParsedSpec 타입으로 구조화.
+ * 외부에서 제공된 구조화 데이터도 parseFromStructuredInput()으로 수용 가능.
  */
 export declare class SpecParser {
-    private readonly llmRouter;
-    /**
-     * SpecParser 생성
-     * @param llmRouter - LLM 라우터 인스턴스
-     */
-    constructor(llmRouter: LLMRouter);
     /**
      * 기획서를 파싱하여 구조화된 결과 반환
      * @param input - 기획서 입력
@@ -33,7 +26,7 @@ export declare class SpecParser {
      */
     parse(input: SpecInput): Promise<ParsedSpec>;
     /**
-     * 텍스트 입력 처리
+     * 텍스트 입력 처리 (키워드 기반 규칙 파싱)
      * @param text - 기획서 텍스트
      * @returns 파싱된 기획서
      */
@@ -51,41 +44,27 @@ export declare class SpecParser {
      */
     private extractTextFromPdf;
     /**
-     * LLM을 사용한 기획서 파싱
+     * 외부에서 제공된 구조화된 데이터를 검증하여 ParsedSpec으로 변환
+     *
+     * Claude 등 외부 시스템이 생성한 JSON 데이터를 수용합니다.
+     * 필수 필드 검증 및 기본값 적용을 통해 안전한 ParsedSpec을 생성합니다.
+     *
+     * @param data - 외부에서 제공된 구조화된 데이터
+     * @returns 검증된 ParsedSpec
+     */
+    parseFromStructuredInput(data: unknown): ParsedSpec;
+    /**
+     * 키워드 기반 규칙 파싱
      * @param text - 기획서 텍스트
-     * @returns 파싱된 기획서
+     * @returns 파싱 결과
      */
-    private parseWithLLM;
+    private parseKeywordBased;
     /**
-     * LLM 응답을 파싱하여 구조화된 결과로 변환
-     * @param content - LLM 응답 내용
-     * @returns 파싱된 결과 (ParsedSpec 부분)
-     */
-    private parseLLMResponse;
-    /**
-     * LLM 파싱 결과를 완전한 ParsedSpec으로 보강
-     * @param partial - 부분 파싱 결과
-     * @param originalText - 원본 텍스트
-     * @returns 완전한 ParsedSpec
-     */
-    private enrichParsedSpec;
-    /**
-     * 텍스트에서 제목 추출 (폴백)
+     * 텍스트에서 제목 추출
      * @param text - 기획서 텍스트
      * @returns 추출된 제목
      */
     private extractTitle;
-    /**
-     * 프롬프트 템플릿 로드
-     * @returns 프롬프트 템플릿 문자열
-     */
-    private loadPromptTemplate;
-    /**
-     * LLM 없이 키워드 기반 간단 파싱 (폴백 모드)
-     * @param text - 기획서 텍스트
-     * @returns 폴백 파싱 결과
-     */
-    fallbackParse(text: string): ParsedSpec;
     /**
      * 텍스트에서 키워드 추출
      */

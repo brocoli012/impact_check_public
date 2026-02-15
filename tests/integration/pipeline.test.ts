@@ -86,7 +86,7 @@ describe('E2E Pipeline', () => {
       const initCmd = new InitCommand([SAMPLE_PROJECT]);
       initResult = await initCmd.execute();
 
-      // Step 2: 기획서 분석 (LLM 없이 규칙 기반 폴백)
+      // Step 2: 기획서 분석 (규칙 기반)
       const analyzeCmd = new AnalyzeCommand(['--file', SAMPLE_SPEC, '--project', 'sample-project']);
       analyzeResult = await analyzeCmd.execute();
 
@@ -124,7 +124,7 @@ describe('E2E Pipeline', () => {
       expect(data.stats.totalFiles).toBeGreaterThanOrEqual(1);
     });
 
-    it('should analyze with fallback mode (no LLM)', () => {
+    it('should analyze with rule-based mode', () => {
       expect(analyzeResult.code).toBe(ResultCode.SUCCESS);
       expect(analyzeResult.message).toContain('분석 완료');
 

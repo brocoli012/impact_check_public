@@ -62,11 +62,11 @@ const fs = __importStar(require("fs"));
  * Step 6: 신뢰도 산출 (ConfidenceScorer)
  */
 class AnalysisPipeline {
-    constructor(llmRouter, basePath) {
-        this.specParser = new spec_parser_1.SpecParser(llmRouter);
+    constructor(basePath) {
+        this.specParser = new spec_parser_1.SpecParser();
         this.indexMatcher = new matcher_1.IndexMatcher();
-        this.impactAnalyzer = new analyzer_1.ImpactAnalyzer(llmRouter);
-        this.scorer = new scorer_1.Scorer(llmRouter);
+        this.impactAnalyzer = new analyzer_1.ImpactAnalyzer();
+        this.scorer = new scorer_1.Scorer();
         this.policyMatcher = new policy_matcher_1.PolicyMatcher();
         this.ownerMapper = new owner_mapper_1.OwnerMapper();
         this.confidenceScorer = new confidence_scorer_1.ConfidenceScorer();
@@ -156,7 +156,7 @@ class AnalysisPipeline {
             confidenceScore: c.overallScore,
             grade: c.grade,
             reason: c.warnings.join('; ') || '분석 데이터가 불충분합니다.',
-            action: c.recommendations.join('; ') || '인덱스를 갱신하고 LLM을 설정하세요.',
+            action: c.recommendations.join('; ') || '인덱스를 갱신하세요.',
         }));
         const finalResult = {
             ...enrichedResult,

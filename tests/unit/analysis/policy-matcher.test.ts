@@ -33,6 +33,7 @@ function createTestImpact(): ImpactResult {
         ],
       },
     ],
+    analysisMethod: 'rule-based' as const,
     tasks: [
       {
         id: 'T-001',

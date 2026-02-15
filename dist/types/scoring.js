@@ -62,6 +62,6 @@ exports.CONFIDENCE_WEIGHTS = {
     layer1Structure: 0.25,
     layer2Dependency: 0.25,
     layer3Policy: 0.20,
-    layer4LLM: 0.30,
+    layer4Analysis: 0.30,
 };
 //# sourceMappingURL=scoring.js.map

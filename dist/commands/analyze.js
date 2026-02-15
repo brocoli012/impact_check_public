@@ -41,13 +41,9 @@ exports.AnalyzeCommand = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const common_1 = require("../types/common");
-const router_1 = require("../llm/router");
 const pipeline_1 = require("../core/analysis/pipeline");
 const logger_1 = require("../utils/logger");
 const config_manager_1 = require("../config/config-manager");
-const anthropic_1 = require("../llm/anthropic");
-const openai_1 = require("../llm/openai");
-const google_1 = require("../llm/google");
 /**
  * AnalyzeCommand - 영향도 분석 명령어
  *
@@ -55,7 +51,7 @@ const google_1 = require("../llm/google");
  * 기능:
  *   - 기획서 파싱
  *   - 인덱스 매칭
- *   - LLM 영향도 분석
+ *   - 규칙 기반 영향도 분석
  *   - 점수 산출
  *   - 결과 저장
  */
@@ -90,31 +86,8 @@ class AnalyzeCommand {
                     message: '📂 먼저 프로젝트를 초기화하세요: /impact init <프로젝트경로>',
                 };
             }
-            // LLM 라우터 설정 (저장된 설정에서 프로바이더 로드)
-            const registry = new router_1.ProviderRegistry();
-            const appConfig = configManager.getConfig();
-            // 설정된 프로바이더 등록
-            for (const [providerName, providerConfig] of Object.entries(appConfig.llm.providers)) {
-                if (providerConfig.enabled && providerConfig.apiKey) {
-                    const apiKey = configManager.getApiKey(providerName);
-                    if (apiKey) {
-                        const provider = this.createProvider(providerName, apiKey);
-                        if (provider) {
-                            registry.register(provider);
-                            logger_1.logger.debug(`Loaded LLM provider from config: ${providerName}`);
-                        }
-                    }
-                }
-            }
-            const llmRouter = new router_1.LLMRouter(registry);
-            // 설정된 라우팅 테이블 적용
-            if (appConfig.llm.routing) {
-                for (const [task, provider] of Object.entries(appConfig.llm.routing)) {
-                    llmRouter.setRoute(task, provider);
-                }
-            }
             // 파이프라인 실행
-            const pipeline = new pipeline_1.AnalysisPipeline(llmRouter);
+            const pipeline = new pipeline_1.AnalysisPipeline();
             pipeline.setProgressCallback((step, total, message) => {
                 const percent = Math.round((step / total) * 100);
                 console.log(`  [${step}/${total}] (${percent}%) ${message}`);
@@ -206,25 +179,6 @@ class AnalyzeCommand {
             return this.args[idx + 1];
         }
         return undefined;
-    }
-    /**
-     * 프로바이더 이름으로 LLM 프로바이더 인스턴스 생성
-     * @param providerName - 프로바이더 이름 (anthropic, openai, google)
-     * @param apiKey - 복호화된 API 키
-     * @returns LLM 프로바이더 인스턴스 또는 null
-     */
-    createProvider(providerName, apiKey) {
-        switch (providerName) {
-            case 'anthropic':
-                return new anthropic_1.AnthropicProvider(apiKey);
-            case 'openai':
-                return new openai_1.OpenAIProvider(apiKey);
-            case 'google':
-                return new google_1.GoogleProvider(apiKey);
-            default:
-                logger_1.logger.warn(`Unknown LLM provider: ${providerName}`);
-                return null;
-        }
     }
 }
 exports.AnalyzeCommand = AnalyzeCommand;

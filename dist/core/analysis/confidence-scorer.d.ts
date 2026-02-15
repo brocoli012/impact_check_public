@@ -10,7 +10,7 @@ import { CodeIndex } from '../../types/index';
  * Layer 1 (구조): 25% - 코드 구조 분석 기반
  * Layer 2 (의존성): 25% - 의존성 그래프 기반
  * Layer 3 (정책): 20% - 정책/주석 기반
- * Layer 4 (LLM): 30% - LLM 추론 기반
+ * Layer 4 (분석 품질): 30% - 분석 결과 품질 기반
  *
  * 등급:
  * - high: 85+
@@ -48,15 +48,10 @@ export declare class ConfidenceScorer {
      */
     private calculatePolicyScore;
     /**
-     * Layer 4: LLM 추론 점수
-     * - LLM이 사용되었는지 기반
+     * Layer 4: 분석 품질 점수
+     * - 규칙 기반 분석의 품질 지표 기반
      */
-    private calculateLLMScore;
-    /**
-     * LLM 사용 여부 추론 (analysisMethod 필드가 없는 경우 폴백)
-     * 레거시 호환을 위해 rationale 길이 기반 휴리스틱 사용
-     */
-    private inferLLMUsage;
+    private calculateAnalysisQualityScore;
     /**
      * 전체 신뢰도 점수 계산
      */
@@ -76,6 +71,6 @@ export declare class ConfidenceScorer {
     private getStructureDetails;
     private getDependencyDetails;
     private getPolicyDetails;
-    private getLLMDetails;
+    private getAnalysisQualityDetails;
 }
 //# sourceMappingURL=confidence-scorer.d.ts.map

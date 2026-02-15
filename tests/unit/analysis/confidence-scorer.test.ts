@@ -170,6 +170,7 @@ function createTestEnrichedResult(options?: {
     policyWarnings: opts.hasPolicyWarnings
       ? [{ id: 'PW-001', policyId: 'pol-1', policyName: 'Policy1', message: 'Warning', severity: 'warning' as const, relatedTaskIds: ['T-001'] }]
       : [],
+    analysisMethod: 'rule-based' as const,
     ownerNotifications: [],
   };
 }
@@ -186,13 +187,13 @@ describe('ConfidenceScorer', () => {
       expect(CONFIDENCE_WEIGHTS.layer1Structure).toBe(0.25);
       expect(CONFIDENCE_WEIGHTS.layer2Dependency).toBe(0.25);
       expect(CONFIDENCE_WEIGHTS.layer3Policy).toBe(0.20);
-      expect(CONFIDENCE_WEIGHTS.layer4LLM).toBe(0.30);
+      expect(CONFIDENCE_WEIGHTS.layer4Analysis).toBe(0.30);
 
       const sum =
         CONFIDENCE_WEIGHTS.layer1Structure +
         CONFIDENCE_WEIGHTS.layer2Dependency +
         CONFIDENCE_WEIGHTS.layer3Policy +
-        CONFIDENCE_WEIGHTS.layer4LLM;
+        CONFIDENCE_WEIGHTS.layer4Analysis;
       expect(sum).toBeCloseTo(1.0, 10);
     });
   });
@@ -256,12 +257,12 @@ describe('ConfidenceScorer', () => {
         expect(conf.layers.layer1Structure).toBeDefined();
         expect(conf.layers.layer2Dependency).toBeDefined();
         expect(conf.layers.layer3Policy).toBeDefined();
-        expect(conf.layers.layer4LLM).toBeDefined();
+        expect(conf.layers.layer4Analysis).toBeDefined();
 
         expect(conf.layers.layer1Structure.weight).toBe(0.25);
         expect(conf.layers.layer2Dependency.weight).toBe(0.25);
         expect(conf.layers.layer3Policy.weight).toBe(0.20);
-        expect(conf.layers.layer4LLM.weight).toBe(0.30);
+        expect(conf.layers.layer4Analysis.weight).toBe(0.30);
       }
     });
 
@@ -299,58 +300,13 @@ describe('ConfidenceScorer', () => {
       expect(confidences.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should give higher Layer 4 score when analysisMethod is llm', () => {
-      const llmResult = createTestEnrichedResult();
-      llmResult.analysisMethod = 'llm';
-
-      const ruleResult = createTestEnrichedResult();
-      ruleResult.analysisMethod = 'rule-based';
-
-      const index = createRichIndex();
-
-      const llmConfidences = confidenceScorer.calculate(llmResult, index);
-      const ruleConfidences = confidenceScorer.calculate(ruleResult, index);
-
-      const llmLayer4 = llmConfidences[0].layers.layer4LLM.score;
-      const ruleLayer4 = ruleConfidences[0].layers.layer4LLM.score;
-
-      expect(llmLayer4).toBeGreaterThan(ruleLayer4);
-    });
-
-    it('should use rationale-based fallback when analysisMethod is not set', () => {
-      const resultNoMethod = createTestEnrichedResult({ hasDetailedRationale: true });
-      // Ensure analysisMethod is undefined for fallback
-      resultNoMethod.analysisMethod = undefined;
-
-      const index = createRichIndex();
-
-      const confidences = confidenceScorer.calculate(resultNoMethod, index);
-
-      // Should still work using fallback heuristic
-      expect(confidences.length).toBeGreaterThan(0);
-      expect(confidences[0].layers.layer4LLM.score).toBeGreaterThan(0);
-    });
-
-    it('should report LLM-based analysis in details when analysisMethod is llm', () => {
+    it('should report rule-based analysis in details', () => {
       const result = createTestEnrichedResult();
-      result.analysisMethod = 'llm';
-
       const index = createRichIndex();
 
       const confidences = confidenceScorer.calculate(result, index);
 
-      expect(confidences[0].layers.layer4LLM.details).toBe('LLM-based analysis');
-    });
-
-    it('should report Rule-based analysis in details when analysisMethod is rule-based', () => {
-      const result = createTestEnrichedResult();
-      result.analysisMethod = 'rule-based';
-
-      const index = createRichIndex();
-
-      const confidences = confidenceScorer.calculate(result, index);
-
-      expect(confidences[0].layers.layer4LLM.details).toBe('Rule-based analysis (no LLM)');
+      expect(confidences[0].layers.layer4Analysis.details).toContain('Rule-based analysis');
     });
   });
 });

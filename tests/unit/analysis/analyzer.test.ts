@@ -4,10 +4,8 @@
  */
 
 import { ImpactAnalyzer } from '../../../src/core/analysis/analyzer';
-import { LLMRouter, ProviderRegistry } from '../../../src/llm/router';
 import { ParsedSpec, MatchedEntities } from '../../../src/types/analysis';
 import { CodeIndex } from '../../../src/types/index';
-import { LLMProvider, LLMResponse } from '../../../src/types/llm';
 
 // fs mock
 jest.mock('fs', () => {
@@ -217,319 +215,40 @@ function createTestMatched(): MatchedEntities {
   };
 }
 
-/** Mock LLM Provider */
-function createMockProvider(chatResponse?: string): LLMProvider {
-  return {
-    name: 'mock-provider',
-    displayName: 'Mock Provider',
-    chat: jest.fn().mockResolvedValue({
-      content: chatResponse || '{}',
-      usage: { inputTokens: 100, outputTokens: 50, estimatedCost: 0.01 },
-      model: 'mock-model',
-      provider: 'mock-provider',
-    } as LLMResponse),
-    estimateTokens: jest.fn().mockReturnValue(100),
-    estimateCost: jest.fn().mockReturnValue(0.01),
-    validateApiKey: jest.fn().mockResolvedValue(true),
-    listModels: jest.fn().mockReturnValue(['mock-model']),
-  };
-}
-
 describe('ImpactAnalyzer', () => {
   let index: CodeIndex;
   let spec: ParsedSpec;
   let matched: MatchedEntities;
+  let analyzer: ImpactAnalyzer;
 
   beforeEach(() => {
     jest.clearAllMocks();
     index = createTestIndex();
     spec = createTestSpec();
     matched = createTestMatched();
+    analyzer = new ImpactAnalyzer();
   });
 
-  describe('analyze (LLM path)', () => {
-    it('should use LLM when provider is configured', async () => {
-      const mockProvider = createMockProvider(JSON.stringify({
-        affectedScreens: [
-          {
-            screenId: 'screen-1',
-            screenName: 'CartPage',
-            impactLevel: 'high',
-            tasks: [
-              {
-                id: 'T-001',
-                title: '[FE] 수량 입력 필드 추가',
-                type: 'FE',
-                actionType: 'modify',
-                description: '수량 입력 필드 추가',
-                affectedFiles: ['src/pages/CartPage.tsx'],
-                relatedApis: ['api-1'],
-                planningChecks: [],
-                rationale: 'LLM 분석 결과',
-              },
-            ],
-          },
-        ],
-        planningChecks: [],
-        policyChanges: [],
-      }));
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = await analyzer.analyze(spec, matched, index);
-
-      expect(mockProvider.chat).toHaveBeenCalledTimes(1);
-      expect(result.specTitle).toBe('장바구니 기능 개선');
-      expect(result.affectedScreens).toHaveLength(1);
-      expect(result.affectedScreens[0].screenName).toBe('CartPage');
-      expect(result.affectedScreens[0].impactLevel).toBe('high');
-      expect(result.tasks).toHaveLength(1);
-      expect(result.tasks[0].id).toBe('T-001');
-    });
-
-    it('should parse LLM response wrapped in code block', async () => {
-      const jsonContent = JSON.stringify({
-        affectedScreens: [
-          {
-            screenId: 'screen-1',
-            screenName: 'CartPage',
-            impactLevel: 'medium',
-            tasks: [],
-          },
-        ],
-        planningChecks: [
-          {
-            id: 'PC-001',
-            content: '확인 필요',
-            relatedFeatureId: 'F-001',
-            priority: 'high',
-          },
-        ],
-        policyChanges: [],
-      });
-
-      const wrappedResponse = '```json\n' + jsonContent + '\n```';
-      const mockProvider = createMockProvider(wrappedResponse);
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = await analyzer.analyze(spec, matched, index);
-
-      expect(result.affectedScreens).toHaveLength(1);
-      expect(result.planningChecks).toHaveLength(1);
-      expect(result.planningChecks[0].content).toBe('확인 필요');
-      expect(result.planningChecks[0].status).toBe('pending');
-    });
-
-    it('should throw error for malformed LLM JSON response', async () => {
-      const mockProvider = createMockProvider('this is not json at all {{{');
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      await expect(
-        analyzer.analyze(spec, matched, index),
-      ).rejects.toThrow('LLM response for impact analysis is not valid JSON.');
-    });
-
-    it('should handle LLM response with empty arrays gracefully', async () => {
-      const mockProvider = createMockProvider(JSON.stringify({
-        affectedScreens: [],
-        planningChecks: [],
-        policyChanges: [],
-      }));
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = await analyzer.analyze(spec, matched, index);
-
-      expect(result.affectedScreens).toHaveLength(0);
-      expect(result.tasks).toHaveLength(0);
-      expect(result.planningChecks).toHaveLength(0);
-      expect(result.policyChanges).toHaveLength(0);
-    });
-
-    it('should handle LLM response with missing optional fields', async () => {
-      const mockProvider = createMockProvider(JSON.stringify({
-        affectedScreens: [
-          {
-            screenId: 'screen-1',
-            tasks: [
-              { id: 'T-001' },
-            ],
-          },
-        ],
-      }));
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = await analyzer.analyze(spec, matched, index);
-
-      expect(result.affectedScreens).toHaveLength(1);
-      expect(result.affectedScreens[0].screenName).toBe('');
-      expect(result.affectedScreens[0].impactLevel).toBe('medium');
-      expect(result.tasks[0].title).toBe('');
-      expect(result.tasks[0].type).toBe('FE');
-      expect(result.tasks[0].actionType).toBe('modify');
-    });
-
-    it('should filter out hallucinated file paths not found in index (R7)', async () => {
-      const mockProvider = createMockProvider(JSON.stringify({
-        affectedScreens: [
-          {
-            screenId: 'screen-1',
-            screenName: 'CartPage',
-            impactLevel: 'high',
-            tasks: [
-              {
-                id: 'T-001',
-                title: '[FE] 수량 입력 필드 추가',
-                type: 'FE',
-                actionType: 'modify',
-                description: '수량 입력 필드 추가',
-                affectedFiles: [
-                  'src/pages/CartPage.tsx',           // exists in index
-                  'src/pages/NonExistent.tsx',         // hallucinated
-                  'src/components/FakeComponent.tsx',  // hallucinated
-                ],
-                relatedApis: ['api-1'],
-                planningChecks: [],
-                rationale: 'LLM 분석 결과',
-              },
-            ],
-          },
-        ],
-        planningChecks: [],
-        policyChanges: [
-          {
-            id: 'POL-001',
-            policyName: '최소 주문 금액',
-            description: '정책 변경',
-            changeType: 'modify',
-            affectedFiles: [
-              'src/utils/validation.ts',     // exists in index
-              'src/utils/nonexistent.ts',    // hallucinated
-            ],
-            requiresReview: true,
-          },
-        ],
-      }));
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = await analyzer.analyze(spec, matched, index);
-
-      // Task affectedFiles should only contain paths that exist in the index
-      expect(result.tasks[0].affectedFiles).toEqual(['src/pages/CartPage.tsx']);
-      expect(result.tasks[0].affectedFiles).not.toContain('src/pages/NonExistent.tsx');
-      expect(result.tasks[0].affectedFiles).not.toContain('src/components/FakeComponent.tsx');
-
-      // PolicyChange affectedFiles should also be filtered
-      expect(result.policyChanges[0].affectedFiles).toEqual(['src/utils/validation.ts']);
-      expect(result.policyChanges[0].affectedFiles).not.toContain('src/utils/nonexistent.ts');
-    });
-
-    it('should include policyChanges from LLM response', async () => {
-      const mockProvider = createMockProvider(JSON.stringify({
-        affectedScreens: [],
-        planningChecks: [],
-        policyChanges: [
-          {
-            id: 'POL-001',
-            policyName: '최소 주문 금액',
-            description: '정책 변경 필요',
-            changeType: 'modify',
-            affectedFiles: ['src/utils/validation.ts'],
-            requiresReview: true,
-          },
-        ],
-      }));
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = await analyzer.analyze(spec, matched, index);
-
-      expect(result.policyChanges).toHaveLength(1);
-      expect(result.policyChanges[0].policyName).toBe('최소 주문 금액');
-      expect(result.policyChanges[0].requiresReview).toBe(true);
-    });
-  });
-
-  describe('analyze (fallback path)', () => {
-    it('should fall back to rule-based analysis when no LLM provider configured', async () => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      const analyzer = new ImpactAnalyzer(router);
-
+  describe('analyze (rule-based)', () => {
+    it('should analyze with rule-based method', async () => {
       const result = await analyzer.analyze(spec, matched, index);
 
       expect(result.specTitle).toBe('장바구니 기능 개선');
       expect(result.analysisId).toMatch(/^analysis-/);
       expect(result.analyzedAt).toBeTruthy();
+      expect(result.analysisMethod).toBe('rule-based');
     });
 
-    it('should re-throw non-NoProviderConfiguredError errors', async () => {
-      const mockProvider = createMockProvider();
-      (mockProvider.chat as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      await expect(
-        analyzer.analyze(spec, matched, index),
-      ).rejects.toThrow('Network error');
-    });
-  });
-
-  describe('analyzeWithoutLLM (rule-based)', () => {
-    let analyzer: ImpactAnalyzer;
-
-    beforeEach(() => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      analyzer = new ImpactAnalyzer(router);
-    });
-
-    it('should generate affectedScreens from matched screens', () => {
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+    it('should generate affectedScreens from matched screens', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
 
       expect(result.affectedScreens).toHaveLength(1);
       expect(result.affectedScreens[0].screenId).toBe('screen-1');
       expect(result.affectedScreens[0].screenName).toBe('CartPage');
     });
 
-    it('should generate tasks for matching features and screens', () => {
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+    it('should generate tasks for matching features and screens', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
 
       // CartPage should get a task from the feature
       const screenTasks = result.affectedScreens[0].tasks;
@@ -541,8 +260,8 @@ describe('ImpactAnalyzer', () => {
       expect(screenTasks[0].affectedFiles).toContain('src/pages/CartPage.tsx');
     });
 
-    it('should generate BE tasks for high-score matched APIs', () => {
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+    it('should generate BE tasks for high-score matched APIs', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
 
       // api-1 has matchScore 0.7 (> 0.5), so it gets a BE task
       const beTasks = result.tasks.filter(t => t.type === 'BE');
@@ -551,8 +270,8 @@ describe('ImpactAnalyzer', () => {
       expect(beTasks[0].actionType).toBe('modify');
     });
 
-    it('should NOT generate BE tasks for low-score APIs', () => {
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+    it('should NOT generate BE tasks for low-score APIs', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
 
       // api-2 has matchScore 0.3 (< 0.5), should be excluded
       const orderApiTask = result.tasks.find(t =>
@@ -561,8 +280,8 @@ describe('ImpactAnalyzer', () => {
       expect(orderApiTask).toBeUndefined();
     });
 
-    it('should generate planning checks from ambiguities', () => {
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+    it('should generate planning checks from ambiguities', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
 
       expect(result.planningChecks.length).toBeGreaterThan(0);
       const check = result.planningChecks.find(c =>
@@ -574,8 +293,8 @@ describe('ImpactAnalyzer', () => {
       expect(check!.id).toMatch(/^PC-/);
     });
 
-    it('should detect policy changes from business rules', () => {
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+    it('should detect policy changes from business rules', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
 
       // businessRule mentions "최소 주문 금액" which overlaps with policy "최소 주문 금액 정책"
       expect(result.policyChanges.length).toBeGreaterThan(0);
@@ -586,15 +305,15 @@ describe('ImpactAnalyzer', () => {
       expect(policyChange.requiresReview).toBe(true);
     });
 
-    it('should determine impact level based on matchScore and taskCount', () => {
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+    it('should determine impact level based on matchScore and taskCount', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
 
       // matchScore=0.9, taskCount varies
       const level = result.affectedScreens[0].impactLevel;
       expect(['low', 'medium', 'high', 'critical']).toContain(level);
     });
 
-    it('should handle empty spec features gracefully', () => {
+    it('should handle empty spec features gracefully', async () => {
       const emptySpec: ParsedSpec = {
         title: '빈 기획서',
         requirements: [],
@@ -605,14 +324,14 @@ describe('ImpactAnalyzer', () => {
         ambiguities: [],
       };
 
-      const result = analyzer.analyzeWithoutLLM(emptySpec, matched, index);
+      const result = await analyzer.analyze(emptySpec, matched, index);
 
       // Still creates screen impacts from matched, but tasks may be minimal
       expect(result.specTitle).toBe('빈 기획서');
       expect(result.affectedScreens).toHaveLength(1);
     });
 
-    it('should handle no matching screens', () => {
+    it('should handle no matching screens', async () => {
       const emptyMatched: MatchedEntities = {
         screens: [],
         components: [],
@@ -620,13 +339,13 @@ describe('ImpactAnalyzer', () => {
         models: [],
       };
 
-      const result = analyzer.analyzeWithoutLLM(spec, emptyMatched, index);
+      const result = await analyzer.analyze(spec, emptyMatched, index);
 
       expect(result.affectedScreens).toHaveLength(0);
       expect(result.planningChecks.length).toBeGreaterThan(0); // ambiguities still generate checks
     });
 
-    it('should generate low-confidence checks for screens with low matchScore', () => {
+    it('should generate low-confidence checks for screens with low matchScore', async () => {
       const lowConfMatched: MatchedEntities = {
         screens: [
           { id: 'screen-1', name: 'CartPage', matchScore: 0.3, matchReason: 'weak' },
@@ -636,7 +355,7 @@ describe('ImpactAnalyzer', () => {
         models: [],
       };
 
-      const result = analyzer.analyzeWithoutLLM(spec, lowConfMatched, index);
+      const result = await analyzer.analyze(spec, lowConfMatched, index);
 
       // Should have planning check about low confidence for CartPage
       const lowConfCheck = result.planningChecks.find(c =>
@@ -647,16 +366,8 @@ describe('ImpactAnalyzer', () => {
     });
   });
 
-  describe('isFeatureRelevantToScreen (via analyzeWithoutLLM)', () => {
-    let analyzer: ImpactAnalyzer;
-
-    beforeEach(() => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      analyzer = new ImpactAnalyzer(router);
-    });
-
-    it('should match feature by targetScreen name', () => {
+  describe('isFeatureRelevantToScreen (via analyze)', () => {
+    it('should match feature by targetScreen name', async () => {
       const specWithTarget: ParsedSpec = {
         title: 'Test',
         requirements: [],
@@ -685,14 +396,14 @@ describe('ImpactAnalyzer', () => {
         models: [],
       };
 
-      const result = analyzer.analyzeWithoutLLM(specWithTarget, matchedWithCart, index);
+      const result = await analyzer.analyze(specWithTarget, matchedWithCart, index);
 
       const screenTasks = result.affectedScreens[0].tasks;
       expect(screenTasks.length).toBe(1);
       expect(screenTasks[0].title).toContain('Cart Feature');
     });
 
-    it('should match feature by keyword in screen name', () => {
+    it('should match feature by keyword in screen name', async () => {
       const specWithKeyword: ParsedSpec = {
         title: 'Test',
         requirements: [],
@@ -721,14 +432,14 @@ describe('ImpactAnalyzer', () => {
         models: [],
       };
 
-      const result = analyzer.analyzeWithoutLLM(specWithKeyword, matchedWithOrder, index);
+      const result = await analyzer.analyze(specWithKeyword, matchedWithOrder, index);
 
       const screenTasks = result.affectedScreens[0].tasks;
       expect(screenTasks.length).toBe(1);
       expect(screenTasks[0].title).toContain('Order Feature');
     });
 
-    it('should include feature for all screens when only one feature exists and no match', () => {
+    it('should include feature for all screens when only one feature exists and no match', async () => {
       const specSingle: ParsedSpec = {
         title: 'Test',
         requirements: [],
@@ -757,14 +468,14 @@ describe('ImpactAnalyzer', () => {
         models: [],
       };
 
-      const result = analyzer.analyzeWithoutLLM(specSingle, matchedWithCart, index);
+      const result = await analyzer.analyze(specSingle, matchedWithCart, index);
 
       // With only 1 feature, it should be included for every screen (spec.features.length <= 1)
       const screenTasks = result.affectedScreens[0].tasks;
       expect(screenTasks.length).toBe(1);
     });
 
-    it('should skip irrelevant features when multiple features exist', () => {
+    it('should skip irrelevant features when multiple features exist', async () => {
       const specMultiple: ParsedSpec = {
         title: 'Test',
         requirements: [],
@@ -801,7 +512,7 @@ describe('ImpactAnalyzer', () => {
         models: [],
       };
 
-      const result = analyzer.analyzeWithoutLLM(specMultiple, matchedWithCart, index);
+      const result = await analyzer.analyze(specMultiple, matchedWithCart, index);
 
       // Only the Cart Feature should match for CartPage (not Order Feature)
       const screenTasks = result.affectedScreens[0].tasks;
@@ -811,15 +522,7 @@ describe('ImpactAnalyzer', () => {
   });
 
   describe('hasOverlap stop words (M8)', () => {
-    let analyzer: ImpactAnalyzer;
-
-    beforeEach(() => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      analyzer = new ImpactAnalyzer(router);
-    });
-
-    it('should NOT match when only common Korean stop words overlap', () => {
+    it('should NOT match when only common Korean stop words overlap', async () => {
       // "변경 필요 작업" vs "변경 처리 확인" - only stop words overlap
       const specWithStopWords: ParsedSpec = {
         title: '테스트',
@@ -857,15 +560,15 @@ describe('ImpactAnalyzer', () => {
         ],
       };
 
-      const result = analyzer.analyzeWithoutLLM(specWithStopWords, matched, indexWithStopWordPolicy);
+      const result = await analyzer.analyze(specWithStopWords, matched, indexWithStopWordPolicy);
 
       // Should NOT detect policy changes because only stop words overlap
       expect(result.policyChanges).toHaveLength(0);
     });
 
-    it('should still match when meaningful words overlap beyond stop words', () => {
+    it('should still match when meaningful words overlap beyond stop words', async () => {
       // "최소 주문 금액 변경 필요" vs "최소 주문 금액 정책" - "주문", "금액" are meaningful
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
+      const result = await analyzer.analyze(spec, matched, index);
 
       // "최소 주문 금액은 15000원 이상으로 변경" overlaps with "최소 주문 금액 정책"
       // because "주문", "금액", "최소" are not stop words
@@ -874,42 +577,31 @@ describe('ImpactAnalyzer', () => {
   });
 
   describe('analysisMethod flag (M6)', () => {
-    it('should set analysisMethod to rule-based in analyzeWithoutLLM', () => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = analyzer.analyzeWithoutLLM(spec, matched, index);
-
-      expect(result.analysisMethod).toBe('rule-based');
-    });
-
-    it('should set analysisMethod to llm when LLM is used', async () => {
-      const mockProvider = createMockProvider(JSON.stringify({
-        affectedScreens: [],
-        planningChecks: [],
-        policyChanges: [],
-      }));
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      router.setRoute('impact-analysis', 'mock-provider');
-      const analyzer = new ImpactAnalyzer(router);
-
-      const result = await analyzer.analyze(spec, matched, index);
-
-      expect(result.analysisMethod).toBe('llm');
-    });
-
-    it('should set analysisMethod to rule-based on LLM fallback', async () => {
-      const registry = new ProviderRegistry();
-      const router = new LLMRouter(registry);
-      const analyzer = new ImpactAnalyzer(router);
-
+    it('should always set analysisMethod to rule-based', async () => {
       const result = await analyzer.analyze(spec, matched, index);
 
       expect(result.analysisMethod).toBe('rule-based');
+    });
+  });
+
+  describe('buildValidFilePathSet', () => {
+    it('should collect all file paths from index', () => {
+      const paths = analyzer.buildValidFilePathSet(index);
+
+      expect(paths.has('src/pages/CartPage.tsx')).toBe(true);
+      expect(paths.has('src/pages/OrderPage.tsx')).toBe(true);
+      expect(paths.has('src/components/CartItem.tsx')).toBe(true);
+      expect(paths.has('src/components/OrderForm.tsx')).toBe(true);
+      expect(paths.has('src/api/cart.ts')).toBe(true);
+      expect(paths.has('src/api/orders.ts')).toBe(true);
+      expect(paths.has('src/models/CartItem.ts')).toBe(true);
+      expect(paths.has('src/utils/validation.ts')).toBe(true);
+    });
+
+    it('should not contain paths not in index', () => {
+      const paths = analyzer.buildValidFilePathSet(index);
+
+      expect(paths.has('src/nonexistent.ts')).toBe(false);
     });
   });
 });

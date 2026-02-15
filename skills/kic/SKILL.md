@@ -45,9 +45,9 @@ commands:
 작업 티켓을 조회하거나 생성합니다.
 실행: node {skill_dir}/../../dist/index.js tickets [--create] [--detail <id>]
 
-### /impact config [--provider <name>] [--key <api_key>]
-LLM 프로바이더 및 API 키를 설정합니다.
-실행: node {skill_dir}/../../dist/index.js config [--provider <name>] [--key <api_key>]
+### /impact config
+프로젝트 설정을 확인합니다.
+실행: node {skill_dir}/../../dist/index.js config
 
 ### /impact reindex [--full]
 코드 인덱스를 수동으로 갱신합니다.
@@ -154,7 +154,7 @@ LLM 프로바이더 및 API 키를 설정합니다.
 | 결과 보기 | `node {skill_dir}/../../dist/index.js view` | "결과 보여줘", "대시보드 열어줘" |
 | 티켓 생성 | `node {skill_dir}/../../dist/index.js tickets` | "티켓 만들어줘", "작업 분배" |
 | 데모 | `node {skill_dir}/../../dist/index.js demo` | "데모 보여줘", "샘플" |
-| 설정 | `node {skill_dir}/../../dist/index.js config` | "설정", "API 키" |
+| 설정 | `node {skill_dir}/../../dist/index.js config` | "설정", "프로젝트 설정" |
 | 인덱스 갱신 | `node {skill_dir}/../../dist/index.js reindex` | "인덱스 갱신", "재스캔" |
 | 정책 검색 | `node {skill_dir}/../../dist/index.js policies --search <term>` | "정책 검색" |
 | 담당자 | `node {skill_dir}/../../dist/index.js owners` | "담당자 확인" |

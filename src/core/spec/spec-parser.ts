@@ -5,9 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { LLMRouter, NoProviderConfiguredError } from '../../llm/router';
 import { ParsedSpec, Feature, Requirement, BusinessRule } from '../../types/analysis';
-import { Message } from '../../types/llm';
 import { logger } from '../../utils/logger';
 
 /** 기획서 입력 타입 */
@@ -23,20 +21,10 @@ export interface SpecInput {
 /**
  * SpecParser - 기획서를 파싱하여 구조화된 결과 반환
  *
- * LLM을 사용하여 기획서를 ParsedSpec 타입으로 구조화.
- * LLM 미설정 시 키워드 기반 폴백 모드로 동작.
+ * 키워드 기반 규칙 파싱으로 기획서를 ParsedSpec 타입으로 구조화.
+ * 외부에서 제공된 구조화 데이터도 parseFromStructuredInput()으로 수용 가능.
  */
 export class SpecParser {
-  private readonly llmRouter: LLMRouter;
-
-  /**
-   * SpecParser 생성
-   * @param llmRouter - LLM 라우터 인스턴스
-   */
-  constructor(llmRouter: LLMRouter) {
-    this.llmRouter = llmRouter;
-  }
-
   /**
    * 기획서를 파싱하여 구조화된 결과 반환
    * @param input - 기획서 입력
@@ -50,25 +38,12 @@ export class SpecParser {
   }
 
   /**
-   * 텍스트 입력 처리
+   * 텍스트 입력 처리 (키워드 기반 규칙 파싱)
    * @param text - 기획서 텍스트
    * @returns 파싱된 기획서
    */
   private async parseText(text: string): Promise<ParsedSpec> {
-    try {
-      return await this.parseWithLLM(text);
-    } catch (err) {
-      if (err instanceof NoProviderConfiguredError) {
-        logger.warn('⚠️ AI 분석에 실패했습니다. 규칙 기반 분석으로 대체합니다.');
-        return this.fallbackParse(text);
-      }
-      // LLM 호출 실패 시에도 규칙 기반으로 폴백
-      if (err instanceof Error && (err.message.includes('rate limit') || err.message.includes('timeout') || err.message.includes('ECONNREFUSED'))) {
-        logger.warn('⚠️ AI 분석에 실패했습니다. 규칙 기반 분석으로 대체합니다.');
-        return this.fallbackParse(text);
-      }
-      throw err;
-    }
+    return this.parseKeywordBased(text);
   }
 
   /**
@@ -106,87 +81,49 @@ export class SpecParser {
   }
 
   /**
-   * LLM을 사용한 기획서 파싱
-   * @param text - 기획서 텍스트
-   * @returns 파싱된 기획서
+   * 외부에서 제공된 구조화된 데이터를 검증하여 ParsedSpec으로 변환
+   *
+   * Claude 등 외부 시스템이 생성한 JSON 데이터를 수용합니다.
+   * 필수 필드 검증 및 기본값 적용을 통해 안전한 ParsedSpec을 생성합니다.
+   *
+   * @param data - 외부에서 제공된 구조화된 데이터
+   * @returns 검증된 ParsedSpec
    */
-  private async parseWithLLM(text: string): Promise<ParsedSpec> {
-    const provider = this.llmRouter.route('spec-parsing');
-    const promptTemplate = this.loadPromptTemplate();
-    const prompt = promptTemplate.replace('{기획서 원문}', text);
-
-    const messages: Message[] = [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ];
-
-    logger.info('Parsing spec with LLM...');
-    const response = await provider.chat(messages, {
-      responseFormat: 'json',
-      temperature: 0.1,
-      maxTokens: 4096,
-    });
-
-    const parsed = this.parseLLMResponse(response.content);
-    return this.enrichParsedSpec(parsed, text);
-  }
-
-  /**
-   * LLM 응답을 파싱하여 구조화된 결과로 변환
-   * @param content - LLM 응답 내용
-   * @returns 파싱된 결과 (ParsedSpec 부분)
-   */
-  private parseLLMResponse(content: string): Partial<ParsedSpec> {
-    // JSON 코드 블록이 있으면 추출
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
-
-    try {
-      return JSON.parse(jsonStr);
-    } catch {
-      throw new Error(
-        'LLM response is not valid JSON. Please check the LLM configuration and prompt template.'
-      );
+  parseFromStructuredInput(data: unknown): ParsedSpec {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid structured input: expected an object');
     }
-  }
 
-  /**
-   * LLM 파싱 결과를 완전한 ParsedSpec으로 보강
-   * @param partial - 부분 파싱 결과
-   * @param originalText - 원본 텍스트
-   * @returns 완전한 ParsedSpec
-   */
-  private enrichParsedSpec(partial: Partial<ParsedSpec>, originalText: string): ParsedSpec {
-    const features: Feature[] = (partial.features || []).map((f, i) => ({
-      id: f.id || `F-${String(i + 1).padStart(3, '0')}`,
-      name: f.name || '',
-      description: f.description || '',
-      targetScreen: f.targetScreen || '',
-      actionType: f.actionType || 'modify',
-      keywords: f.keywords || [],
+    const input = data as Record<string, unknown>;
+
+    const features: Feature[] = (Array.isArray(input.features) ? input.features : []).map((f: Record<string, unknown>, i: number) => ({
+      id: String(f.id || `F-${String(i + 1).padStart(3, '0')}`),
+      name: String(f.name || ''),
+      description: String(f.description || ''),
+      targetScreen: String(f.targetScreen || ''),
+      actionType: (['new', 'modify', 'config'].includes(String(f.actionType)) ? String(f.actionType) : 'modify') as 'new' | 'modify' | 'config',
+      keywords: Array.isArray(f.keywords) ? f.keywords.map(String) : [],
     }));
 
-    const requirements: Requirement[] = (partial.requirements || []).map((r, i) => ({
-      id: r.id || `R-${String(i + 1).padStart(3, '0')}`,
-      name: r.name || '',
-      description: r.description || '',
-      priority: r.priority || 'should',
-      relatedFeatures: r.relatedFeatures || [],
+    const requirements: Requirement[] = (Array.isArray(input.requirements) ? input.requirements : []).map((r: Record<string, unknown>, i: number) => ({
+      id: String(r.id || `R-${String(i + 1).padStart(3, '0')}`),
+      name: String(r.name || ''),
+      description: String(r.description || ''),
+      priority: (['must', 'should', 'could', 'wont'].includes(String(r.priority)) ? String(r.priority) : 'should') as 'must' | 'should' | 'could' | 'wont',
+      relatedFeatures: Array.isArray(r.relatedFeatures) ? r.relatedFeatures.map(String) : [],
     }));
 
-    const businessRules: BusinessRule[] = (partial.businessRules || []).map((b, i) => ({
-      id: b.id || `BR-${String(i + 1).padStart(3, '0')}`,
-      description: b.description || '',
-      relatedFeatures: b.relatedFeatures || [],
+    const businessRules: BusinessRule[] = (Array.isArray(input.businessRules) ? input.businessRules : []).map((b: Record<string, unknown>, i: number) => ({
+      id: String(b.id || `BR-${String(i + 1).padStart(3, '0')}`),
+      description: String(b.description || ''),
+      relatedFeatures: Array.isArray(b.relatedFeatures) ? b.relatedFeatures.map(String) : [],
     }));
 
     // 모든 기능의 키워드를 수집
     const allKeywords = new Set<string>();
     features.forEach(f => f.keywords.forEach(k => allKeywords.add(k)));
-    if (partial.keywords) {
-      partial.keywords.forEach(k => allKeywords.add(k));
+    if (Array.isArray(input.keywords)) {
+      input.keywords.forEach((k: unknown) => allKeywords.add(String(k)));
     }
 
     // 대상 화면 수집
@@ -194,81 +131,28 @@ export class SpecParser {
     features.forEach(f => {
       if (f.targetScreen) targetScreens.add(f.targetScreen);
     });
-    if (partial.targetScreens) {
-      partial.targetScreens.forEach(s => targetScreens.add(s));
+    if (Array.isArray(input.targetScreens)) {
+      input.targetScreens.forEach((s: unknown) => targetScreens.add(String(s)));
     }
 
     return {
-      title: partial.title || this.extractTitle(originalText),
+      title: String(input.title || '제목 없음'),
       requirements,
       features,
       businessRules,
       targetScreens: Array.from(targetScreens),
       keywords: Array.from(allKeywords),
-      ambiguities: partial.ambiguities || [],
+      ambiguities: Array.isArray(input.ambiguities) ? input.ambiguities.map(String) : [],
     };
   }
 
   /**
-   * 텍스트에서 제목 추출 (폴백)
+   * 키워드 기반 규칙 파싱
    * @param text - 기획서 텍스트
-   * @returns 추출된 제목
+   * @returns 파싱 결과
    */
-  private extractTitle(text: string): string {
-    const lines = text.split('\n').filter(l => l.trim().length > 0);
-    if (lines.length === 0) return '제목 없음';
-
-    // 첫 번째 비어있지 않은 줄을 제목으로 사용
-    const firstLine = lines[0].replace(/^#+\s*/, '').trim();
-    return firstLine.length > 100 ? firstLine.substring(0, 100) + '...' : firstLine;
-  }
-
-  /**
-   * 프롬프트 템플릿 로드
-   * @returns 프롬프트 템플릿 문자열
-   */
-  private loadPromptTemplate(): string {
-    const templatePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'prompts',
-      'parse-spec.prompt.md'
-    );
-
-    try {
-      if (fs.existsSync(templatePath)) {
-        return fs.readFileSync(templatePath, 'utf-8');
-      }
-    } catch {
-      logger.debug('Failed to load prompt template, using default.');
-    }
-
-    // 기본 프롬프트
-    return `당신은 소프트웨어 기획서 분석 전문가입니다.
-주어진 기획서를 분석하여 JSON으로 변환하세요.
-
-<spec>
-{기획서 원문}
-</spec>
-
-다음 JSON 형식으로 출력하세요:
-{
-  "title": "기획 제목",
-  "features": [{ "id": "F-001", "name": "", "description": "", "targetScreen": "", "actionType": "new|modify|config", "keywords": [] }],
-  "businessRules": [{ "id": "BR-001", "description": "", "relatedFeatures": [] }],
-  "ambiguities": []
-}`;
-  }
-
-  /**
-   * LLM 없이 키워드 기반 간단 파싱 (폴백 모드)
-   * @param text - 기획서 텍스트
-   * @returns 폴백 파싱 결과
-   */
-  fallbackParse(text: string): ParsedSpec {
-    logger.info('Using fallback keyword-based parsing...');
+  private parseKeywordBased(text: string): ParsedSpec {
+    logger.info('Using keyword-based parsing...');
 
     const title = this.extractTitle(text);
 
@@ -287,7 +171,7 @@ export class SpecParser {
     // 불명확한 사항
     const ambiguities: string[] = [];
     if (features.length === 0) {
-      ambiguities.push('기획서에서 구체적인 기능 요구사항을 식별하지 못했습니다. LLM을 설정하면 더 정확한 분석이 가능합니다.');
+      ambiguities.push('기획서에서 구체적인 기능 요구사항을 식별하지 못했습니다.');
     }
 
     return {
@@ -305,6 +189,20 @@ export class SpecParser {
       keywords,
       ambiguities,
     };
+  }
+
+  /**
+   * 텍스트에서 제목 추출
+   * @param text - 기획서 텍스트
+   * @returns 추출된 제목
+   */
+  private extractTitle(text: string): string {
+    const lines = text.split('\n').filter(l => l.trim().length > 0);
+    if (lines.length === 0) return '제목 없음';
+
+    // 첫 번째 비어있지 않은 줄을 제목으로 사용
+    const firstLine = lines[0].replace(/^#+\s*/, '').trim();
+    return firstLine.length > 100 ? firstLine.substring(0, 100) + '...' : firstLine;
   }
 
   /**

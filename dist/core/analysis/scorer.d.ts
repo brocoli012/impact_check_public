@@ -2,7 +2,6 @@
  * @module core/analysis/scorer
  * @description 점수 산출기 - 4차원 가중합 점수 산출 및 등급 결정
  */
-import { LLMRouter } from '../../llm/router';
 import { ImpactResult, ScoredResult, ScreenScore, TaskScore } from '../../types/analysis';
 import { ScoreBreakdown, Grade } from '../../types/scoring';
 /**
@@ -21,18 +20,12 @@ import { ScoreBreakdown, Grade } from '../../types/scoring';
  * - Critical: 71+
  */
 export declare class Scorer {
-    private readonly llmRouter;
-    constructor(llmRouter: LLMRouter);
     /**
-     * 4차원 점수 산출
+     * 4차원 점수 산출 (규칙 기반)
      * @param impact - 영향도 분석 결과
      * @returns 점수가 포함된 결과
      */
     score(impact: ImpactResult): Promise<ScoredResult>;
-    /**
-     * LLM 기반 점수 산출
-     */
-    private scoreWithLLM;
     /**
      * 규칙 기반 점수 산출
      */
@@ -98,14 +91,6 @@ export declare class Scorer {
      * 기본 점수 분해
      */
     private defaultScoreBreakdown;
-    /**
-     * LLM 점수 응답 파싱
-     */
-    private parseLLMScoreResponse;
-    /**
-     * 프롬프트 템플릿 로드
-     */
-    private loadPromptTemplate;
     private getComplexityRationale;
     private getScopeRationale;
     private getPolicyRationale;

@@ -3,7 +3,6 @@
  * @description 분석 파이프라인 오케스트레이터 - 전체 분석 파이프라인 실행
  */
 
-import { LLMRouter } from '../../llm/router';
 import {
   ParsedSpec,
   MatchedEntities,
@@ -53,11 +52,11 @@ export class AnalysisPipeline {
   private readonly indexer: Indexer;
   private onProgress?: ProgressCallback;
 
-  constructor(llmRouter: LLMRouter, basePath?: string) {
-    this.specParser = new SpecParser(llmRouter);
+  constructor(basePath?: string) {
+    this.specParser = new SpecParser();
     this.indexMatcher = new IndexMatcher();
-    this.impactAnalyzer = new ImpactAnalyzer(llmRouter);
-    this.scorer = new Scorer(llmRouter);
+    this.impactAnalyzer = new ImpactAnalyzer();
+    this.scorer = new Scorer();
     this.policyMatcher = new PolicyMatcher();
     this.ownerMapper = new OwnerMapper();
     this.confidenceScorer = new ConfidenceScorer();
@@ -168,7 +167,7 @@ export class AnalysisPipeline {
         confidenceScore: c.overallScore,
         grade: c.grade,
         reason: c.warnings.join('; ') || '분석 데이터가 불충분합니다.',
-        action: c.recommendations.join('; ') || '인덱스를 갱신하고 LLM을 설정하세요.',
+        action: c.recommendations.join('; ') || '인덱스를 갱신하세요.',
       }));
 
     const finalResult: ConfidenceEnrichedResult = {

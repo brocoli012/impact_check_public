@@ -66,6 +66,7 @@ function createTestResult(overrides: Partial<ConfidenceEnrichedResult> = {}): Co
     recommendation: 'test recommendation',
     policyWarnings: [],
     ownerNotifications: [],
+    analysisMethod: 'rule-based' as const,
     confidenceScores: [],
     lowConfidenceWarnings: [],
     ...overrides,

@@ -35,7 +35,6 @@ describe('ConfigManager', () => {
       await configManager.load();
       const config = configManager.getConfig();
       expect(config.version).toBe(DEFAULT_CONFIG.version);
-      expect(config.llm.defaultProvider).toBe(DEFAULT_CONFIG.llm.defaultProvider);
       expect(config.general.webPort).toBe(DEFAULT_CONFIG.general.webPort);
     });
 
@@ -79,68 +78,6 @@ describe('ConfigManager', () => {
     });
   });
 
-  describe('API Key encryption/decryption', () => {
-    it('should encrypt and decrypt API key correctly', async () => {
-      await configManager.load();
-      const testKey = 'sk-ant-test-key-12345';
-
-      configManager.setApiKey('anthropic', testKey);
-      const retrievedKey = configManager.getApiKey('anthropic');
-
-      expect(retrievedKey).toBe(testKey);
-    });
-
-    it('should store encrypted API key (not plaintext)', async () => {
-      await configManager.load();
-      const testKey = 'sk-ant-test-key-12345';
-
-      configManager.setApiKey('anthropic', testKey);
-      await configManager.save();
-
-      // 파일에서 직접 읽어서 평문이 아님을 확인
-      const configPath = path.join(tempDir, '.impact', 'config.json');
-      const raw = fs.readFileSync(configPath, 'utf-8');
-      expect(raw).not.toContain(testKey);
-    });
-
-    it('should return null for non-existent provider', async () => {
-      await configManager.load();
-      const key = configManager.getApiKey('nonexistent');
-      expect(key).toBeNull();
-    });
-
-    it('should handle multiple providers', async () => {
-      await configManager.load();
-
-      configManager.setApiKey('anthropic', 'sk-ant-key1');
-      configManager.setApiKey('openai', 'sk-openai-key2');
-      configManager.setApiKey('google', 'AIza-google-key3');
-
-      expect(configManager.getApiKey('anthropic')).toBe('sk-ant-key1');
-      expect(configManager.getApiKey('openai')).toBe('sk-openai-key2');
-      expect(configManager.getApiKey('google')).toBe('AIza-google-key3');
-    });
-
-    it('should enable provider after setting API key', async () => {
-      await configManager.load();
-      configManager.setApiKey('anthropic', 'sk-ant-test');
-      const config = configManager.getConfig();
-      expect(config.llm.providers['anthropic'].enabled).toBe(true);
-    });
-
-    it('should persist API keys across save/load cycle', async () => {
-      await configManager.load();
-      configManager.setApiKey('anthropic', 'sk-ant-persist-test');
-      await configManager.save();
-
-      // 새 ConfigManager 인스턴스로 로드
-      const newConfigManager = new ConfigManager(tempDir);
-      await newConfigManager.load();
-      const key = newConfigManager.getApiKey('anthropic');
-      expect(key).toBe('sk-ant-persist-test');
-    });
-  });
-
   describe('Active project management', () => {
     it('should return null when no active project is set', async () => {
       await configManager.load();
@@ -167,21 +104,9 @@ describe('ConfigManager', () => {
   describe('reset()', () => {
     it('should reset config to defaults', async () => {
       await configManager.load();
-      configManager.setApiKey('anthropic', 'sk-ant-test');
-
       configManager.reset();
       const config = configManager.getConfig();
-      expect(Object.keys(config.llm.providers)).toHaveLength(0);
       expect(config.general.webPort).toBe(DEFAULT_CONFIG.general.webPort);
-    });
-  });
-
-  describe('setLLMDataConsent()', () => {
-    it('should set LLM data consent', async () => {
-      await configManager.load();
-      configManager.setLLMDataConsent(true);
-      const config = configManager.getConfig();
-      expect(config.general.llmDataConsent).toBe(true);
     });
   });
 });

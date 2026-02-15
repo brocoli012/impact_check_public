@@ -135,8 +135,8 @@ export interface LayerScore {
   layer2Dependency: { score: number; weight: 0.25; details: string };
   /** Layer 3: 정책/주석 (가중치: 0.20) */
   layer3Policy: { score: number; weight: 0.20; details: string };
-  /** Layer 4: LLM 추론 (가중치: 0.30) */
-  layer4LLM: { score: number; weight: 0.30; details: string };
+  /** Layer 4: 분석 품질 (가중치: 0.30) */
+  layer4Analysis: { score: number; weight: 0.30; details: string };
 }
 
 /** 신뢰도 가중치 */
@@ -144,5 +144,5 @@ export const CONFIDENCE_WEIGHTS = {
   layer1Structure: 0.25,
   layer2Dependency: 0.25,
   layer3Policy: 0.20,
-  layer4LLM: 0.30,
+  layer4Analysis: 0.30,
 } as const;

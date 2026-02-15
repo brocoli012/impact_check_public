@@ -71,19 +71,10 @@ import {
 
 import {
   AppConfig,
-  LLMProviderConfig,
   OwnersConfig,
   SystemOwner,
   DEFAULT_CONFIG,
 } from '../../src/types/config';
-
-import {
-  LLMProvider,
-  LLMOptions,
-  LLMResponse,
-  LLMTask,
-  Message,
-} from '../../src/types/llm';
 
 import {
   ResultCode,
@@ -302,6 +293,7 @@ describe('Type Definitions Compilation', () => {
         tasks: [],
         planningChecks: [],
         policyChanges: [],
+        analysisMethod: 'rule-based',
       };
       expect(result.analysisId).toBe('a1');
     });
@@ -357,7 +349,7 @@ describe('Type Definitions Compilation', () => {
       expect(CONFIDENCE_WEIGHTS.layer1Structure).toBe(0.25);
       expect(CONFIDENCE_WEIGHTS.layer2Dependency).toBe(0.25);
       expect(CONFIDENCE_WEIGHTS.layer3Policy).toBe(0.20);
-      expect(CONFIDENCE_WEIGHTS.layer4LLM).toBe(0.30);
+      expect(CONFIDENCE_WEIGHTS.layer4Analysis).toBe(0.30);
       const totalWeight = Object.values(CONFIDENCE_WEIGHTS).reduce((sum, w) => sum + w, 0);
       expect(totalWeight).toBeCloseTo(1.0);
     });
@@ -386,7 +378,7 @@ describe('Type Definitions Compilation', () => {
         lastAnalyzed: '2026-02-14T00:00:00Z',
         sourceHash: 'abc123',
         analyzerVersion: '1.0.0',
-        llmModel: 'claude-sonnet-4',
+        model: 'claude-sonnet-4',
         fileSummary: {
           description: 'Test file',
           confidence: 0.85,
@@ -463,14 +455,13 @@ describe('Type Definitions Compilation', () => {
   describe('types/config', () => {
     it('should define DEFAULT_CONFIG', () => {
       expect(DEFAULT_CONFIG.version).toBe(1);
-      expect(DEFAULT_CONFIG.llm.defaultProvider).toBe('anthropic');
       expect(DEFAULT_CONFIG.general.webPort).toBe(3847);
     });
 
     it('should compile AppConfig type', () => {
       const config: AppConfig = { ...DEFAULT_CONFIG };
-      expect(config.llm.routing['spec-parsing']).toBe('openai');
-      expect(config.llm.routing['impact-analysis']).toBe('anthropic');
+      expect(config.general.autoReindex).toBe(true);
+      expect(config.general.logLevel).toBe('info');
     });
 
     it('should compile SystemOwner type', () => {
@@ -491,50 +482,6 @@ describe('Type Definitions Compilation', () => {
     });
   });
 
-  describe('types/llm', () => {
-    it('should compile Message type', () => {
-      const msg: Message = {
-        role: 'user',
-        content: 'Hello',
-      };
-      expect(msg.role).toBe('user');
-    });
-
-    it('should compile LLMOptions type', () => {
-      const options: LLMOptions = {
-        model: 'claude-sonnet-4',
-        maxTokens: 4096,
-        temperature: 0,
-        responseFormat: 'json',
-      };
-      expect(options.model).toBe('claude-sonnet-4');
-    });
-
-    it('should compile LLMResponse type', () => {
-      const response: LLMResponse = {
-        content: 'Test response',
-        usage: {
-          inputTokens: 100,
-          outputTokens: 50,
-          estimatedCost: 0.01,
-        },
-        model: 'claude-sonnet-4',
-        provider: 'anthropic',
-      };
-      expect(response.provider).toBe('anthropic');
-    });
-
-    it('should compile LLMTask type with all valid values', () => {
-      const tasks: LLMTask[] = [
-        'spec-parsing',
-        'impact-analysis',
-        'score-calculation',
-        'multimodal-parsing',
-        'general',
-      ];
-      expect(tasks.length).toBe(5);
-    });
-  });
 });
 
 // Suppress unused import warnings by using all imported types in type assertions
@@ -567,9 +514,7 @@ void (null as unknown as PolicyDependency);
 void (null as unknown as PolicyImpactScope);
 void (null as unknown as PolicyReviewItem);
 void (null as unknown as PolicyReference);
-void (null as unknown as LLMProviderConfig);
 void (null as unknown as OwnersConfig);
-void (null as unknown as LLMProvider);
 void (null as unknown as BusinessRule);
 void (null as unknown as Command);
 void (null as unknown as CommandResult);

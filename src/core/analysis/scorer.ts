@@ -3,9 +3,6 @@
  * @description 점수 산출기 - 4차원 가중합 점수 산출 및 등급 결정
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { LLMRouter, NoProviderConfiguredError } from '../../llm/router';
 import {
   ImpactResult,
   ScoredResult,
@@ -20,11 +17,10 @@ import {
   GRADE_THRESHOLDS,
   SCORE_WEIGHTS,
 } from '../../types/scoring';
-import { Message } from '../../types/llm';
 import { logger } from '../../utils/logger';
 
 // ── Rule-based scoring constants ──────────────────────────────────────
-// These tune the heuristic scoring when no LLM is available.
+// These tune the heuristic scoring.
 
 /** Base score assigned before any action-type or file-count adjustments. */
 const COMPLEXITY_BASE = 3;
@@ -80,30 +76,15 @@ const TASK_GRADE_HIGH_MAX = 7.5;
  * - Critical: 71+
  */
 export class Scorer {
-  private readonly llmRouter: LLMRouter;
-
-  constructor(llmRouter: LLMRouter) {
-    this.llmRouter = llmRouter;
-  }
-
   /**
-   * 4차원 점수 산출
+   * 4차원 점수 산출 (규칙 기반)
    * @param impact - 영향도 분석 결과
    * @returns 점수가 포함된 결과
    */
   async score(impact: ImpactResult): Promise<ScoredResult> {
-    let taskScoreMap: Map<string, { scores: ScoreBreakdown; total: number }>;
+    logger.info('Using rule-based scoring...');
 
-    try {
-      taskScoreMap = await this.scoreWithLLM(impact);
-    } catch (err) {
-      if (err instanceof NoProviderConfiguredError) {
-        logger.warn('LLM not configured. Using rule-based scoring.');
-        taskScoreMap = this.scoreWithRules(impact);
-      } else {
-        throw err;
-      }
-    }
+    const taskScoreMap = this.scoreWithRules(impact);
 
     // 화면별 점수 계산
     const screenScores = this.buildScreenScores(impact.affectedScreens, taskScoreMap);
@@ -121,34 +102,6 @@ export class Scorer {
       grade,
       recommendation,
     };
-  }
-
-  /**
-   * LLM 기반 점수 산출
-   */
-  private async scoreWithLLM(
-    impact: ImpactResult,
-  ): Promise<Map<string, { scores: ScoreBreakdown; total: number }>> {
-    const provider = this.llmRouter.route('score-calculation');
-    const promptTemplate = this.loadPromptTemplate();
-
-    const prompt = promptTemplate.replace(
-      '{영향도 분석 결과 JSON}',
-      JSON.stringify(impact, null, 2),
-    );
-
-    const messages: Message[] = [
-      { role: 'user', content: prompt },
-    ];
-
-    logger.info('Scoring with LLM...');
-    const response = await provider.chat(messages, {
-      responseFormat: 'json',
-      temperature: 0.1,
-      maxTokens: 4096,
-    });
-
-    return this.parseLLMScoreResponse(response.content);
   }
 
   /**
@@ -381,87 +334,6 @@ export class Scorer {
       policyChange: { score: SCORE_MIN, weight: SCORE_WEIGHTS.policyChange, rationale: '기본값' },
       dependencyRisk: { score: SCORE_MIN, weight: SCORE_WEIGHTS.dependencyRisk, rationale: '기본값' },
     };
-  }
-
-  /**
-   * LLM 점수 응답 파싱
-   */
-  private parseLLMScoreResponse(
-    content: string,
-  ): Map<string, { scores: ScoreBreakdown; total: number }> {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
-
-    try {
-      const parsed = JSON.parse(jsonStr);
-      const map = new Map<string, { scores: ScoreBreakdown; total: number }>();
-
-      const taskScores = parsed.taskScores || [];
-      for (const ts of taskScores) {
-        const clamp = (val: number, fallback: number): number =>
-          Math.min(SCORE_MAX, Math.max(SCORE_MIN, val || fallback));
-
-        const scores: ScoreBreakdown = {
-          developmentComplexity: {
-            score: clamp(ts.scores?.developmentComplexity?.score, COMPLEXITY_BASE),
-            weight: SCORE_WEIGHTS.developmentComplexity,
-            rationale: ts.scores?.developmentComplexity?.rationale || '',
-          },
-          impactScope: {
-            score: clamp(ts.scores?.impactScope?.score, COMPLEXITY_BASE),
-            weight: SCORE_WEIGHTS.impactScope,
-            rationale: ts.scores?.impactScope?.rationale || '',
-          },
-          policyChange: {
-            score: clamp(ts.scores?.policyChange?.score, SCORE_MIN),
-            weight: SCORE_WEIGHTS.policyChange,
-            rationale: ts.scores?.policyChange?.rationale || '',
-          },
-          dependencyRisk: {
-            score: clamp(ts.scores?.dependencyRisk?.score, SCORE_MIN),
-            weight: SCORE_WEIGHTS.dependencyRisk,
-            rationale: ts.scores?.dependencyRisk?.rationale || '',
-          },
-        };
-
-        const total = this.calculateTaskScore(scores);
-        map.set(ts.taskId, { scores, total });
-      }
-
-      return map;
-    } catch {
-      throw new Error('Failed to parse LLM score response as JSON.');
-    }
-  }
-
-  /**
-   * 프롬프트 템플릿 로드
-   */
-  private loadPromptTemplate(): string {
-    const templatePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'prompts',
-      'score-difficulty.prompt.md'
-    );
-
-    try {
-      if (fs.existsSync(templatePath)) {
-        return fs.readFileSync(templatePath, 'utf-8');
-      }
-    } catch {
-      logger.debug('Failed to load score prompt template.');
-    }
-
-    return `각 작업에 대해 4차원 점수를 산출하세요.
-
-<impact_result>
-{영향도 분석 결과 JSON}
-</impact_result>
-
-JSON 형식으로 taskScores를 출력하세요.`;
   }
 
   // Rationale helpers

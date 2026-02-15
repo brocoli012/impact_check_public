@@ -36,8 +36,7 @@ function setupTestData(): void {
   // config.json 생성
   writeJsonFile(path.join(impactDir, 'config.json'), {
     version: 1,
-    llm: { defaultProvider: 'anthropic', providers: {}, routing: {} },
-    general: { autoReindex: true, webPort: 3847, logLevel: 'info', llmDataConsent: false },
+    general: { autoReindex: true, webPort: 3847, logLevel: 'info' },
   });
 
   // 결과 디렉토리 및 데이터 생성

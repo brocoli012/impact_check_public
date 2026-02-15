@@ -4,7 +4,6 @@
  */
 
 import { Scorer } from '../../../src/core/analysis/scorer';
-import { LLMRouter, ProviderRegistry } from '../../../src/llm/router';
 import { ImpactResult, Task } from '../../../src/types/analysis';
 import { ScoreBreakdown, SCORE_WEIGHTS, GRADE_THRESHOLDS } from '../../../src/types/scoring';
 
@@ -25,6 +24,7 @@ function createTestImpactResult(tasks: Task[]): ImpactResult {
     tasks,
     planningChecks: [],
     policyChanges: [],
+    analysisMethod: 'rule-based' as const,
   };
 }
 
@@ -32,9 +32,7 @@ describe('Scorer', () => {
   let scorer: Scorer;
 
   beforeEach(() => {
-    const registry = new ProviderRegistry();
-    const router = new LLMRouter(registry);
-    scorer = new Scorer(router);
+    scorer = new Scorer();
   });
 
   describe('calculateTaskScore', () => {
@@ -199,7 +197,7 @@ describe('Scorer', () => {
     });
   });
 
-  describe('score (rule-based fallback)', () => {
+  describe('score (rule-based)', () => {
     it('should score a simple modify task', async () => {
       const task: Task = {
         id: 'T-001',
@@ -298,122 +296,6 @@ describe('Scorer', () => {
     it('should return appropriate recommendation for Critical', () => {
       const recommendation = scorer.getRecommendation('Critical');
       expect(recommendation).toContain('아키텍처');
-    });
-  });
-
-  describe('parseLLMScoreResponse clamping', () => {
-    it('should clamp out-of-range LLM scores to 1-10', async () => {
-      // Create a mock provider that returns out-of-range scores
-      const mockProvider = {
-        name: 'mock',
-        displayName: 'Mock',
-        chat: jest.fn().mockResolvedValue({
-          content: JSON.stringify({
-            taskScores: [
-              {
-                taskId: 'T-001',
-                scores: {
-                  developmentComplexity: { score: 15, rationale: 'too high' },
-                  impactScope: { score: -3, rationale: 'negative' },
-                  policyChange: { score: -5, rationale: 'also negative' },
-                  dependencyRisk: { score: 100, rationale: 'extreme' },
-                },
-              },
-            ],
-          }),
-          usage: { inputTokens: 0, outputTokens: 0, estimatedCost: 0 },
-          model: 'mock',
-          provider: 'mock',
-        }),
-        estimateTokens: () => 0,
-        estimateCost: () => 0,
-        validateApiKey: async () => true,
-        listModels: () => ['mock'],
-      };
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      const llmScorer = new Scorer(router);
-
-      const task: Task = {
-        id: 'T-001',
-        title: 'Test',
-        type: 'FE',
-        actionType: 'modify',
-        description: 'test',
-        affectedFiles: ['test.ts'],
-        relatedApis: [],
-        planningChecks: [],
-        rationale: '',
-      };
-
-      const impact = createTestImpactResult([task]);
-      const result = await llmScorer.score(impact);
-
-      const taskScore = result.screenScores[0].taskScores[0];
-      // Scores above 10 should be clamped to 10
-      expect(taskScore.scores.developmentComplexity.score).toBe(10); // 15 -> 10
-      expect(taskScore.scores.dependencyRisk.score).toBe(10);        // 100 -> 10
-      // Negative scores should be clamped to 1
-      expect(taskScore.scores.impactScope.score).toBe(1);            // -3 -> 1
-      expect(taskScore.scores.policyChange.score).toBe(1);           // -5 -> 1
-    });
-
-    it('should use fallback values when LLM returns null scores', async () => {
-      const mockProvider = {
-        name: 'mock',
-        displayName: 'Mock',
-        chat: jest.fn().mockResolvedValue({
-          content: JSON.stringify({
-            taskScores: [
-              {
-                taskId: 'T-001',
-                scores: {
-                  developmentComplexity: { rationale: 'no score' },
-                  impactScope: { score: null, rationale: 'null score' },
-                  policyChange: {},
-                  dependencyRisk: { score: 5, rationale: 'valid' },
-                },
-              },
-            ],
-          }),
-          usage: { inputTokens: 0, outputTokens: 0, estimatedCost: 0 },
-          model: 'mock',
-          provider: 'mock',
-        }),
-        estimateTokens: () => 0,
-        estimateCost: () => 0,
-        validateApiKey: async () => true,
-        listModels: () => ['mock'],
-      };
-
-      const registry = new ProviderRegistry();
-      registry.register(mockProvider);
-      const router = new LLMRouter(registry);
-      const llmScorer = new Scorer(router);
-
-      const task: Task = {
-        id: 'T-001',
-        title: 'Test',
-        type: 'FE',
-        actionType: 'modify',
-        description: 'test',
-        affectedFiles: ['test.ts'],
-        relatedApis: [],
-        planningChecks: [],
-        rationale: '',
-      };
-
-      const impact = createTestImpactResult([task]);
-      const result = await llmScorer.score(impact);
-
-      const taskScore = result.screenScores[0].taskScores[0];
-      // Missing/null scores should get fallback values (3 for complexity/scope, 1 for policy/dependency)
-      expect(taskScore.scores.developmentComplexity.score).toBe(3);
-      expect(taskScore.scores.impactScope.score).toBe(3);
-      expect(taskScore.scores.policyChange.score).toBe(1);
-      expect(taskScore.scores.dependencyRisk.score).toBe(5); // valid value kept
     });
   });
 

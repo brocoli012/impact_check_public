@@ -89,8 +89,8 @@ export interface LayerScore {
         weight: 0.20;
         details: string;
     };
-    /** Layer 4: LLM 추론 (가중치: 0.30) */
-    layer4LLM: {
+    /** Layer 4: 분석 품질 (가중치: 0.30) */
+    layer4Analysis: {
         score: number;
         weight: 0.30;
         details: string;
@@ -101,6 +101,6 @@ export declare const CONFIDENCE_WEIGHTS: {
     readonly layer1Structure: 0.25;
     readonly layer2Dependency: 0.25;
     readonly layer3Policy: 0.2;
-    readonly layer4LLM: 0.3;
+    readonly layer4Analysis: 0.3;
 };
 //# sourceMappingURL=scoring.d.ts.map

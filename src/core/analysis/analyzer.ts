@@ -1,11 +1,8 @@
 /**
  * @module core/analysis/analyzer
- * @description 영향도 분석기 - LLM 기반 영향도 심층 분석
+ * @description 영향도 분석기 - 규칙 기반 영향도 심층 분석
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { LLMRouter, NoProviderConfiguredError } from '../../llm/router';
 import {
   ParsedSpec,
   MatchedEntities,
@@ -16,24 +13,16 @@ import {
   PolicyChange,
 } from '../../types/analysis';
 import { CodeIndex } from '../../types/index';
-import { Message } from '../../types/llm';
 import { logger } from '../../utils/logger';
 
 /**
  * ImpactAnalyzer - 영향도 심층 분석
  *
- * LLM (Claude Sonnet)으로 영향도 심층 분석.
- * LLM 미설정 시 규칙 기반 폴백 분석 제공.
+ * 규칙 기반으로 영향도를 심층 분석합니다.
  */
 export class ImpactAnalyzer {
-  private readonly llmRouter: LLMRouter;
-
-  constructor(llmRouter: LLMRouter) {
-    this.llmRouter = llmRouter;
-  }
-
   /**
-   * 영향도 심층 분석 (LLM 사용)
+   * 영향도 심층 분석 (규칙 기반)
    * @param spec - 파싱된 기획서
    * @param matched - 매칭된 엔티티
    * @param index - 코드 인덱스
@@ -44,62 +33,6 @@ export class ImpactAnalyzer {
     matched: MatchedEntities,
     index: CodeIndex,
   ): Promise<ImpactResult> {
-    try {
-      return await this.analyzeWithLLM(spec, matched, index);
-    } catch (err) {
-      if (err instanceof NoProviderConfiguredError) {
-        logger.warn('LLM not configured. Using rule-based analysis fallback.');
-        return this.analyzeWithoutLLM(spec, matched, index);
-      }
-      throw err;
-    }
-  }
-
-  /**
-   * LLM을 사용한 영향도 분석
-   */
-  private async analyzeWithLLM(
-    spec: ParsedSpec,
-    matched: MatchedEntities,
-    index: CodeIndex,
-  ): Promise<ImpactResult> {
-    const provider = this.llmRouter.route('impact-analysis');
-    const promptTemplate = this.loadPromptTemplate();
-
-    const prompt = promptTemplate
-      .replace('{파싱된 기획서 JSON}', JSON.stringify(spec, null, 2))
-      .replace('{인덱스 매칭 결과 JSON}', JSON.stringify(matched, null, 2))
-      .replace('{관련 코드 스니펫}', this.buildCodeSnippets(matched, index));
-
-    const messages: Message[] = [
-      { role: 'user', content: prompt },
-    ];
-
-    logger.info('Analyzing impact with LLM...');
-    const response = await provider.chat(messages, {
-      responseFormat: 'json',
-      temperature: 0.2,
-      maxTokens: 8192,
-    });
-
-    const parsed = this.parseLLMResponse(response.content);
-    const result = this.buildImpactResult(spec, parsed, index);
-    result.analysisMethod = 'llm';
-    return result;
-  }
-
-  /**
-   * LLM 없이 규칙 기반 분석 (폴백)
-   * @param spec - 파싱된 기획서
-   * @param matched - 매칭된 엔티티
-   * @param index - 코드 인덱스
-   * @returns 영향도 분석 결과
-   */
-  analyzeWithoutLLM(
-    spec: ParsedSpec,
-    matched: MatchedEntities,
-    index: CodeIndex,
-  ): ImpactResult {
     logger.info('Using rule-based impact analysis...');
 
     const analysisId = `analysis-${Date.now()}`;
@@ -366,161 +299,12 @@ export class ImpactAnalyzer {
   }
 
   /**
-   * LLM 응답 파싱
-   */
-  private parseLLMResponse(content: string): Record<string, unknown> {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
-
-    try {
-      return JSON.parse(jsonStr);
-    } catch {
-      throw new Error('LLM response for impact analysis is not valid JSON.');
-    }
-  }
-
-  /**
-   * LLM 응답을 ImpactResult로 변환
-   *
-   * Tech design R7: LLM 응답의 affectedFiles에 포함된 파일 경로가
-   * 실제 인덱스에 존재하는지 검증하고, 존재하지 않는 경로는 자동 제거합니다.
-   * 이를 통해 LLM hallucination으로 인한 허위 파일 경로를 방지합니다.
-   *
-   * @param spec - 파싱된 기획서
-   * @param parsed - LLM 응답 파싱 결과
-   * @param index - 코드 인덱스 (파일 경로 검증용, 선택)
-   */
-  private buildImpactResult(
-    spec: ParsedSpec,
-    parsed: Record<string, unknown>,
-    index?: CodeIndex,
-  ): ImpactResult {
-    const analysisId = `analysis-${Date.now()}`;
-    const now = new Date().toISOString();
-
-    // 인덱스에서 유효한 파일 경로 집합을 구축 (hallucination 방지)
-    const validFilePaths = index ? this.buildValidFilePathSet(index) : null;
-
-    const rawScreens = (parsed.affectedScreens || []) as Array<Record<string, unknown>>;
-    const rawChecks = (parsed.planningChecks || []) as Array<Record<string, unknown>>;
-    const rawPolicyChanges = (parsed.policyChanges || []) as Array<Record<string, unknown>>;
-
-    const affectedScreens: ScreenImpact[] = rawScreens.map((s) => {
-      const tasks: Task[] = ((s.tasks || []) as Array<Record<string, unknown>>).map((t) => {
-        let affectedFiles = (t.affectedFiles || []) as string[];
-
-        // LLM이 생성한 파일 경로를 인덱스에 존재하는 경로만 남기도록 필터링
-        if (validFilePaths) {
-          const originalCount = affectedFiles.length;
-          affectedFiles = affectedFiles.filter(fp => validFilePaths.has(fp));
-          const removedCount = originalCount - affectedFiles.length;
-          if (removedCount > 0) {
-            logger.warn(
-              `Task "${String(t.id || '')}": Removed ${removedCount} hallucinated file path(s) not found in index.`,
-            );
-          }
-        }
-
-        return {
-          id: String(t.id || ''),
-          title: String(t.title || ''),
-          type: (String(t.type || 'FE') as 'FE' | 'BE'),
-          actionType: (String(t.actionType || 'modify') as 'new' | 'modify' | 'config'),
-          description: String(t.description || ''),
-          affectedFiles,
-          relatedApis: (t.relatedApis || []) as string[],
-          planningChecks: (t.planningChecks || []) as string[],
-          rationale: String(t.rationale || ''),
-        };
-      });
-
-      return {
-        screenId: String(s.screenId || ''),
-        screenName: String(s.screenName || ''),
-        impactLevel: String(s.impactLevel || 'medium') as ScreenImpact['impactLevel'],
-        tasks,
-      };
-    });
-
-    const planningChecks: Check[] = rawChecks.map((c) => ({
-      id: String(c.id || ''),
-      content: String(c.content || ''),
-      relatedFeatureId: String(c.relatedFeatureId || ''),
-      priority: String(c.priority || 'medium') as Check['priority'],
-      status: 'pending' as const,
-    }));
-
-    const policyChanges: PolicyChange[] = rawPolicyChanges.map((p) => {
-      let affectedFiles = (p.affectedFiles || []) as string[];
-
-      // 정책 변경의 affectedFiles도 인덱스 기반으로 검증
-      if (validFilePaths) {
-        affectedFiles = affectedFiles.filter(fp => validFilePaths.has(fp));
-      }
-
-      return {
-        id: String(p.id || ''),
-        policyName: String(p.policyName || ''),
-        description: String(p.description || ''),
-        changeType: String(p.changeType || 'modify') as PolicyChange['changeType'],
-        affectedFiles,
-        requiresReview: Boolean(p.requiresReview),
-      };
-    });
-
-    const allTasks = affectedScreens.flatMap(s => s.tasks);
-
-    return {
-      analysisId,
-      analyzedAt: now,
-      specTitle: spec.title,
-      affectedScreens,
-      tasks: allTasks,
-      planningChecks,
-      policyChanges,
-    };
-  }
-
-  /**
-   * 매칭된 엔티티에서 코드 스니펫 구성
-   */
-  private buildCodeSnippets(matched: MatchedEntities, index: CodeIndex): string {
-    const snippets: string[] = [];
-
-    // 매칭된 화면의 파일 경로
-    for (const screen of matched.screens.slice(0, 5)) {
-      const screenInfo = index.screens.find(s => s.id === screen.id);
-      if (screenInfo) {
-        snippets.push(`Screen: ${screenInfo.name} (${screenInfo.filePath}), route: ${screenInfo.route}`);
-      }
-    }
-
-    // 매칭된 컴포넌트
-    for (const comp of matched.components.slice(0, 5)) {
-      const compInfo = index.components.find(c => c.id === comp.id);
-      if (compInfo) {
-        snippets.push(`Component: ${compInfo.name} (${compInfo.filePath}), props: [${compInfo.props.join(', ')}]`);
-      }
-    }
-
-    // 매칭된 API
-    for (const api of matched.apis.slice(0, 5)) {
-      const apiInfo = index.apis.find(a => a.id === api.id);
-      if (apiInfo) {
-        snippets.push(`API: ${apiInfo.method} ${apiInfo.path} (${apiInfo.filePath})`);
-      }
-    }
-
-    return snippets.join('\n') || 'No code snippets available.';
-  }
-
-  /**
    * 인덱스에서 유효한 파일 경로 집합을 구축
    *
    * files, screens, components, apis, models, policies의
-   * 모든 파일 경로를 수집하여 LLM 응답 검증에 사용합니다.
+   * 모든 파일 경로를 수집하여 결과 검증에 사용합니다.
    */
-  private buildValidFilePathSet(index: CodeIndex): Set<string> {
+  buildValidFilePathSet(index: CodeIndex): Set<string> {
     const paths = new Set<string>();
 
     // files 배열의 path
@@ -554,43 +338,5 @@ export class ImpactAnalyzer {
     }
 
     return paths;
-  }
-
-  /**
-   * 프롬프트 템플릿 로드
-   */
-  private loadPromptTemplate(): string {
-    const templatePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'prompts',
-      'analyze-impact.prompt.md'
-    );
-
-    try {
-      if (fs.existsSync(templatePath)) {
-        return fs.readFileSync(templatePath, 'utf-8');
-      }
-    } catch {
-      logger.debug('Failed to load impact analysis prompt template.');
-    }
-
-    return `영향도 분석을 수행하세요.
-
-<parsed_spec>
-{파싱된 기획서 JSON}
-</parsed_spec>
-
-<matched_entities>
-{인덱스 매칭 결과 JSON}
-</matched_entities>
-
-<code_snippets>
-{관련 코드 스니펫}
-</code_snippets>
-
-JSON 형식으로 affectedScreens, planningChecks, policyChanges를 출력하세요.`;
   }
 }

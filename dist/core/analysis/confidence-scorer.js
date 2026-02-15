@@ -13,7 +13,7 @@ const logger_1 = require("../../utils/logger");
  * Layer 1 (구조): 25% - 코드 구조 분석 기반
  * Layer 2 (의존성): 25% - 의존성 그래프 기반
  * Layer 3 (정책): 20% - 정책/주석 기반
- * Layer 4 (LLM): 30% - LLM 추론 기반
+ * Layer 4 (분석 품질): 30% - 분석 결과 품질 기반
  *
  * 등급:
  * - high: 85+
@@ -93,10 +93,10 @@ class ConfidenceScorer {
                 weight: 0.20,
                 details: this.getPolicyDetails(systemId, result),
             },
-            layer4LLM: {
-                score: this.calculateLLMScore(result),
+            layer4Analysis: {
+                score: this.calculateAnalysisQualityScore(result),
                 weight: 0.30,
-                details: this.getLLMDetails(result),
+                details: this.getAnalysisQualityDetails(result),
             },
         };
     }
@@ -170,15 +170,12 @@ class ConfidenceScorer {
         return Math.min(100, Math.max(0, score));
     }
     /**
-     * Layer 4: LLM 추론 점수
-     * - LLM이 사용되었는지 기반
+     * Layer 4: 분석 품질 점수
+     * - 규칙 기반 분석의 품질 지표 기반
      */
-    calculateLLMScore(result) {
-        // analysisMethod 필드가 있으면 직접 사용 (정확한 판단)
-        const usedLLM = result.analysisMethod
-            ? result.analysisMethod === 'llm'
-            : this.inferLLMUsage(result); // 폴백: 레거시 호환
-        let score = usedLLM ? 55 : 30; // LLM 사용 시 기본값 상향
+    calculateAnalysisQualityScore(result) {
+        // 규칙 기반 분석 고정 - 기본 점수
+        let score = 30;
         // 기획 확인 사항이 구체적인지
         const hasDetailedChecks = result.planningChecks.some(c => c.content && c.content.length > 30);
         if (hasDetailedChecks)
@@ -195,20 +192,13 @@ class ConfidenceScorer {
         return Math.min(100, Math.max(0, score));
     }
     /**
-     * LLM 사용 여부 추론 (analysisMethod 필드가 없는 경우 폴백)
-     * 레거시 호환을 위해 rationale 길이 기반 휴리스틱 사용
-     */
-    inferLLMUsage(result) {
-        return result.tasks.some(t => t.rationale && t.rationale.length > 50);
-    }
-    /**
      * 전체 신뢰도 점수 계산
      */
     calculateOverallScore(layers) {
         return (layers.layer1Structure.score * scoring_1.CONFIDENCE_WEIGHTS.layer1Structure +
             layers.layer2Dependency.score * scoring_1.CONFIDENCE_WEIGHTS.layer2Dependency +
             layers.layer3Policy.score * scoring_1.CONFIDENCE_WEIGHTS.layer3Policy +
-            layers.layer4LLM.score * scoring_1.CONFIDENCE_WEIGHTS.layer4LLM);
+            layers.layer4Analysis.score * scoring_1.CONFIDENCE_WEIGHTS.layer4Analysis);
     }
     /**
      * 등급 결정
@@ -236,8 +226,8 @@ class ConfidenceScorer {
         if (layers.layer3Policy.score < 50) {
             warnings.push('정책 정보가 부족합니다. 주석이나 정책 파일을 보완하세요.');
         }
-        if (layers.layer4LLM.score < 40) {
-            warnings.push('LLM 기반 분석이 제한적입니다. LLM을 설정하면 정확도가 향상됩니다.');
+        if (layers.layer4Analysis.score < 40) {
+            warnings.push('분석 품질이 제한적입니다. 인덱스를 보완하면 정확도가 향상됩니다.');
         }
         return warnings;
     }
@@ -252,8 +242,8 @@ class ConfidenceScorer {
         if (layers.layer1Structure.score < 60) {
             recommendations.push('reindex 명령을 실행하여 인덱스를 갱신하세요.');
         }
-        if (layers.layer4LLM.score < 50) {
-            recommendations.push('LLM API 키를 설정하면 분석 정확도가 크게 향상됩니다.');
+        if (layers.layer4Analysis.score < 50) {
+            recommendations.push('인덱스를 보완하고 기획서를 더 구체적으로 작성하면 분석 정확도가 향상됩니다.');
         }
         return recommendations;
     }
@@ -267,15 +257,8 @@ class ConfidenceScorer {
     getPolicyDetails(_systemId, result) {
         return `Policy warnings: ${result.policyWarnings.length}, Policy changes: ${result.policyChanges.length}`;
     }
-    getLLMDetails(result) {
-        if (result.analysisMethod) {
-            return result.analysisMethod === 'llm'
-                ? 'LLM-based analysis'
-                : 'Rule-based analysis (no LLM)';
-        }
-        // 폴백: 레거시 호환
-        const hasDetailedRationale = result.tasks.some(t => t.rationale && t.rationale.length > 50);
-        return hasDetailedRationale ? 'LLM-based analysis detected' : 'Rule-based analysis (no LLM)';
+    getAnalysisQualityDetails(result) {
+        return `Rule-based analysis. Tasks: ${result.tasks.length}, Checks: ${result.planningChecks.length}`;
     }
 }
 exports.ConfidenceScorer = ConfidenceScorer;

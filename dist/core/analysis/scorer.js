@@ -3,48 +3,12 @@
  * @module core/analysis/scorer
  * @description 점수 산출기 - 4차원 가중합 점수 산출 및 등급 결정
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Scorer = void 0;
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const router_1 = require("../../llm/router");
 const scoring_1 = require("../../types/scoring");
 const logger_1 = require("../../utils/logger");
 // ── Rule-based scoring constants ──────────────────────────────────────
-// These tune the heuristic scoring when no LLM is available.
+// These tune the heuristic scoring.
 /** Base score assigned before any action-type or file-count adjustments. */
 const COMPLEXITY_BASE = 3;
 /** Bonus added for brand-new feature tasks (highest complexity). */
@@ -92,28 +56,14 @@ const TASK_GRADE_HIGH_MAX = 7.5;
  * - Critical: 71+
  */
 class Scorer {
-    constructor(llmRouter) {
-        this.llmRouter = llmRouter;
-    }
     /**
-     * 4차원 점수 산출
+     * 4차원 점수 산출 (규칙 기반)
      * @param impact - 영향도 분석 결과
      * @returns 점수가 포함된 결과
      */
     async score(impact) {
-        let taskScoreMap;
-        try {
-            taskScoreMap = await this.scoreWithLLM(impact);
-        }
-        catch (err) {
-            if (err instanceof router_1.NoProviderConfiguredError) {
-                logger_1.logger.warn('LLM not configured. Using rule-based scoring.');
-                taskScoreMap = this.scoreWithRules(impact);
-            }
-            else {
-                throw err;
-            }
-        }
+        logger_1.logger.info('Using rule-based scoring...');
+        const taskScoreMap = this.scoreWithRules(impact);
         // 화면별 점수 계산
         const screenScores = this.buildScreenScores(impact.affectedScreens, taskScoreMap);
         // 총점 및 등급 계산
@@ -127,24 +77,6 @@ class Scorer {
             grade,
             recommendation,
         };
-    }
-    /**
-     * LLM 기반 점수 산출
-     */
-    async scoreWithLLM(impact) {
-        const provider = this.llmRouter.route('score-calculation');
-        const promptTemplate = this.loadPromptTemplate();
-        const prompt = promptTemplate.replace('{영향도 분석 결과 JSON}', JSON.stringify(impact, null, 2));
-        const messages = [
-            { role: 'user', content: prompt },
-        ];
-        logger_1.logger.info('Scoring with LLM...');
-        const response = await provider.chat(messages, {
-            responseFormat: 'json',
-            temperature: 0.1,
-            maxTokens: 4096,
-        });
-        return this.parseLLMScoreResponse(response.content);
     }
     /**
      * 규칙 기반 점수 산출
@@ -358,70 +290,6 @@ class Scorer {
             policyChange: { score: SCORE_MIN, weight: scoring_1.SCORE_WEIGHTS.policyChange, rationale: '기본값' },
             dependencyRisk: { score: SCORE_MIN, weight: scoring_1.SCORE_WEIGHTS.dependencyRisk, rationale: '기본값' },
         };
-    }
-    /**
-     * LLM 점수 응답 파싱
-     */
-    parseLLMScoreResponse(content) {
-        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-        const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
-        try {
-            const parsed = JSON.parse(jsonStr);
-            const map = new Map();
-            const taskScores = parsed.taskScores || [];
-            for (const ts of taskScores) {
-                const clamp = (val, fallback) => Math.min(SCORE_MAX, Math.max(SCORE_MIN, val || fallback));
-                const scores = {
-                    developmentComplexity: {
-                        score: clamp(ts.scores?.developmentComplexity?.score, COMPLEXITY_BASE),
-                        weight: scoring_1.SCORE_WEIGHTS.developmentComplexity,
-                        rationale: ts.scores?.developmentComplexity?.rationale || '',
-                    },
-                    impactScope: {
-                        score: clamp(ts.scores?.impactScope?.score, COMPLEXITY_BASE),
-                        weight: scoring_1.SCORE_WEIGHTS.impactScope,
-                        rationale: ts.scores?.impactScope?.rationale || '',
-                    },
-                    policyChange: {
-                        score: clamp(ts.scores?.policyChange?.score, SCORE_MIN),
-                        weight: scoring_1.SCORE_WEIGHTS.policyChange,
-                        rationale: ts.scores?.policyChange?.rationale || '',
-                    },
-                    dependencyRisk: {
-                        score: clamp(ts.scores?.dependencyRisk?.score, SCORE_MIN),
-                        weight: scoring_1.SCORE_WEIGHTS.dependencyRisk,
-                        rationale: ts.scores?.dependencyRisk?.rationale || '',
-                    },
-                };
-                const total = this.calculateTaskScore(scores);
-                map.set(ts.taskId, { scores, total });
-            }
-            return map;
-        }
-        catch {
-            throw new Error('Failed to parse LLM score response as JSON.');
-        }
-    }
-    /**
-     * 프롬프트 템플릿 로드
-     */
-    loadPromptTemplate() {
-        const templatePath = path.join(__dirname, '..', '..', '..', 'prompts', 'score-difficulty.prompt.md');
-        try {
-            if (fs.existsSync(templatePath)) {
-                return fs.readFileSync(templatePath, 'utf-8');
-            }
-        }
-        catch {
-            logger_1.logger.debug('Failed to load score prompt template.');
-        }
-        return `각 작업에 대해 4차원 점수를 산출하세요.
-
-<impact_result>
-{영향도 분석 결과 JSON}
-</impact_result>
-
-JSON 형식으로 taskScores를 출력하세요.`;
     }
     // Rationale helpers
     getComplexityRationale(task, score) {

@@ -44,7 +44,7 @@ describe('Router', () => {
     });
 
     it('should route "config" to ConfigCommand', () => {
-      const command = route(['config', '--provider', 'anthropic']);
+      const command = route(['config']);
       expect(command).toBeInstanceOf(ConfigCommand);
       expect(command.name).toBe('config');
     });
