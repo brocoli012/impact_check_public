@@ -1,0 +1,987 @@
+/**
+ * @module core/indexing/parsers/typescript-parser
+ * @description TypeScript/JavaScript 파서 - @swc/core를 사용한 AST 기반 코드 분석
+ */
+
+import { parseSync } from '@swc/core';
+import type {
+  Module,
+  ModuleItem,
+  Statement,
+  Expression,
+  Declaration,
+  ImportDeclaration,
+  ExportDeclaration,
+  ExportDefaultDeclaration,
+  ExportDefaultExpression,
+  ExportNamedDeclaration,
+  FunctionDeclaration,
+  ClassDeclaration,
+  VariableDeclaration,
+  ArrowFunctionExpression,
+  FunctionExpression,
+  CallExpression,
+  MemberExpression,
+  Identifier,
+  StringLiteral,
+  Param,
+  Pattern,
+  TsTypeAnnotation,
+  TsType,
+  ClassMethod,
+  BlockStatement,
+  ExpressionStatement,
+  Span,
+} from '@swc/core';
+import { BaseParser } from './base-parser';
+import { ParsedFile, FunctionInfo } from '../types';
+import { logger } from '../../../utils/logger';
+
+/** 정책 주석 패턴 */
+const POLICY_COMMENT_PATTERNS = [
+  /^\/\/\s*정책\s*:/,
+  /^\/\/\s*Policy\s*:/i,
+  /^\/\*\s*정책\s*:/,
+  /^\/\*\s*Policy\s*:/i,
+  /^\/\/\s*@policy/i,
+  /^\/\*\s*@policy/i,
+  /^\/\/\s*POLICY\s*:/,
+  /^\/\*\s*POLICY\s*:/,
+];
+
+/** API 호출 메서드 패턴 */
+const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'];
+
+/**
+ * TypeScriptParser - TypeScript/JavaScript 파일을 SWC로 파싱하여 구조화된 정보 추출
+ *
+ * 기능:
+ *   - import/export 추출
+ *   - 함수 정의 추출 (function declaration, arrow function, class method)
+ *   - React 컴포넌트 감지 (JSX 반환하는 함수/클래스)
+ *   - API 호출 감지 (fetch, axios 패턴)
+ *   - 라우트 정의 감지 (react-router Route, express router)
+ *   - 정책 주석 추출
+ */
+export class TypeScriptParser extends BaseParser {
+  readonly name = 'typescript';
+  readonly supportedExtensions = ['.ts', '.tsx', '.js', '.jsx'];
+
+  /** 소스 코드 라인 배열 (라인 번호 계산용) */
+  private sourceLines: string[] = [];
+  /** 현재 파싱 중인 파일 경로 */
+  private currentFilePath = '';
+  /** SWC span 기준 오프셋 (parseSync 호출 간 누적되는 offset 보정용) */
+  private spanBaseOffset = 0;
+
+  /**
+   * TypeScript/JavaScript 파일을 파싱하여 구조화된 정보 추출
+   * @param filePath - 파일 경로
+   * @param content - 파일 내용
+   * @returns 파싱된 파일 정보
+   */
+  async parse(filePath: string, content: string): Promise<ParsedFile> {
+    const result = this.createEmptyParsedFile(filePath);
+    this.currentFilePath = filePath;
+    this.sourceLines = content.split('\n');
+
+    if (!content.trim()) {
+      return result;
+    }
+
+    try {
+      const isTsx = filePath.endsWith('.tsx') || filePath.endsWith('.jsx');
+      const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx');
+
+      const ast = parseSync(content, {
+        syntax: isTs ? 'typescript' : 'ecmascript',
+        tsx: isTsx,
+        jsx: !isTs && isTsx,
+        comments: true,
+        target: 'es2020',
+      });
+
+      // SWC parseSync는 호출 간 span offset이 누적됨 (버그/사양)
+      // Module span.start를 기준 오프셋으로 저장하여 라인 계산 시 보정
+      this.spanBaseOffset = ast.span.start;
+
+      // AST 모듈 body 순회
+      for (const item of ast.body) {
+        this.processModuleItem(item, result);
+      }
+
+      // 주석 추출 (소스 코드에서 직접)
+      this.extractComments(content, result);
+
+      // React 컴포넌트 판별 (함수 중 JSX를 반환하는 것)
+      this.detectReactComponents(ast, result);
+
+    } catch (err) {
+      logger.debug(`Failed to parse ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+      // 파싱 실패해도 빈 결과 반환 (fail-safe)
+    }
+
+    return result;
+  }
+
+  /**
+   * ModuleItem을 처리 (import, export, statement)
+   */
+  private processModuleItem(item: ModuleItem, result: ParsedFile): void {
+    switch (item.type) {
+      case 'ImportDeclaration':
+        this.processImport(item, result);
+        break;
+      case 'ExportDeclaration':
+        this.processExportDeclaration(item, result);
+        break;
+      case 'ExportDefaultDeclaration':
+        this.processExportDefault(item, result);
+        break;
+      case 'ExportDefaultExpression':
+        this.processExportDefaultExpression(item, result);
+        break;
+      case 'ExportNamedDeclaration':
+        this.processExportNamed(item, result);
+        break;
+      default:
+        // 일반 statement 처리
+        this.processStatement(item as Statement, result, false);
+        break;
+    }
+  }
+
+  /**
+   * Import 선언 처리
+   */
+  private processImport(node: ImportDeclaration, result: ParsedFile): void {
+    const importInfo = {
+      source: node.source.value,
+      specifiers: [] as string[],
+      isDefault: false,
+      line: this.getLineNumber(node.span),
+    };
+
+    for (const spec of node.specifiers) {
+      switch (spec.type) {
+        case 'ImportDefaultSpecifier':
+          importInfo.isDefault = true;
+          importInfo.specifiers.push(spec.local.value);
+          break;
+        case 'ImportSpecifier':
+          importInfo.specifiers.push(
+            spec.imported
+              ? (spec.imported.type === 'Identifier' ? spec.imported.value : spec.imported.value)
+              : spec.local.value
+          );
+          break;
+        case 'ImportNamespaceSpecifier':
+          importInfo.specifiers.push(`* as ${spec.local.value}`);
+          break;
+      }
+    }
+
+    result.imports.push(importInfo);
+  }
+
+  /**
+   * Export 선언 처리 (export function/class/const)
+   */
+  private processExportDeclaration(node: ExportDeclaration, result: ParsedFile): void {
+    const decl = node.declaration;
+    this.processDeclaration(decl, result, true);
+  }
+
+  /**
+   * Export Default 처리
+   */
+  private processExportDefault(node: ExportDefaultDeclaration, result: ParsedFile): void {
+    const decl = node.decl;
+    const line = this.getLineNumber(node.span);
+
+    if (decl.type === 'FunctionExpression') {
+      const funcExpr = decl as FunctionExpression;
+      const name = funcExpr.identifier?.value || 'default';
+      result.exports.push({
+        name,
+        type: 'default',
+        kind: 'function',
+        line,
+      });
+      this.extractFunction(name, funcExpr, line, result, true);
+    } else if (decl.type === 'ClassExpression') {
+      const name = (decl as unknown as { identifier?: { value: string } }).identifier?.value || 'default';
+      result.exports.push({
+        name,
+        type: 'default',
+        kind: 'class',
+        line,
+      });
+    } else {
+      result.exports.push({
+        name: 'default',
+        type: 'default',
+        kind: 'variable',
+        line,
+      });
+    }
+  }
+
+  /**
+   * Export Default Expression 처리
+   */
+  private processExportDefaultExpression(node: ExportDefaultExpression, result: ParsedFile): void {
+    const line = this.getLineNumber(node.span);
+    result.exports.push({
+      name: 'default',
+      type: 'default',
+      kind: 'variable',
+      line,
+    });
+  }
+
+  /**
+   * Export Named 처리 (export { ... })
+   */
+  private processExportNamed(node: ExportNamedDeclaration, result: ParsedFile): void {
+    const line = this.getLineNumber(node.span);
+    for (const spec of node.specifiers) {
+      if (spec.type === 'ExportSpecifier') {
+        const name = spec.exported
+          ? (spec.exported.type === 'Identifier' ? spec.exported.value : spec.exported.value)
+          : (spec.orig.type === 'Identifier' ? spec.orig.value : spec.orig.value);
+        result.exports.push({
+          name,
+          type: 'named',
+          kind: 'variable',
+          line,
+        });
+      }
+    }
+  }
+
+  /**
+   * Declaration 처리
+   */
+  private processDeclaration(decl: Declaration, result: ParsedFile, isExported: boolean): void {
+    switch (decl.type) {
+      case 'FunctionDeclaration':
+        this.processFunctionDeclaration(decl, result, isExported);
+        break;
+      case 'ClassDeclaration':
+        this.processClassDeclaration(decl, result, isExported);
+        break;
+      case 'VariableDeclaration':
+        this.processVariableDeclaration(decl, result, isExported);
+        break;
+      case 'TsInterfaceDeclaration':
+      case 'TsTypeAliasDeclaration': {
+        if (isExported) {
+          const line = this.getLineNumber(decl.span);
+          result.exports.push({
+            name: decl.id.value,
+            type: 'named',
+            kind: 'type',
+            line,
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Statement 처리
+   */
+  private processStatement(stmt: Statement, result: ParsedFile, isExported: boolean): void {
+    if (!stmt || !stmt.type) return;
+
+    switch (stmt.type) {
+      case 'FunctionDeclaration':
+        this.processFunctionDeclaration(stmt, result, isExported);
+        break;
+      case 'ClassDeclaration':
+        this.processClassDeclaration(stmt, result, isExported);
+        break;
+      case 'VariableDeclaration':
+        this.processVariableDeclaration(stmt, result, isExported);
+        break;
+      case 'ExpressionStatement':
+        this.processExpressionStatement(stmt as ExpressionStatement, result);
+        break;
+    }
+  }
+
+  /**
+   * 함수 선언 처리
+   */
+  private processFunctionDeclaration(
+    node: FunctionDeclaration,
+    result: ParsedFile,
+    isExported: boolean,
+  ): void {
+    const name = node.identifier.value;
+    const line = this.getLineNumber(node.span);
+    const endLine = this.getEndLineNumber(node.span);
+
+    const params = this.extractParams(node.params);
+    const returnType = node.returnType
+      ? this.tsTypeToString(node.returnType.typeAnnotation)
+      : undefined;
+
+    const funcInfo: FunctionInfo = {
+      name,
+      signature: this.buildSignature(name, params, returnType, node.async),
+      startLine: line,
+      endLine,
+      params,
+      returnType,
+      isAsync: node.async,
+      isExported,
+    };
+
+    result.functions.push(funcInfo);
+
+    if (isExported) {
+      result.exports.push({
+        name,
+        type: 'named',
+        kind: 'function',
+        line,
+      });
+    }
+
+    // 함수 본문에서 API 호출 감지
+    if (node.body) {
+      this.detectApiCallsInBlock(node.body, name, result);
+    }
+  }
+
+  /**
+   * 클래스 선언 처리
+   */
+  private processClassDeclaration(
+    node: ClassDeclaration,
+    result: ParsedFile,
+    isExported: boolean,
+  ): void {
+    const name = node.identifier.value;
+    const line = this.getLineNumber(node.span);
+
+    if (isExported) {
+      result.exports.push({
+        name,
+        type: 'named',
+        kind: 'class',
+        line,
+      });
+    }
+
+    // 클래스 메서드 추출
+    for (const member of node.body) {
+      if (member.type === 'ClassMethod') {
+        this.processClassMethod(member, name, result);
+      }
+    }
+  }
+
+  /**
+   * 클래스 메서드 처리
+   */
+  private processClassMethod(
+    method: ClassMethod,
+    className: string,
+    result: ParsedFile,
+  ): void {
+    let methodName = '';
+    if (method.key.type === 'Identifier') {
+      methodName = method.key.value;
+    } else if (method.key.type === 'Computed') {
+      methodName = '[computed]';
+    }
+
+    const fullName = `${className}.${methodName}`;
+    const line = this.getLineNumber(method.span);
+    const endLine = this.getEndLineNumber(method.span);
+    const params = this.extractParams(method.function.params);
+
+    result.functions.push({
+      name: fullName,
+      signature: this.buildSignature(fullName, params, undefined, method.function.async),
+      startLine: line,
+      endLine,
+      params,
+      isAsync: method.function.async,
+      isExported: false,
+    });
+
+    // API 호출 감지
+    if (method.function.body) {
+      this.detectApiCallsInBlock(method.function.body, fullName, result);
+    }
+  }
+
+  /**
+   * 변수 선언 처리 (arrow function 포함)
+   */
+  private processVariableDeclaration(
+    node: VariableDeclaration,
+    result: ParsedFile,
+    isExported: boolean,
+  ): void {
+    for (const decl of node.declarations) {
+      if (decl.id.type === 'Identifier' && decl.init) {
+        const name = decl.id.value;
+        const line = this.getLineNumber(decl.span);
+
+        if (
+          decl.init.type === 'ArrowFunctionExpression' ||
+          decl.init.type === 'FunctionExpression'
+        ) {
+          this.extractFunction(name, decl.init, line, result, isExported);
+        } else if (isExported) {
+          result.exports.push({
+            name,
+            type: 'named',
+            kind: 'variable',
+            line,
+          });
+        }
+
+        // 변수에 할당된 값에서 API 호출 감지
+        if (decl.init.type === 'CallExpression') {
+          this.detectApiCallInExpression(decl.init, name, result);
+        }
+      }
+    }
+  }
+
+  /**
+   * 함수 추출 (arrow function / function expression)
+   */
+  private extractFunction(
+    name: string,
+    node: ArrowFunctionExpression | FunctionExpression,
+    line: number,
+    result: ParsedFile,
+    isExported: boolean,
+  ): void {
+    const endLine = this.getEndLineNumber(node.span);
+
+    // ArrowFunctionExpression.params는 Pattern[] 타입
+    // FunctionExpression.params는 Param[] 타입
+    let params: { name: string; type?: string }[];
+    if (node.type === 'FunctionExpression') {
+      params = this.extractParams(node.params);
+    } else {
+      // ArrowFunctionExpression: params is Pattern[]
+      params = (node.params as unknown as Pattern[]).map(p => this.extractParamFromPattern(p));
+    }
+
+    const returnType = node.returnType
+      ? this.tsTypeToString((node.returnType as TsTypeAnnotation).typeAnnotation)
+      : undefined;
+
+    const funcInfo: FunctionInfo = {
+      name,
+      signature: this.buildSignature(name, params, returnType, node.async),
+      startLine: line,
+      endLine,
+      params,
+      returnType,
+      isAsync: node.async,
+      isExported,
+    };
+
+    result.functions.push(funcInfo);
+
+    if (isExported) {
+      result.exports.push({
+        name,
+        type: 'named',
+        kind: 'function',
+        line,
+      });
+    }
+
+    // 함수 본문에서 API 호출 감지
+    if (node.body && node.body.type === 'BlockStatement') {
+      this.detectApiCallsInBlock(node.body as BlockStatement, name, result);
+    } else if (node.body && node.body.type === 'CallExpression') {
+      // Expression body (e.g., () => fetch(...))
+      this.detectApiCallInExpression(node.body as CallExpression, name, result);
+    }
+  }
+
+  /**
+   * Expression statement 처리 (app.get, router.post 등)
+   */
+  private processExpressionStatement(
+    stmt: ExpressionStatement,
+    result: ParsedFile,
+  ): void {
+    if (stmt.expression.type === 'CallExpression') {
+      this.detectRouteDefinition(stmt.expression, result);
+      this.detectApiCallInExpression(stmt.expression, '<module>', result);
+    }
+  }
+
+  /**
+   * 주석 추출
+   */
+  private extractComments(content: string, result: ParsedFile): void {
+    const lines = content.split('\n');
+    let inBlockComment = false;
+    let blockCommentStart = 0;
+    let blockCommentText = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+
+      if (inBlockComment) {
+        blockCommentText += '\n' + lines[i];
+        if (trimmed.includes('*/')) {
+          inBlockComment = false;
+          const isPolicy = POLICY_COMMENT_PATTERNS.some(p => p.test(blockCommentText.trim()));
+          result.comments.push({
+            text: blockCommentText.trim(),
+            line: blockCommentStart + 1,
+            type: 'block',
+            isPolicy,
+          });
+          blockCommentText = '';
+        }
+        continue;
+      }
+
+      // 한 줄 주석
+      const singleLineMatch = trimmed.match(/^\/\/(.*)/);
+      if (singleLineMatch) {
+        const commentText = `//${singleLineMatch[1]}`;
+        const isPolicy = POLICY_COMMENT_PATTERNS.some(p => p.test(commentText.trim()));
+        result.comments.push({
+          text: commentText.trim(),
+          line: i + 1,
+          type: 'line',
+          isPolicy,
+        });
+        continue;
+      }
+
+      // 블록 주석 시작
+      const blockStart = trimmed.match(/^\/\*/);
+      if (blockStart) {
+        if (trimmed.includes('*/')) {
+          // 한 줄 블록 주석
+          const commentText = trimmed;
+          const isPolicy = POLICY_COMMENT_PATTERNS.some(p => p.test(commentText.trim()));
+          result.comments.push({
+            text: commentText.trim(),
+            line: i + 1,
+            type: 'block',
+            isPolicy,
+          });
+        } else {
+          inBlockComment = true;
+          blockCommentStart = i;
+          blockCommentText = lines[i];
+        }
+      }
+    }
+  }
+
+  /**
+   * React 컴포넌트 감지
+   */
+  private detectReactComponents(
+    _ast: Module,
+    result: ParsedFile,
+  ): void {
+    // 함수 중에서 JSX를 반환하는 것을 컴포넌트로 감지
+    // PascalCase 이름 + JSX 반환 패턴을 기반으로 판별
+    for (const func of result.functions) {
+      // PascalCase 이름인지 확인 (첫 글자 대문자)
+      const baseName = func.name.includes('.') ? func.name.split('.').pop()! : func.name;
+      if (!/^[A-Z]/.test(baseName)) continue;
+
+      // 함수 본문에서 JSX 패턴 확인
+      const funcBody = this.sourceLines
+        .slice(func.startLine - 1, func.endLine)
+        .join('\n');
+
+      const hasJSX =
+        /<[A-Z][a-zA-Z]*/.test(funcBody) ||
+        /<[a-z]+/.test(funcBody) ||
+        /React\.createElement/.test(funcBody) ||
+        /<>/.test(funcBody);
+
+      if (hasJSX) {
+        // Props 추출
+        const props = this.extractPropsFromFunction(func);
+
+        result.components.push({
+          name: baseName,
+          type: 'function-component',
+          props,
+          filePath: this.currentFilePath,
+          line: func.startLine,
+        });
+      }
+    }
+  }
+
+  /**
+   * 함수 파라미터에서 Props 추출
+   */
+  private extractPropsFromFunction(func: FunctionInfo): string[] {
+    if (func.params.length === 0) return [];
+
+    const firstParam = func.params[0];
+    if (firstParam.type) {
+      // 타입 어노테이션이 있으면 타입 이름 반환
+      return [firstParam.type];
+    }
+    return [firstParam.name];
+  }
+
+  /**
+   * 블록 문장에서 API 호출 감지
+   */
+  private detectApiCallsInBlock(
+    block: BlockStatement,
+    callerFunction: string,
+    result: ParsedFile,
+  ): void {
+    for (const stmt of block.stmts) {
+      this.detectApiCallsInStatement(stmt, callerFunction, result);
+    }
+  }
+
+  /**
+   * Statement에서 API 호출 감지
+   */
+  private detectApiCallsInStatement(
+    stmt: Statement,
+    callerFunction: string,
+    result: ParsedFile,
+  ): void {
+    if (!stmt) return;
+
+    switch (stmt.type) {
+      case 'ExpressionStatement':
+        if (stmt.expression.type === 'CallExpression') {
+          this.detectApiCallInExpression(stmt.expression, callerFunction, result);
+        } else if (stmt.expression.type === 'AwaitExpression' && stmt.expression.argument.type === 'CallExpression') {
+          this.detectApiCallInExpression(stmt.expression.argument, callerFunction, result);
+        }
+        break;
+      case 'VariableDeclaration':
+        for (const decl of stmt.declarations) {
+          if (decl.init?.type === 'CallExpression') {
+            this.detectApiCallInExpression(decl.init, callerFunction, result);
+          } else if (decl.init?.type === 'AwaitExpression' && decl.init.argument.type === 'CallExpression') {
+            this.detectApiCallInExpression(decl.init.argument, callerFunction, result);
+          }
+        }
+        break;
+      case 'ReturnStatement':
+        if (stmt.argument?.type === 'CallExpression') {
+          this.detectApiCallInExpression(stmt.argument, callerFunction, result);
+        }
+        break;
+      case 'IfStatement':
+        if (stmt.consequent.type === 'BlockStatement') {
+          this.detectApiCallsInBlock(stmt.consequent, callerFunction, result);
+        }
+        if (stmt.alternate) {
+          if (stmt.alternate.type === 'BlockStatement') {
+            this.detectApiCallsInBlock(stmt.alternate, callerFunction, result);
+          }
+        }
+        break;
+      case 'TryStatement':
+        this.detectApiCallsInBlock(stmt.block, callerFunction, result);
+        if (stmt.handler?.body) {
+          this.detectApiCallsInBlock(stmt.handler.body, callerFunction, result);
+        }
+        break;
+    }
+  }
+
+  /**
+   * CallExpression에서 API 호출 감지
+   */
+  private detectApiCallInExpression(
+    expr: CallExpression,
+    callerFunction: string,
+    result: ParsedFile,
+  ): void {
+    const line = this.getLineNumber(expr.span);
+
+    // fetch() 호출 감지
+    if (expr.callee.type === 'Identifier' && expr.callee.value === 'fetch') {
+      const url = this.extractUrlFromArgs(expr.arguments);
+      const method = this.extractMethodFromFetchOptions(expr.arguments);
+      if (url) {
+        result.apiCalls.push({
+          method: method || 'GET',
+          url,
+          line,
+          callerFunction,
+        });
+      }
+      return;
+    }
+
+    // axios.get(), axios.post() 등
+    if (expr.callee.type === 'MemberExpression') {
+      const memberExpr = expr.callee;
+      const objName = this.getIdentifierName(memberExpr.object);
+      const propName = this.getPropertyName(memberExpr);
+
+      if (objName && propName) {
+        // axios.get('/api/...'), api.get('/...') 등
+        if (
+          (objName === 'axios' || objName === 'api' || objName === 'http' || objName === 'client') &&
+          HTTP_METHODS.includes(propName.toLowerCase())
+        ) {
+          const url = this.extractUrlFromArgs(expr.arguments);
+          if (url) {
+            result.apiCalls.push({
+              method: propName.toUpperCase(),
+              url,
+              line,
+              callerFunction,
+            });
+          }
+          return;
+        }
+      }
+    }
+
+    // axios('/api/...') 직접 호출
+    if (expr.callee.type === 'Identifier' && expr.callee.value === 'axios') {
+      const url = this.extractUrlFromArgs(expr.arguments);
+      if (url) {
+        result.apiCalls.push({
+          method: 'GET',
+          url,
+          line,
+          callerFunction,
+        });
+      }
+    }
+  }
+
+  /**
+   * 라우트 정의 감지 (express router, react-router)
+   */
+  private detectRouteDefinition(
+    expr: CallExpression,
+    result: ParsedFile,
+  ): void {
+    const line = this.getLineNumber(expr.span);
+
+    // express: app.get('/path', handler), router.post('/path', handler)
+    if (expr.callee.type === 'MemberExpression') {
+      const objName = this.getIdentifierName(expr.callee.object);
+      const methodName = this.getPropertyName(expr.callee);
+
+      if (
+        objName &&
+        (objName === 'app' || objName === 'router') &&
+        methodName &&
+        HTTP_METHODS.includes(methodName.toLowerCase())
+      ) {
+        const routePath = this.extractUrlFromArgs(expr.arguments);
+        if (routePath) {
+          result.routeDefinitions.push({
+            path: routePath,
+            component: `${objName}.${methodName}`,
+            filePath: this.currentFilePath,
+            line,
+          });
+        }
+      }
+    }
+  }
+
+  // ============================================================
+  // Helper Methods
+  // ============================================================
+
+  /**
+   * Span에서 라인 번호 계산
+   * SWC의 누적 span offset을 보정하기 위해 spanBaseOffset을 차감
+   */
+  private getLineNumber(span: Span): number {
+    let offset = span.start - this.spanBaseOffset;
+    let line = 1;
+    for (let i = 0; i < this.sourceLines.length && offset > 0; i++) {
+      const lineLength = this.sourceLines[i].length + 1; // +1 for newline
+      if (offset <= lineLength) {
+        return i + 1;
+      }
+      offset -= lineLength;
+      line = i + 2;
+    }
+    return line;
+  }
+
+  /**
+   * Span에서 종료 라인 번호 계산
+   * SWC의 누적 span offset을 보정하기 위해 spanBaseOffset을 차감
+   */
+  private getEndLineNumber(span: Span): number {
+    let offset = span.end - this.spanBaseOffset;
+    let line = 1;
+    for (let i = 0; i < this.sourceLines.length && offset > 0; i++) {
+      const lineLength = this.sourceLines[i].length + 1;
+      if (offset <= lineLength) {
+        return i + 1;
+      }
+      offset -= lineLength;
+      line = i + 2;
+    }
+    return line;
+  }
+
+  /**
+   * 파라미터 목록 추출
+   */
+  private extractParams(params: Param[]): { name: string; type?: string }[] {
+    return params.map(param => {
+      const pattern = param.pat;
+      return this.extractParamFromPattern(pattern);
+    });
+  }
+
+  /**
+   * 패턴에서 파라미터 정보 추출
+   */
+  private extractParamFromPattern(pattern: Pattern): { name: string; type?: string } {
+    switch (pattern.type) {
+      case 'Identifier': {
+        const ident = pattern as Identifier & { typeAnnotation?: TsTypeAnnotation };
+        return {
+          name: ident.value,
+          type: ident.typeAnnotation
+            ? this.tsTypeToString(ident.typeAnnotation.typeAnnotation)
+            : undefined,
+        };
+      }
+      case 'AssignmentPattern':
+        return this.extractParamFromPattern(pattern.left);
+      case 'ObjectPattern':
+        return { name: '{ ... }', type: undefined };
+      case 'ArrayPattern':
+        return { name: '[ ... ]', type: undefined };
+      case 'RestElement':
+        return { name: `...${this.extractParamFromPattern(pattern.argument).name}` };
+      default:
+        return { name: 'unknown' };
+    }
+  }
+
+  /**
+   * TypeScript 타입을 문자열로 변환
+   */
+  private tsTypeToString(tsType: TsType): string {
+    switch (tsType.type) {
+      case 'TsKeywordType':
+        return tsType.kind;
+      case 'TsTypeReference':
+        return tsType.typeName.type === 'Identifier'
+          ? tsType.typeName.value
+          : 'unknown';
+      case 'TsArrayType':
+        return `${this.tsTypeToString(tsType.elemType)}[]`;
+      case 'TsUnionType':
+        return tsType.types.map(t => this.tsTypeToString(t)).join(' | ');
+      case 'TsLiteralType':
+        return String((tsType.literal as StringLiteral).value || 'literal');
+      default:
+        return 'unknown';
+    }
+  }
+
+  /**
+   * 함수 시그니처 빌드
+   */
+  private buildSignature(
+    name: string,
+    params: { name: string; type?: string }[],
+    returnType?: string,
+    isAsync?: boolean,
+  ): string {
+    const paramStr = params
+      .map(p => (p.type ? `${p.name}: ${p.type}` : p.name))
+      .join(', ');
+    const asyncPrefix = isAsync ? 'async ' : '';
+    const returnSuffix = returnType ? `: ${returnType}` : '';
+    return `${asyncPrefix}function ${name}(${paramStr})${returnSuffix}`;
+  }
+
+  /**
+   * CallExpression 인자에서 URL 추출
+   */
+  private extractUrlFromArgs(args: CallExpression['arguments']): string | null {
+    if (args.length === 0) return null;
+    const firstArg = args[0];
+    if (firstArg.expression.type === 'StringLiteral') {
+      return firstArg.expression.value;
+    }
+    if (firstArg.expression.type === 'TemplateLiteral') {
+      const quasi = firstArg.expression;
+      return quasi.quasis.map(q => q.raw).join('${...}');
+    }
+    return null;
+  }
+
+  /**
+   * fetch 옵션에서 HTTP 메서드 추출
+   */
+  private extractMethodFromFetchOptions(args: CallExpression['arguments']): string | null {
+    if (args.length < 2) return null;
+    const options = args[1].expression;
+    if (options.type === 'ObjectExpression') {
+      for (const prop of options.properties) {
+        if (
+          prop.type === 'KeyValueProperty' &&
+          prop.key.type === 'Identifier' &&
+          prop.key.value === 'method' &&
+          prop.value.type === 'StringLiteral'
+        ) {
+          return prop.value.value.toUpperCase();
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 식별자 이름 추출
+   */
+  private getIdentifierName(expr: Expression): string | null {
+    if (expr.type === 'Identifier') {
+      return expr.value;
+    }
+    return null;
+  }
+
+  /**
+   * MemberExpression에서 속성 이름 추출
+   */
+  private getPropertyName(expr: MemberExpression): string | null {
+    if (expr.property.type === 'Identifier') {
+      return expr.property.value;
+    }
+    if (expr.property.type === 'Computed') {
+      const computedExpr = expr.property.expression;
+      if (computedExpr.type === 'StringLiteral') {
+        return computedExpr.value;
+      }
+    }
+    return null;
+  }
+}
