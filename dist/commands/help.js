@@ -141,6 +141,34 @@ const COMMAND_HELP = {
             '/impact demo --no-open',
         ],
     },
+    'export-index': {
+        usage: '/impact export-index [--project <id>] [--summary|--full] [--output <file>]',
+        description: '코드 인덱스를 요약 또는 전체 형태로 내보냅니다.',
+        options: [
+            '--project <id>    특정 프로젝트 ID 지정 (기본: 활성 프로젝트)',
+            '--summary          요약 형태로 출력 (기본값)',
+            '--full             전체 인덱스 출력',
+            '--output <file>    파일로 저장 (기본: stdout)',
+        ],
+        examples: [
+            '/impact export-index',
+            '/impact export-index --full',
+            '/impact export-index --output index.json',
+            '/impact export-index --project my-app --full --output full-index.json',
+        ],
+    },
+    'save-result': {
+        usage: '/impact save-result --file <path> [--project <id>]',
+        description: '분석 결과 JSON 파일을 프로젝트 저장소에 등록합니다.',
+        options: [
+            '--file <path>     분석 결과 JSON 파일 경로 (필수)',
+            '--project <id>    특정 프로젝트 ID 지정 (기본: 활성 프로젝트)',
+        ],
+        examples: [
+            '/impact save-result --file result.json',
+            '/impact save-result --file result.json --project my-app',
+        ],
+    },
     help: {
         usage: '/impact help [command]',
         description: '도움말을 표시합니다.',

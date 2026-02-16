@@ -18,6 +18,8 @@ commands:
   - /impact owners
   - /impact annotations
   - /impact projects
+  - /impact export-index
+  - /impact save-result
   - /impact demo
   - /impact help
 ---
@@ -69,6 +71,14 @@ commands:
 멀티 프로젝트를 관리합니다 (전환, 제거, 아카이브).
 실행: node {skill_dir}/../../dist/index.js projects [--switch <name>] [--remove <name>] [--archive <name>]
 
+### /impact export-index [--project <id>] [--summary|--full] [--output <file>]
+코드 인덱스를 요약 또는 전체 형태로 내보냅니다. AI 분석 프로토콜의 Step 1에서 사용합니다.
+실행: node {skill_dir}/../../dist/index.js export-index [--project <id>] [--summary|--full] [--output <file>]
+
+### /impact save-result --file <path> [--project <id>]
+분석 결과 JSON 파일을 프로젝트 저장소에 등록합니다. AI 분석 프로토콜의 Step 4에서 사용합니다.
+실행: node {skill_dir}/../../dist/index.js save-result --file <path> [--project <id>]
+
 ### /impact demo
 샘플 데이터 기반으로 도구를 체험합니다.
 실행: node {skill_dir}/../../dist/index.js demo
@@ -76,6 +86,230 @@ commands:
 ### /impact help [command] / /impact faq
 도움말을 표시하거나 자주 묻는 질문(FAQ)을 조회합니다.
 실행: node {skill_dir}/../../dist/index.js help [command]
+
+---
+
+## AI 분석 프로토콜 (Claude Native Mode)
+
+사용자가 기획서 분석을 요청하면 아래 4단계로 진행한다.
+단, 사용자가 "규칙 기반으로", "CLI로 분석" 등을 명시하면 기존 `analyze --file <path>` 명령어를 사용한다.
+
+### Step 1: 코드 인덱스 로드
+```bash
+node {skill_dir}/../../dist/index.js export-index [--project <id>]
+```
+- stdout으로 인덱스 요약 JSON을 수신한다.
+- 프로젝트의 화면/컴포넌트/API/모델/정책/의존성 구조를 파악한다.
+- 대형 프로젝트의 경우 기본값(요약 모드)을 사용하고, 상세 정보가 필요하면 `--full` 옵션을 추가한다.
+
+### Step 2: 기획서 읽기
+사용자로부터 기획서를 받는다:
+- 파일 경로 제공 시: Read 도구로 직접 읽기 (PDF도 Read 도구가 지원)
+- 텍스트 직접 입력 시: 그대로 사용
+
+기획서에서 다음을 추출한다:
+- 기능 요구사항 (features)
+- 비즈니스 규칙 (businessRules)
+- 변경/추가되는 화면 (screens)
+- 불명확한 사항 (ambiguities)
+
+### Step 3: 영향도 분석 수행
+인덱스 + 기획서 내용을 대조하여 직접 분석한다:
+- 영향받는 화면/컴포넌트/API 식별 (인덱스의 화면명, 라우트, 컴포넌트명으로 매칭)
+- FE/BE 작업 항목 도출
+- 정책 충돌 감지 (인덱스의 policies와 기획서 요구사항 비교)
+- 4차원 난이도 점수 산출 (developmentComplexity, impactScope, policyChange, dependencyRisk)
+- 등급 결정: Low(0-15), Medium(16-40), High(41-70), Critical(71+)
+
+### Step 4: 결과 저장 및 시각화
+분석 결과를 ConfidenceEnrichedResult JSON으로 구조화한다 (하단 "분석 결과 JSON 스키마" 참조).
+임시 파일로 저장 후 CLI로 등록:
+```bash
+node {skill_dir}/../../dist/index.js save-result --file <temp-result.json> [--project <id>]
+```
+
+저장 완료 후 대시보드 안내:
+```bash
+node {skill_dir}/../../dist/index.js view
+```
+→ http://localhost:3847 에서 결과 확인 가능
+
+---
+
+## 분석 결과 JSON 스키마
+
+AI 분석 결과는 ConfidenceEnrichedResult 타입에 맞는 JSON이어야 한다.
+아래 스키마를 준수하여 JSON을 생성하고, `save-result` 명령어로 저장한다.
+
+### 전체 구조
+
+```json
+{
+  "analysisId": "analysis-1708012800000",
+  "analyzedAt": "2026-02-16T12:00:00.000Z",
+  "specTitle": "기획서 제목",
+  "analysisMethod": "claude-native",
+  "affectedScreens": [ ... ],
+  "tasks": [ ... ],
+  "planningChecks": [ ... ],
+  "policyChanges": [ ... ],
+  "screenScores": [ ... ],
+  "totalScore": 32,
+  "grade": "Medium",
+  "recommendation": "권장 사항 텍스트",
+  "policyWarnings": [ ... ],
+  "ownerNotifications": [ ... ],
+  "confidenceScores": [ ... ],
+  "lowConfidenceWarnings": [ ... ]
+}
+```
+
+### affectedScreens 항목
+
+```json
+{
+  "screenId": "screen-cart",
+  "screenName": "장바구니",
+  "impactLevel": "high",
+  "tasks": [
+    {
+      "id": "task-001",
+      "title": "작업 제목",
+      "type": "FE",
+      "actionType": "modify",
+      "description": "작업 설명",
+      "affectedFiles": ["src/pages/Cart.tsx"],
+      "relatedApis": ["api-cart-items"],
+      "planningChecks": ["check-001"],
+      "rationale": "분석 근거"
+    }
+  ]
+}
+```
+- `impactLevel`: `"low"` | `"medium"` | `"high"` | `"critical"`
+- `tasks`: 해당 화면에 속하는 작업 목록. 최상위 `tasks` 배열에도 동일하게 포함한다.
+
+### tasks 항목
+
+```json
+{
+  "id": "task-001",
+  "title": "장바구니 쿠폰 적용 UI 구현",
+  "type": "FE",
+  "actionType": "modify",
+  "description": "쿠폰 입력 필드 및 적용 버튼 추가",
+  "affectedFiles": ["src/pages/Cart.tsx", "src/components/CouponInput.tsx"],
+  "relatedApis": ["api-apply-coupon"],
+  "planningChecks": ["check-001"],
+  "rationale": "기획서 3.2절 쿠폰 적용 요구사항에 따라 장바구니 화면 수정 필요"
+}
+```
+- `type`: `"FE"` | `"BE"` (프론트엔드/백엔드 구분 필수)
+- `actionType`: `"new"` | `"modify"` | `"config"`
+
+### planningChecks 항목
+
+```json
+{
+  "id": "check-001",
+  "content": "쿠폰 중복 적용 가능 여부 확인 필요",
+  "relatedFeatureId": "feat-coupon",
+  "priority": "high",
+  "status": "pending"
+}
+```
+- `priority`: `"high"` | `"medium"` | `"low"`
+- `status`: 항상 `"pending"` (생성 시점)
+
+### policyChanges 항목
+
+```json
+{
+  "id": "policy-change-001",
+  "policyName": "쿠폰 사용 정책",
+  "description": "1인 1쿠폰 제한 정책을 중복 적용 가능으로 변경",
+  "changeType": "modify",
+  "affectedFiles": ["src/policies/coupon-policy.ts"],
+  "requiresReview": true
+}
+```
+- `changeType`: `"new"` | `"modify"` | `"remove"`
+
+### screenScores 항목
+
+```json
+{
+  "screenId": "screen-cart",
+  "screenName": "장바구니",
+  "screenScore": 25,
+  "grade": "Medium",
+  "taskScores": [
+    {
+      "taskId": "task-001",
+      "scores": {
+        "developmentComplexity": { "score": 6, "weight": 0.35, "rationale": "근거" },
+        "impactScope": { "score": 7, "weight": 0.30, "rationale": "근거" },
+        "policyChange": { "score": 5, "weight": 0.20, "rationale": "근거" },
+        "dependencyRisk": { "score": 4, "weight": 0.15, "rationale": "근거" }
+      },
+      "totalScore": 25,
+      "grade": "Medium"
+    }
+  ]
+}
+```
+- 각 score 차원의 점수는 1~10 범위
+- `totalScore` = 각 차원 (score * weight * 10)의 합산
+- `grade`: `"Low"` (0-15) | `"Medium"` (16-40) | `"High"` (41-70) | `"Critical"` (71+)
+
+### confidenceScores 항목
+
+```json
+{
+  "systemId": "screen-cart",
+  "systemName": "장바구니",
+  "overallScore": 85,
+  "grade": "high",
+  "layers": {
+    "layer1Structure": { "score": 90, "weight": 0.25, "details": "화면 파일 정확히 식별" },
+    "layer2Dependency": { "score": 80, "weight": 0.25, "details": "API 의존성 확인됨" },
+    "layer3Policy": { "score": 75, "weight": 0.20, "details": "관련 정책 1건 매칭" },
+    "layer4Analysis": { "score": 90, "weight": 0.30, "details": "작업 항목 구체적" }
+  },
+  "warnings": [],
+  "recommendations": []
+}
+```
+- `grade`: `"high"` (80+) | `"medium"` (60-79) | `"low"` (40-59) | `"very_low"` (<40)
+- 각 영향받는 화면(시스템)마다 1개씩 생성한다.
+
+### lowConfidenceWarnings 항목
+
+```json
+{
+  "systemId": "screen-cart",
+  "systemName": "장바구니",
+  "confidenceScore": 35,
+  "grade": "very_low",
+  "reason": "인덱스에 해당 화면의 컴포넌트 정보 부족",
+  "action": "/impact reindex --full 실행 후 재분석 권장"
+}
+```
+- `overallScore`가 60 미만인 시스템에 대해서만 생성한다.
+
+### 필드별 규칙 요약
+
+| 필드 | 규칙 |
+|------|------|
+| `analysisId` | `"analysis-"` + 타임스탬프 (밀리초) |
+| `analyzedAt` | ISO 8601 형식 |
+| `analysisMethod` | 반드시 `"claude-native"` 설정 |
+| `grade` | totalScore 기준 - Low(0-15), Medium(16-40), High(41-70), Critical(71+) |
+| `affectedScreens` | 인덱스의 screens와 매칭하여 screenId 사용 |
+| `tasks` | FE/BE 구분 필수, affectedFiles는 인덱스 기반 추정 |
+| `policyWarnings` | 정책 충돌이 없으면 빈 배열 |
+| `ownerNotifications` | 담당자 정보가 없으면 빈 배열 |
+| `confidenceScores` | 각 시스템(화면)별 분석 신뢰도와 근거 |
 
 ---
 
@@ -147,10 +381,14 @@ commands:
 
 사용자의 자연어 입력을 아래 테이블에 따라 CLI 명령어로 매핑하여 실행합니다:
 
-| 사용자 의도 | 실행 명령어 | 트리거 예시 |
-|------------|-----------|-----------|
+| 사용자 의도 | 실행 방식 | 트리거 예시 |
+|------------|----------|-----------|
 | 프로젝트 등록 | `node {skill_dir}/../../dist/index.js init <path>` | "이 경로가 분석 대상이야", "프로젝트 등록" |
-| 기획서 분석 | `node {skill_dir}/../../dist/index.js analyze --file <path>` | "분석해줘", "기획서 분석", "영향도 체크" |
+| 기획서 분석 | AI 분석 프로토콜 (Step 1~4) | "분석해줘", "기획서 분석", "영향도 체크" |
+| 기획서 분석 (규칙 기반) | `node {skill_dir}/../../dist/index.js analyze --file <path>` | "규칙 기반으로 분석", "CLI로 분석" |
+| AI 분석, 정밀 분석 | AI 분석 프로토콜 (Step 1~4) | "AI로 분석해줘", "정밀 분석", "AI 분석" |
+| 인덱스 내보내기 | `node {skill_dir}/../../dist/index.js export-index` | "인덱스 내보내기", "인덱스 확인" |
+| 결과 저장 | `node {skill_dir}/../../dist/index.js save-result --file <path>` | "결과 저장", "분석 결과 저장" |
 | 결과 보기 | `node {skill_dir}/../../dist/index.js view` | "결과 보여줘", "대시보드 열어줘" |
 | 티켓 생성 | `node {skill_dir}/../../dist/index.js tickets` | "티켓 만들어줘", "작업 분배" |
 | 데모 | `node {skill_dir}/../../dist/index.js demo` | "데모 보여줘", "샘플" |
@@ -158,6 +396,7 @@ commands:
 | 인덱스 갱신 | `node {skill_dir}/../../dist/index.js reindex` | "인덱스 갱신", "재스캔" |
 | 정책 검색 | `node {skill_dir}/../../dist/index.js policies --search <term>` | "정책 검색" |
 | 담당자 | `node {skill_dir}/../../dist/index.js owners` | "담당자 확인" |
+| 주석 생성 | `node {skill_dir}/../../dist/index.js annotations generate` | "주석 생성", "코드 분석 메모" |
 | 프로젝트 전환 | `node {skill_dir}/../../dist/index.js projects --switch <name>` | "다른 프로젝트" |
 | 도움말 | `node {skill_dir}/../../dist/index.js help` | "도움말", "뭘 할 수 있어?" |
 

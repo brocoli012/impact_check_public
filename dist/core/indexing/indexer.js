@@ -110,6 +110,7 @@ class Indexer {
                 techStack: scanResult.techStack,
                 packageManager: this.detectPackageManager(resolvedPath),
             },
+            lastUpdateType: 'full',
             stats: {
                 totalFiles: scanResult.stats.totalFiles,
                 screens: screens.length,
@@ -133,15 +134,171 @@ class Indexer {
         return codeIndex;
     }
     /**
-     * 증분 업데이트
+     * 증분 업데이트 - Git diff 기반으로 변경된 파일만 재파싱
      * @param projectPath - 프로젝트 루트 경로
+     * @param projectId - 프로젝트 ID (인덱스 로드/저장용)
+     * @param basePath - 기본 경로 (인덱스 로드/저장용)
      * @returns 업데이트된 코드 인덱스
      */
-    async incrementalUpdate(projectPath) {
-        // TODO: Phase 3에서 Git diff 기반 증분 업데이트 구현
-        // 현재는 fullIndex()로 폴백 (MVP 동작)
-        logger_1.logger.info('Incremental update: falling back to full index (MVP)');
-        return this.fullIndex(projectPath);
+    async incrementalUpdate(projectPath, projectId, basePath) {
+        const resolvedPath = path.resolve(projectPath);
+        const effectiveProjectId = projectId || path.basename(resolvedPath);
+        logger_1.logger.info(`Starting incremental update for: ${resolvedPath}`);
+        // Step 1: 기존 인덱스 로드
+        const existingIndex = await this.loadIndex(effectiveProjectId, basePath);
+        if (!existingIndex) {
+            logger_1.logger.info('No existing index found, falling back to full index');
+            return this.fullIndex(projectPath);
+        }
+        // Step 2: 변경 파일 감지
+        const lastCommit = existingIndex.meta.gitCommit;
+        if (!lastCommit || lastCommit === 'unknown') {
+            logger_1.logger.info('No valid git commit in existing index, falling back to full index');
+            return this.fullIndex(projectPath);
+        }
+        let changedFiles;
+        try {
+            changedFiles = await this.getChangedFiles(projectPath, lastCommit);
+        }
+        catch (err) {
+            logger_1.logger.warn(`Failed to get changed files, falling back to full index: ${err instanceof Error ? err.message : String(err)}`);
+            return this.fullIndex(projectPath);
+        }
+        const totalChanged = changedFiles.added.length + changedFiles.modified.length + changedFiles.deleted.length;
+        // Step 3: 변경 없음 체크
+        if (totalChanged === 0) {
+            logger_1.logger.info('이미 최신 상태입니다');
+            return existingIndex;
+        }
+        // Step 4: 변경 비율 체크 (30% 초과 시 fullIndex 전환)
+        const totalFiles = existingIndex.files.length;
+        if (totalFiles > 0) {
+            const changeRatio = totalChanged / totalFiles;
+            if (changeRatio > 0.3) {
+                logger_1.logger.info(`Change ratio ${(changeRatio * 100).toFixed(1)}% exceeds 30% threshold, switching to full index`);
+                return this.fullIndex(projectPath);
+            }
+        }
+        logger_1.logger.info(`Incremental update: +${changedFiles.added.length} ~${changedFiles.modified.length} -${changedFiles.deleted.length}`);
+        // Step 5: 증분 처리
+        // 5a. 변경/추가 파일만 파싱
+        const filesToParse = [];
+        const changedPathSet = new Set([...changedFiles.added, ...changedFiles.modified]);
+        // 현재 파일 시스템에서 스캔하여 FileInfo 획득
+        const scanResult = await this.scanner.scan(resolvedPath);
+        const currentFileMap = new Map();
+        for (const file of scanResult.files) {
+            currentFileMap.set(file.path, file);
+        }
+        for (const filePath of changedPathSet) {
+            const fileInfo = currentFileMap.get(filePath);
+            if (fileInfo) {
+                filesToParse.push(fileInfo);
+            }
+        }
+        const newParsedFiles = await this.parseFiles(resolvedPath, filesToParse);
+        logger_1.logger.info(`  Parsed ${newParsedFiles.length} changed files`);
+        // 5b. files 배열 업데이트: deleted 제거, modified 교체, added 추가
+        const deletedSet = new Set(changedFiles.deleted);
+        const modifiedSet = new Set(changedFiles.modified);
+        const addedSet = new Set(changedFiles.added);
+        // 삭제/수정 파일 제거 후 수정/추가 파일 반영
+        const updatedFiles = existingIndex.files.filter(f => !deletedSet.has(f.path) && !modifiedSet.has(f.path));
+        // modified, added 파일의 FileInfo 추가
+        for (const filePath of [...modifiedSet, ...addedSet]) {
+            const fileInfo = currentFileMap.get(filePath);
+            if (fileInfo) {
+                updatedFiles.push(fileInfo);
+            }
+        }
+        // 5c. screens, components, apis 업데이트 (변경 파일 관련 항목만)
+        const allChangedPaths = new Set([...changedFiles.added, ...changedFiles.modified, ...changedFiles.deleted]);
+        // 기존 항목에서 변경 파일 관련 제거
+        const updatedScreens = existingIndex.screens.filter(s => !allChangedPaths.has(s.filePath));
+        const updatedComponents = existingIndex.components.filter(c => !allChangedPaths.has(c.filePath));
+        const updatedApis = existingIndex.apis.filter(a => !allChangedPaths.has(a.filePath));
+        // 새로 파싱된 파일에서 추출하여 추가
+        const newScreens = this.extractScreens(newParsedFiles);
+        const newComponents = this.extractComponents(newParsedFiles);
+        const newApis = this.extractApiEndpoints(newParsedFiles);
+        updatedScreens.push(...newScreens);
+        updatedComponents.push(...newComponents);
+        updatedApis.push(...newApis);
+        // 5d. 전체 파일 대상 policies 재추출
+        logger_1.logger.info('  Re-extracting policies...');
+        const allFilesToParse = await this.parseFiles(resolvedPath, updatedFiles);
+        const commentPolicies = this.policyExtractor.extractFromComments(allFilesToParse);
+        const docPolicies = await this.policyExtractor.extractFromDocs(resolvedPath);
+        const manualPolicies = await this.policyExtractor.loadManualPolicies(resolvedPath);
+        const allPolicies = this.policyExtractor.mergeAllPolicies(commentPolicies, docPolicies, manualPolicies);
+        // 5e. dependencyGraph 전체 재빌드 (안전 전략)
+        logger_1.logger.info('  Rebuilding dependency graph...');
+        const dependencyGraph = this.graphBuilder.build(allFilesToParse);
+        // 5f. meta 갱신
+        const now = new Date().toISOString();
+        const gitInfo = await this.getGitInfo(resolvedPath);
+        const updatedMeta = {
+            ...existingIndex.meta,
+            updatedAt: now,
+            gitCommit: gitInfo.commit,
+            gitBranch: gitInfo.branch,
+            lastUpdateType: 'incremental',
+            stats: {
+                totalFiles: updatedFiles.length,
+                screens: updatedScreens.length,
+                components: updatedComponents.length,
+                apiEndpoints: updatedApis.length,
+                models: existingIndex.models.length,
+                modules: dependencyGraph.graph.nodes.filter(n => n.type === 'module').length,
+            },
+        };
+        const updatedIndex = {
+            meta: updatedMeta,
+            files: updatedFiles,
+            screens: updatedScreens,
+            components: updatedComponents,
+            apis: updatedApis,
+            models: existingIndex.models,
+            policies: allPolicies,
+            dependencies: dependencyGraph,
+        };
+        logger_1.logger.info('Incremental update complete!');
+        return updatedIndex;
+    }
+    /**
+     * 인덱스가 최신인지 확인
+     * @param projectPath - 프로젝트 루트 경로
+     * @param projectId - 프로젝트 ID
+     * @param basePath - 기본 경로
+     * @returns true이면 stale (업데이트 필요)
+     */
+    async isIndexStale(projectPath, projectId, basePath) {
+        const resolvedPath = path.resolve(projectPath);
+        const effectiveProjectId = projectId || path.basename(resolvedPath);
+        // 기존 인덱스 로드
+        const existingIndex = await this.loadIndex(effectiveProjectId, basePath);
+        if (!existingIndex) {
+            return true;
+        }
+        // gitCommit 체크
+        if (!existingIndex.meta.gitCommit || existingIndex.meta.gitCommit === 'unknown') {
+            return true;
+        }
+        // HEAD commit과 비교
+        try {
+            const { simpleGit } = await Promise.resolve().then(() => __importStar(require('simple-git')));
+            const git = simpleGit(resolvedPath);
+            const log = await git.log({ maxCount: 1 });
+            const headCommit = log.latest?.hash || '';
+            if (!headCommit) {
+                return true;
+            }
+            return headCommit !== existingIndex.meta.gitCommit;
+        }
+        catch {
+            // Git 오류 시 stale로 판단
+            return true;
+        }
     }
     /**
      * 인덱스 저장
@@ -330,6 +487,131 @@ class Indexer {
             }
         }
         return screens;
+    }
+    /**
+     * Git diff 또는 hash 비교를 통해 변경된 파일 목록을 반환
+     * @param projectPath 프로젝트 루트 경로
+     * @param lastCommit 이전 인덱싱 시점의 Git commit hash
+     * @returns ChangedFileSet
+     */
+    async getChangedFiles(projectPath, lastCommit) {
+        const resolvedPath = path.resolve(projectPath);
+        // 지원하는 파일 확장자 (FileScanner의 SUPPORTED_EXTENSIONS와 동일)
+        const supportedExtensions = ['.ts', '.tsx', '.js', '.jsx', '.vue', '.java', '.kt', '.py'];
+        const isSupported = (filePath) => {
+            const ext = path.extname(filePath).toLowerCase();
+            return supportedExtensions.includes(ext);
+        };
+        try {
+            // Git diff 방식 시도
+            const { simpleGit } = await Promise.resolve().then(() => __importStar(require('simple-git')));
+            const git = simpleGit(resolvedPath);
+            // Git 저장소인지 확인
+            const isRepo = await git.checkIsRepo();
+            if (!isRepo) {
+                throw new Error('Not a git repository');
+            }
+            // diff --name-status로 정확한 파일 상태 분류
+            const nameStatusRaw = await git.diff(['--name-status', lastCommit, 'HEAD']);
+            const addedSet = new Set();
+            const modifiedSet = new Set();
+            const deletedSet = new Set();
+            for (const line of nameStatusRaw.split('\n')) {
+                const trimmed = line.trim();
+                if (!trimmed)
+                    continue;
+                const parts = trimmed.split('\t');
+                if (parts.length < 2)
+                    continue;
+                const status = parts[0].charAt(0); // A, M, D, R 등
+                // rename의 경우 parts[2]가 새 이름
+                const filePath = status === 'R' && parts.length >= 3 ? parts[2] : parts[1];
+                if (!isSupported(filePath))
+                    continue;
+                switch (status) {
+                    case 'A':
+                        addedSet.add(filePath);
+                        break;
+                    case 'M':
+                        modifiedSet.add(filePath);
+                        break;
+                    case 'D':
+                        deletedSet.add(filePath);
+                        break;
+                    case 'R':
+                        // Rename: 이전 파일은 삭제, 새 파일은 추가
+                        if (parts.length >= 3 && isSupported(parts[1])) {
+                            deletedSet.add(parts[1]);
+                        }
+                        addedSet.add(filePath);
+                        break;
+                    default:
+                        // C (copy), T (type change) 등은 modified로 처리
+                        modifiedSet.add(filePath);
+                        break;
+                }
+            }
+            logger_1.logger.info(`Changed files (git-diff): +${addedSet.size} ~${modifiedSet.size} -${deletedSet.size}`);
+            return {
+                added: Array.from(addedSet),
+                modified: Array.from(modifiedSet),
+                deleted: Array.from(deletedSet),
+                method: 'git-diff',
+            };
+        }
+        catch (err) {
+            // Git 사용 불가 시 hash 비교 폴백
+            logger_1.logger.info(`Git diff unavailable, falling back to hash comparison: ${err instanceof Error ? err.message : String(err)}`);
+            return this.getChangedFilesByHash(resolvedPath);
+        }
+    }
+    /**
+     * 해시 비교 방식으로 변경된 파일 감지 (Git 폴백)
+     * @param projectPath 프로젝트 루트 경로 (resolved)
+     * @returns ChangedFileSet
+     */
+    async getChangedFilesByHash(projectPath) {
+        // 현재 파일 스캔
+        const scanResult = await this.scanner.scan(projectPath);
+        const currentFiles = new Map();
+        for (const file of scanResult.files) {
+            currentFiles.set(file.path, file.hash);
+        }
+        // 기존 인덱스의 파일 목록 로드 시도
+        const projectName = path.basename(projectPath);
+        const existingIndex = await this.loadIndex(projectName);
+        const previousFiles = new Map();
+        if (existingIndex) {
+            for (const file of existingIndex.files) {
+                previousFiles.set(file.path, file.hash);
+            }
+        }
+        const added = [];
+        const modified = [];
+        const deleted = [];
+        // 현재 파일 순회: 새 파일 / 수정된 파일 감지
+        for (const [filePath, hash] of currentFiles) {
+            const prevHash = previousFiles.get(filePath);
+            if (prevHash === undefined) {
+                added.push(filePath);
+            }
+            else if (prevHash !== hash) {
+                modified.push(filePath);
+            }
+        }
+        // 이전 파일 순회: 삭제된 파일 감지
+        for (const filePath of previousFiles.keys()) {
+            if (!currentFiles.has(filePath)) {
+                deleted.push(filePath);
+            }
+        }
+        logger_1.logger.info(`Changed files (hash-compare): +${added.length} ~${modified.length} -${deleted.length}`);
+        return {
+            added,
+            modified,
+            deleted,
+            method: 'hash-compare',
+        };
     }
     /**
      * Git 정보 가져오기

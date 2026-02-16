@@ -62,6 +62,8 @@ export interface IndexMeta {
     /** 패키지 매니저 */
     packageManager: string;
   };
+  /** 마지막 업데이트 유형 */
+  lastUpdateType?: 'full' | 'incremental';
   /** 통계 정보 */
   stats: {
     /** 전체 파일 수 */
@@ -277,6 +279,22 @@ export interface FileInfo {
   extension: string;
   /** 마지막 수정 시각 */
   lastModified: ISODateString;
+}
+
+// ============================================================
+// 변경 파일 감지 타입
+// ============================================================
+
+/** 변경된 파일 세트 - Git diff 또는 해시 비교 결과 */
+export interface ChangedFileSet {
+  /** 신규 파일 경로 (프로젝트 루트 상대) */
+  added: FilePath[];
+  /** 수정 파일 경로 */
+  modified: FilePath[];
+  /** 삭제 파일 경로 */
+  deleted: FilePath[];
+  /** 감지 방법 */
+  method: 'git-diff' | 'hash-compare';
 }
 
 // ============================================================

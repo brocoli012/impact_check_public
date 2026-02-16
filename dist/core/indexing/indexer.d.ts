@@ -2,7 +2,7 @@
  * @module core/indexing/indexer
  * @description 인덱서 메인 - 전체 인덱싱 파이프라인 실행 및 인덱스 관리
  */
-import { CodeIndex } from '../../types/index';
+import { CodeIndex, ChangedFileSet } from '../../types/index';
 /**
  * Indexer - 전체 인덱싱 파이프라인 실행 및 관리
  *
@@ -27,11 +27,21 @@ export declare class Indexer {
      */
     fullIndex(projectPath: string): Promise<CodeIndex>;
     /**
-     * 증분 업데이트
+     * 증분 업데이트 - Git diff 기반으로 변경된 파일만 재파싱
      * @param projectPath - 프로젝트 루트 경로
+     * @param projectId - 프로젝트 ID (인덱스 로드/저장용)
+     * @param basePath - 기본 경로 (인덱스 로드/저장용)
      * @returns 업데이트된 코드 인덱스
      */
-    incrementalUpdate(projectPath: string): Promise<CodeIndex>;
+    incrementalUpdate(projectPath: string, projectId?: string, basePath?: string): Promise<CodeIndex>;
+    /**
+     * 인덱스가 최신인지 확인
+     * @param projectPath - 프로젝트 루트 경로
+     * @param projectId - 프로젝트 ID
+     * @param basePath - 기본 경로
+     * @returns true이면 stale (업데이트 필요)
+     */
+    isIndexStale(projectPath: string, projectId?: string, basePath?: string): Promise<boolean>;
     /**
      * 인덱스 저장
      * @param index - 코드 인덱스
@@ -66,6 +76,19 @@ export declare class Indexer {
      * 화면 정보 추출
      */
     private extractScreens;
+    /**
+     * Git diff 또는 hash 비교를 통해 변경된 파일 목록을 반환
+     * @param projectPath 프로젝트 루트 경로
+     * @param lastCommit 이전 인덱싱 시점의 Git commit hash
+     * @returns ChangedFileSet
+     */
+    getChangedFiles(projectPath: string, lastCommit: string): Promise<ChangedFileSet>;
+    /**
+     * 해시 비교 방식으로 변경된 파일 감지 (Git 폴백)
+     * @param projectPath 프로젝트 루트 경로 (resolved)
+     * @returns ChangedFileSet
+     */
+    private getChangedFilesByHash;
     /**
      * Git 정보 가져오기
      */

@@ -19,6 +19,8 @@ const projects_1 = require("./commands/projects");
 const policies_1 = require("./commands/policies");
 const owners_1 = require("./commands/owners");
 const annotations_1 = require("./commands/annotations");
+const export_index_1 = require("./commands/export-index");
+const save_result_1 = require("./commands/save-result");
 /** 알 수 없는 명령어 에러 */
 class UnknownCommandError extends Error {
     /**
@@ -49,6 +51,8 @@ const COMMANDS = {
     'policies': policies_1.PoliciesCommand,
     'owners': owners_1.OwnersCommand,
     'annotations': annotations_1.AnnotationsCommand,
+    'export-index': export_index_1.ExportIndexCommand,
+    'save-result': save_result_1.SaveResultCommand,
 };
 /**
  * 명령어를 라우팅하여 적절한 Command 인스턴스를 반환

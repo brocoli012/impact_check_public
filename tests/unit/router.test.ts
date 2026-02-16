@@ -16,6 +16,8 @@ import { ProjectsCommand } from '../../src/commands/projects';
 import { PoliciesCommand } from '../../src/commands/policies';
 import { OwnersCommand } from '../../src/commands/owners';
 import { AnnotationsCommand } from '../../src/commands/annotations';
+import { ExportIndexCommand } from '../../src/commands/export-index';
+import { SaveResultCommand } from '../../src/commands/save-result';
 
 describe('Router', () => {
   describe('route()', () => {
@@ -97,6 +99,18 @@ describe('Router', () => {
       expect(command.name).toBe('annotations');
     });
 
+    it('should route "export-index" to ExportIndexCommand', () => {
+      const command = route(['export-index', '--full']);
+      expect(command).toBeInstanceOf(ExportIndexCommand);
+      expect(command.name).toBe('export-index');
+    });
+
+    it('should route "save-result" to SaveResultCommand', () => {
+      const command = route(['save-result', '--file', 'result.json']);
+      expect(command).toBeInstanceOf(SaveResultCommand);
+      expect(command.name).toBe('save-result');
+    });
+
     it('should default to HelpCommand when no command is provided', () => {
       const command = route([]);
       expect(command).toBeInstanceOf(HelpCommand);
@@ -146,11 +160,13 @@ describe('Router', () => {
       expect(commands).toContain('policies');
       expect(commands).toContain('owners');
       expect(commands).toContain('annotations');
+      expect(commands).toContain('export-index');
+      expect(commands).toContain('save-result');
     });
 
-    it('should return at least 13 commands', () => {
+    it('should return at least 15 commands', () => {
       const commands = getAvailableCommands();
-      expect(commands.length).toBeGreaterThanOrEqual(13);
+      expect(commands.length).toBeGreaterThanOrEqual(15);
     });
   });
 });

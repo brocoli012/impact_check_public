@@ -23,6 +23,8 @@ import { ProjectsCommand } from '../../src/commands/projects';
 import { PoliciesCommand } from '../../src/commands/policies';
 import { OwnersCommand } from '../../src/commands/owners';
 import { AnnotationsCommand } from '../../src/commands/annotations';
+import { ExportIndexCommand } from '../../src/commands/export-index';
+import { SaveResultCommand } from '../../src/commands/save-result';
 
 // Mock the web-server module to prevent real Express server from starting during tests.
 // Without this mock, ViewCommand.handleStart() would start a real HTTP server,
@@ -60,6 +62,8 @@ const ALL_COMMANDS: Array<{
   { name: 'reindex', CommandClass: ReindexCommand, args: [] },
   { name: 'help', CommandClass: HelpCommand, args: [] },
   { name: 'config', CommandClass: ConfigCommand, args: [] },
+  { name: 'export-index', CommandClass: ExportIndexCommand, args: [] },
+  { name: 'save-result', CommandClass: SaveResultCommand, args: [] },
 ];
 
 describe('Command Handlers', () => {
@@ -229,13 +233,14 @@ describe('Command Handlers', () => {
       expect(allOutput).toContain('--output');
     });
 
-    it('should list all 12 commands in help output', async () => {
+    it('should list all 14 commands in help output', async () => {
       const command = new HelpCommand([]);
       await command.execute();
       const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
       const expectedCommands = [
         'init', 'analyze', 'view', 'tickets', 'config', 'reindex',
         'policies', 'owners', 'annotations', 'projects', 'demo', 'help',
+        'export-index', 'save-result',
       ];
       for (const cmd of expectedCommands) {
         expect(allOutput).toContain(cmd);

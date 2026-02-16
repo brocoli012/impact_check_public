@@ -16,6 +16,8 @@ import { ProjectsCommand } from './commands/projects';
 import { PoliciesCommand } from './commands/policies';
 import { OwnersCommand } from './commands/owners';
 import { AnnotationsCommand } from './commands/annotations';
+import { ExportIndexCommand } from './commands/export-index';
+import { SaveResultCommand } from './commands/save-result';
 
 /** 알 수 없는 명령어 에러 */
 export class UnknownCommandError extends Error {
@@ -55,6 +57,8 @@ const COMMANDS: Record<string, CommandConstructor> = {
   'policies': PoliciesCommand,
   'owners': OwnersCommand,
   'annotations': AnnotationsCommand,
+  'export-index': ExportIndexCommand,
+  'save-result': SaveResultCommand,
 } as const;
 
 /**
