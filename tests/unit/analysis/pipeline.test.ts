@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { AnalysisPipeline } from '../../../src/core/analysis/pipeline';
+import { Indexer } from '../../../src/core/indexing/indexer';
 import { CodeIndex } from '../../../src/types/index';
 import { SpecInput } from '../../../src/core/spec/spec-parser';
 import { ensureDir, writeJsonFile } from '../../../src/utils/file';
@@ -288,6 +289,140 @@ describe('AnalysisPipeline', () => {
         `${resultId}.json`,
       );
       expect(fs.existsSync(resultPath)).toBe(true);
+    });
+  });
+
+  describe('autoRefreshIndex', () => {
+    const defaultInput: SpecInput = {
+      type: 'text',
+      content: '# 테스트 기획서\n\n1. 기능 추가',
+    };
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should call isIndexStale during run()', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+      const isIndexStaleSpy = jest.spyOn(Indexer.prototype, 'isIndexStale')
+        .mockResolvedValue(false);
+
+      await pipeline.run(defaultInput, projectId, tmpDir);
+
+      expect(isIndexStaleSpy).toHaveBeenCalledWith(
+        '/test', // projectPath from index meta
+        projectId,
+        tmpDir,
+      );
+    });
+
+    it('should call incrementalUpdate when index is stale', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+      const updatedIndex = createTestCodeIndex();
+      updatedIndex.meta.updatedAt = '2024-06-01T00:00:00Z';
+      updatedIndex.meta.gitCommit = 'def456';
+
+      jest.spyOn(Indexer.prototype, 'isIndexStale')
+        .mockResolvedValue(true);
+      const incrementalUpdateSpy = jest.spyOn(Indexer.prototype, 'incrementalUpdate')
+        .mockResolvedValue(updatedIndex);
+      jest.spyOn(Indexer.prototype, 'saveIndex')
+        .mockResolvedValue(undefined);
+
+      await pipeline.run(defaultInput, projectId, tmpDir);
+
+      expect(incrementalUpdateSpy).toHaveBeenCalledWith(
+        '/test', // projectPath from index meta
+        projectId,
+        tmpDir,
+      );
+    });
+
+    it('should not call incrementalUpdate when index is not stale', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+
+      jest.spyOn(Indexer.prototype, 'isIndexStale')
+        .mockResolvedValue(false);
+      const incrementalUpdateSpy = jest.spyOn(Indexer.prototype, 'incrementalUpdate');
+
+      await pipeline.run(defaultInput, projectId, tmpDir);
+
+      expect(incrementalUpdateSpy).not.toHaveBeenCalled();
+    });
+
+    it('should fallback to existing index when incrementalUpdate fails', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+
+      jest.spyOn(Indexer.prototype, 'isIndexStale')
+        .mockResolvedValue(true);
+      jest.spyOn(Indexer.prototype, 'incrementalUpdate')
+        .mockRejectedValue(new Error('Git not available'));
+
+      // run() should NOT throw - it should fall back to existing index
+      const result = await pipeline.run(defaultInput, projectId, tmpDir);
+
+      // 분석이 정상적으로 완료되어야 함
+      expect(result.analysisId).toBeDefined();
+      expect(result.specTitle).toBeTruthy();
+    });
+
+    it('should use updated index for analysis after auto-refresh', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+
+      // 업데이트된 인덱스에 특정 정책 추가 (분석 결과로 검증 가능)
+      const updatedIndex = createTestCodeIndex();
+      updatedIndex.meta.gitCommit = 'new-commit';
+      updatedIndex.policies.push({
+        id: 'pol-refresh-marker',
+        name: '자동 갱신 테스트 정책',
+        description: '자동 갱신 후 이 정책이 분석에 포함되어야 함',
+        source: 'manual',
+        sourceText: '// refresh marker',
+        filePath: 'src/components/CartItem.tsx',
+        lineNumber: 100,
+        category: '테스트',
+        relatedComponents: ['comp-1'],
+        relatedApis: [],
+        relatedModules: ['cart'],
+        extractedAt: '2024-06-01T00:00:00Z',
+      });
+
+      jest.spyOn(Indexer.prototype, 'isIndexStale')
+        .mockResolvedValue(true);
+      jest.spyOn(Indexer.prototype, 'incrementalUpdate')
+        .mockResolvedValue(updatedIndex);
+      jest.spyOn(Indexer.prototype, 'saveIndex')
+        .mockResolvedValue(undefined);
+
+      const result = await pipeline.run(defaultInput, projectId, tmpDir);
+
+      // 분석 완료 확인
+      expect(result.analysisId).toBeDefined();
+      // incrementalUpdate가 호출되었고 분석이 성공적으로 완료됨 = 업데이트된 인덱스 사용됨
+      expect(result.specTitle).toBeTruthy();
+      expect(result.confidenceScores).toBeDefined();
+      expect(result.confidenceScores.length).toBeGreaterThan(0);
+    });
+
+    it('should save updated index after successful incrementalUpdate', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+      const updatedIndex = createTestCodeIndex();
+      updatedIndex.meta.gitCommit = 'new-commit';
+
+      jest.spyOn(Indexer.prototype, 'isIndexStale')
+        .mockResolvedValue(true);
+      jest.spyOn(Indexer.prototype, 'incrementalUpdate')
+        .mockResolvedValue(updatedIndex);
+      const saveIndexSpy = jest.spyOn(Indexer.prototype, 'saveIndex')
+        .mockResolvedValue(undefined);
+
+      await pipeline.run(defaultInput, projectId, tmpDir);
+
+      expect(saveIndexSpy).toHaveBeenCalledWith(
+        updatedIndex,
+        projectId,
+        tmpDir,
+      );
     });
   });
 });

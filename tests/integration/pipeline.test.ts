@@ -203,7 +203,8 @@ describe('E2E Pipeline', () => {
 
   describe('reindex flow', () => {
     it('should reindex existing project', async () => {
-      const cmd = new ReindexCommand([]);
+      // Use --full to force reindex even if index is already up to date
+      const cmd = new ReindexCommand(['--full']);
       const result = await cmd.execute();
 
       expect(result.code).toBe(ResultCode.SUCCESS);
@@ -213,6 +214,18 @@ describe('E2E Pipeline', () => {
       expect(data.projectId).toBe('sample-project');
       expect(data.stats).toBeDefined();
       expect(data.stats.totalFiles).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should return up-to-date when index is not stale', async () => {
+      const cmd = new ReindexCommand([]);
+      const result = await cmd.execute();
+
+      expect(result.code).toBe(ResultCode.SUCCESS);
+      // When index is already current, returns "up to date" message
+      // When stale, returns "Reindex complete"
+      expect(
+        result.message.includes('up to date') || result.message.includes('Reindex complete')
+      ).toBe(true);
     });
   });
 

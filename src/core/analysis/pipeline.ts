@@ -113,13 +113,16 @@ export class AnalysisPipeline {
     logger.info(`  Keywords: ${parsedSpec.keywords.length}`);
 
     // 코드 인덱스 로드
-    const index = await this.loadCodeIndex(projectId, basePath);
+    let index = await this.loadCodeIndex(projectId, basePath);
     if (!index) {
       throw new Error(
         `Code index not found for project "${projectId}". ` +
         `Run "init" or "reindex" first.`
       );
     }
+
+    // 인덱스 자동 갱신: stale 체크 후 증분 업데이트
+    index = await this.autoRefreshIndex(index, projectId, basePath);
 
     // Step 2: 인덱스 매칭
     this.reportProgress(2, totalSteps, '코드 인덱스 매칭 중...');
@@ -224,6 +227,53 @@ export class AnalysisPipeline {
 
     // 기본 빈 설정
     return { systems: [] };
+  }
+
+  /**
+   * 인덱스 자동 갱신
+   *
+   * 인덱스가 stale(최신이 아닌) 상태인지 확인하고,
+   * stale이면 증분 업데이트를 수행한다.
+   * 에러 발생 시 기존 인덱스로 폴백하여 분석을 중단하지 않는다.
+   *
+   * @param currentIndex - 현재 로드된 코드 인덱스
+   * @param projectId - 프로젝트 ID
+   * @param basePath - 기본 경로
+   * @returns 갱신된 인덱스 또는 기존 인덱스
+   */
+  private async autoRefreshIndex(
+    currentIndex: CodeIndex,
+    projectId: string,
+    basePath?: string,
+  ): Promise<CodeIndex> {
+    const projectPath = currentIndex.meta.project.path;
+    if (!projectPath) {
+      logger.debug('No project path in index meta, skipping auto-refresh');
+      return currentIndex;
+    }
+
+    try {
+      const isStale = await this.indexer.isIndexStale(projectPath, projectId, basePath);
+      if (!isStale) {
+        return currentIndex;
+      }
+
+      // 변경 감지됨 - 증분 업데이트 실행
+      logger.info('변경 감지: 증분 업데이트 중...');
+      const updatedIndex = await this.indexer.incrementalUpdate(projectPath, projectId, basePath);
+
+      // 업데이트된 인덱스 저장
+      await this.indexer.saveIndex(updatedIndex, projectId, basePath);
+      logger.info('인덱스 자동 갱신 완료');
+
+      return updatedIndex;
+    } catch (err) {
+      // 에러 발생 시 기존 인덱스로 폴백
+      logger.warn(
+        `인덱스 자동 갱신 실패, 기존 인덱스 사용: ${err instanceof Error ? err.message : String(err)}`
+      );
+      return currentIndex;
+    }
   }
 
   /**

@@ -4,8 +4,8 @@
 
 | 상태 | 개수 |
 |------|------|
-| Done | 7 (MVP 5 Phase + Post-MVP + REQ-002) |
-| In Progress | 1 (REQ-003) |
+| Done | 8 (MVP 5 Phase + Post-MVP + REQ-002 + REQ-003) |
+| In Progress | 0 |
 | Ready | 4 (REQ-004~007) |
 
 ## 활성 EPIC
@@ -21,7 +21,7 @@
 | EPIC-001 | EPIC | Kurly Impact Checker | in_progress | - |
 | REQ-001 | REQ | Kurly Impact Checker MVP 개발 | done | CRITICAL |
 | REQ-002 | REQ | Claude Native Analysis - AI 직접 분석 전환 | done | CRITICAL |
-| REQ-003 | REQ | 증분 인덱스 & 자동 갱신 | in_progress | CRITICAL |
+| REQ-003 | REQ | 증분 인덱스 & 자동 갱신 | done | CRITICAL |
 | REQ-004 | REQ | 어노테이션 시스템 | ready | HIGH |
 | REQ-005 | REQ | 다중 쿼리 모드 | ready | HIGH |
 | REQ-006 | REQ | 웹 대시보드 확장 - 정책 뷰 | ready | MEDIUM |
@@ -65,7 +65,7 @@
 
 **티켓 상세**: `.dream-team/docs/tickets/REQ-002-claude-native-analysis.md`
 
-## REQ-003: 증분 인덱스 & 자동 갱신 (IN PROGRESS)
+## REQ-003: 증분 인덱스 & 자동 갱신 (DONE)
 
 **목표**: Git diff 기반 증분 인덱싱, isIndexStale() 감지, 분석 전 자동 갱신
 
@@ -73,11 +73,11 @@
 |------|------|------|--------|
 | TASK-007 | Git diff 변경 파일 감지 | done | - |
 | TASK-008 | 증분 인덱싱 엔진 | done | TASK-007 |
-| TASK-009 | isIndexStale() 판정 로직 | ready | TASK-007 |
-| TASK-010 | 분석 전 자동 갱신 통합 | ready | TASK-008, 009 |
-| TASK-011 | 증분 인덱스 테스트 + QA | ready | TASK-010 |
+| TASK-009 | isIndexStale() 판정 로직 | done | TASK-007 |
+| TASK-010 | 분석 전 자동 갱신 통합 | done | TASK-008, 009 |
+| TASK-011 | 증분 인덱스 테스트 + QA | done | TASK-010 |
 
-**복잡도**: CRITICAL, TASK 5개
+**복잡도**: CRITICAL, TASK 5개, QA PASS (661 테스트)
 
 ## REQ-004: 어노테이션 시스템 (READY)
 
@@ -150,11 +150,11 @@
 
 - **MVP**: 완료 (588 -> 580 테스트, LLM 테스트 39건 삭제 + 웹 31건 추가)
 - **Post-MVP**: 4건 완료 (대화형, 플러그인, LLM 제거, README)
-- **REQ-002**: 완료 (629 테스트, QA PASS)
-- **REQ-003~007**: PM 명세서(5개) + Designer 리뷰 + TPO 기술설계(23 TASK) 완료
-- **현재 작업**: TASK-009+010 대기 (다음 세션)
+- **REQ-002**: 완료 (601 테스트, QA PASS)
+- **REQ-003**: 완료 (661 테스트, QA PASS, 5/5 TASK done)
+- **현재 작업**: REQ-004 착수 대기 (어노테이션 시스템)
 - **대기 중**: REQ-004~007 (Ready, 개발 대기)
-- **전체 TASK**: 23개 (REQ-003: 5, REQ-004: 4, REQ-005: 5, REQ-006: 4, REQ-007: 5)
+- **전체 TASK**: 23개 (REQ-003: 5 done, REQ-004: 4, REQ-005: 5, REQ-006: 4, REQ-007: 5)
 - **GitHub**: https://github.com/brocoli012/impact_checker
 
 ---

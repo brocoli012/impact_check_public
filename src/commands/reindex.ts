@@ -14,10 +14,14 @@ import { logger } from '../utils/logger';
 /**
  * ReindexCommand - 인덱스 갱신 명령어
  *
- * 사용법: /impact reindex [--full]
+ * 사용법: /impact reindex [--full] [--incremental]
  * 기능:
  *   - 증분 인덱스 업데이트 (기본)
  *   - --full 옵션으로 전체 재인덱싱
+ *   - --incremental 옵션으로 명시적 증분 인덱싱
+ *   - isIndexStale 확인 후 자동 분기
+ *   - 변경 비율 30% 초과 시 전체 인덱싱 전환
+ *   - 증분 인덱싱 실패 시 전체 인덱싱 폴백
  *   - 인덱싱 진행률 출력
  */
 export class ReindexCommand implements Command {
@@ -31,6 +35,7 @@ export class ReindexCommand implements Command {
 
   async execute(): Promise<CommandResult> {
     const isFull = this.args.includes('--full');
+    const isIncremental = this.args.includes('--incremental');
 
     try {
       // 활성 프로젝트 확인
@@ -71,21 +76,55 @@ export class ReindexCommand implements Command {
       logger.header('Impact Checker - 인덱스 갱신');
       console.log(`\n프로젝트: ${project.name}`);
       console.log(`경로: ${project.path}`);
-      console.log(`모드: ${isFull ? '전체 재인덱싱' : '증분 업데이트'}\n`);
 
       const indexer = new Indexer();
       let codeIndex;
+      const startTime = Date.now();
 
       if (isFull) {
+        // --full: 무조건 전체 인덱싱
+        console.log(`모드: 전체 재인덱싱\n`);
         logger.info('전체 재인덱싱을 시작합니다...');
         codeIndex = await indexer.fullIndex(project.path);
       } else {
-        logger.info('증분 업데이트를 시작합니다...');
-        codeIndex = await indexer.incrementalUpdate(project.path);
+        // 기본 동작 또는 --incremental: isIndexStale 확인 후 분기
+        console.log(`모드: ${isIncremental ? '증분 업데이트 (명시적)' : '자동 감지'}\n`);
+        logger.info('인덱스 상태 확인 중...');
+
+        const stale = await indexer.isIndexStale(project.path, activeProjectId);
+
+        if (!stale && !isIncremental) {
+          logger.success('이미 최신 상태입니다.');
+          const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`\n소요 시간: ${elapsedSec}s`);
+          return {
+            code: ResultCode.SUCCESS,
+            message: 'Index is already up to date.',
+            data: {
+              projectId: activeProjectId,
+              mode: 'none',
+              upToDate: true,
+            },
+          };
+        }
+
+        // stale이거나 --incremental인 경우 증분 인덱싱 시도
+        logger.info('변경된 파일 감지 중...');
+
+        try {
+          codeIndex = await indexer.incrementalUpdate(project.path, activeProjectId);
+        } catch (err) {
+          // 증분 인덱싱 실패 시 전체 인덱싱 폴백
+          const errMsg = err instanceof Error ? err.message : String(err);
+          logger.warn(`증분 인덱싱 실패, 전체 인덱싱으로 전환합니다: ${errMsg}`);
+          codeIndex = await indexer.fullIndex(project.path);
+        }
       }
 
       // 인덱스 저장
       await indexer.saveIndex(codeIndex, activeProjectId);
+
+      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
 
       // 결과 출력
       logger.separator();
@@ -97,6 +136,9 @@ export class ReindexCommand implements Command {
       console.log(`  모듈 수:       ${codeIndex.meta.stats.modules}`);
       console.log(`  정책 수:       ${codeIndex.policies.length}`);
       logger.separator();
+
+      const mode = isFull ? 'full' : (codeIndex.meta.lastUpdateType || 'incremental');
+      console.log(`인덱싱 완료: ${codeIndex.meta.stats.totalFiles}개 파일 처리 (소요 시간: ${elapsedSec}s)`);
       logger.success('인덱스 갱신이 완료되었습니다!');
 
       return {
@@ -104,8 +146,9 @@ export class ReindexCommand implements Command {
         message: `Reindex complete for ${activeProjectId}`,
         data: {
           projectId: activeProjectId,
-          mode: isFull ? 'full' : 'incremental',
+          mode,
           stats: codeIndex.meta.stats,
+          elapsedSeconds: parseFloat(elapsedSec),
         },
       };
     } catch (err) {

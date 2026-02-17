@@ -79,6 +79,19 @@ export declare class AnalysisPipeline {
      */
     private loadOwnersConfig;
     /**
+     * 인덱스 자동 갱신
+     *
+     * 인덱스가 stale(최신이 아닌) 상태인지 확인하고,
+     * stale이면 증분 업데이트를 수행한다.
+     * 에러 발생 시 기존 인덱스로 폴백하여 분석을 중단하지 않는다.
+     *
+     * @param currentIndex - 현재 로드된 코드 인덱스
+     * @param projectId - 프로젝트 ID
+     * @param basePath - 기본 경로
+     * @returns 갱신된 인덱스 또는 기존 인덱스
+     */
+    private autoRefreshIndex;
+    /**
      * 진행률 보고
      */
     private reportProgress;
