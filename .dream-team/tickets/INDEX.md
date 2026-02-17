@@ -4,9 +4,9 @@
 
 | 상태 | 개수 |
 |------|------|
-| Done | 9 (MVP 5 Phase + Post-MVP + REQ-002 + REQ-003 + REQ-004) |
+| Done | 10 (MVP 5 Phase + Post-MVP + REQ-002 + REQ-003 + REQ-004 + REQ-005) |
 | In Progress | 0 |
-| Ready | 3 (REQ-005~007) |
+| Ready | 2 (REQ-006~007) |
 
 ## 활성 EPIC
 
@@ -23,7 +23,7 @@
 | REQ-002 | REQ | Claude Native Analysis - AI 직접 분석 전환 | done | CRITICAL |
 | REQ-003 | REQ | 증분 인덱스 & 자동 갱신 | done | CRITICAL |
 | REQ-004 | REQ | 어노테이션 시스템 | done | HIGH |
-| REQ-005 | REQ | 다중 쿼리 모드 | ready | HIGH |
+| REQ-005 | REQ | 다중 쿼리 모드 | done | HIGH |
 | REQ-006 | REQ | 웹 대시보드 확장 - 정책 뷰 | ready | MEDIUM |
 | REQ-007 | REQ | 크로스 프로젝트 임팩트 | ready | MEDIUM |
 
@@ -93,18 +93,18 @@
 
 **복잡도**: HIGH (8/10), TASK 5개, QA PASS (772 테스트)
 
-## REQ-005: 다중 쿼리 모드 (READY)
+## REQ-005: 다중 쿼리 모드 (DONE)
 
 **목표**: PolicyCheckCommand, AskCommand, SummaryCommand 3개 신규 CLI 명령어
 
 | TASK | 내용 | 상태 | 의존성 |
 |------|------|------|--------|
-| TASK-017 | 다중 쿼리 CLI 인터페이스 | ready | - |
-| TASK-018 | 병렬 분석 파이프라인 | ready | TASK-017 |
-| TASK-019 | 교차 영향도 비교 엔진 | ready | TASK-018 |
-| TASK-020 | 다중 쿼리 테스트 + QA | ready | TASK-019 |
+| TASK-017 | PolicyCheckCommand (정책 영향도 분석) | done | - |
+| TASK-018 | AskCommand (코드베이스 자유 질의) | done | TASK-017 |
+| TASK-019 | SummaryCommand + SKILL.md 확장 | done | TASK-018 |
+| TASK-020 | QA PASS (AC 10/10, matchRate 100%) | done | TASK-019 |
 
-**복잡도**: HIGH, TASK 4개
+**복잡도**: HIGH (7/10), TASK 4개, QA PASS (849 테스트)
 
 ## REQ-006: 웹 대시보드 확장 - 정책 뷰 (READY)
 
@@ -153,9 +153,10 @@
 - **REQ-002**: 완료 (601 테스트, QA PASS)
 - **REQ-003**: 완료 (661 테스트, QA PASS, 5/5 TASK done)
 - **REQ-004**: 완료 (772 테스트, QA PASS, 5/5 TASK done)
-- **현재 작업**: REQ-005 TASK-017~020 대기 (다중 쿼리 모드)
-- **대기 중**: REQ-005~007 (Ready, 개발 대기)
-- **전체 TASK**: 23개 (REQ-003: 5 done, REQ-004: 5 done, REQ-005: 4, REQ-006: 4, REQ-007: 5)
+- **REQ-005**: 완료 (849 테스트, QA PASS, 4/4 TASK done)
+- **현재 작업**: REQ-006+007 병렬 착수 대기 (TASK-021~029)
+- **대기 중**: REQ-006~007 (Ready, 개발 대기)
+- **전체 TASK**: 23개 (REQ-003: 5 done, REQ-004: 5 done, REQ-005: 4 done, REQ-006: 4, REQ-007: 5)
 - **GitHub**: https://github.com/brocoli012/impact_checker
 
 ---

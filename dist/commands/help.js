@@ -169,6 +169,42 @@ const COMMAND_HELP = {
             '/impact save-result --file result.json --project my-app',
         ],
     },
+    ask: {
+        usage: '/impact ask <질문>',
+        description: '코드베이스에 대한 자유 질의',
+        options: [],
+        examples: [
+            '/impact ask 결제 로직은 어디에 있나요?',
+            '/impact ask 배송비 계산 관련 파일 목록',
+            '/impact ask API 엔드포인트 정리',
+        ],
+    },
+    'policy-check': {
+        usage: '/impact policy-check [--policy <name>] [--change <description>]',
+        description: '정책 영향도 분석',
+        options: [
+            '--policy <name>         특정 정책 상세 조회 (부분 매칭)',
+            '--change <description>  변경 내용의 정책 영향도 분석',
+        ],
+        examples: [
+            '/impact policy-check',
+            '/impact policy-check --policy "배송비"',
+            '/impact policy-check --change "무료배송 기준 3만원으로 변경"',
+        ],
+    },
+    summary: {
+        usage: '/impact summary [--system <name>] [--recent]',
+        description: '프로젝트 요약 정보를 표시합니다.',
+        options: [
+            '--system <name>  특정 시스템(모듈) 상세 요약',
+            '--recent         Git log 기반 최근 변경 요약',
+        ],
+        examples: [
+            '/impact summary',
+            '/impact summary --system cart',
+            '/impact summary --recent',
+        ],
+    },
     help: {
         usage: '/impact help [command]',
         description: '도움말을 표시합니다.',
