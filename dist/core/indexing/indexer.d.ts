@@ -12,14 +12,18 @@ import { CodeIndex, ChangedFileSet } from '../../types/index';
  *   3. PolicyExtractor -> 정책 추출
  *   4. DependencyGraphBuilder.build() -> 의존성 그래프
  *   5. 결과 조합 -> CodeIndex
- *   6. JSON 직렬화 -> .impact/projects/{id}/index/ 저장
+ *   6. (optional) 보강 주석 생성 (annotationsEnabled일 때만)
+ *   7. JSON 직렬화 -> .impact/projects/{id}/index/ 저장
  */
 export declare class Indexer {
     private readonly scanner;
     private readonly parsers;
     private readonly graphBuilder;
     private readonly policyExtractor;
-    constructor();
+    private readonly annotationsEnabled;
+    constructor(options?: {
+        annotationsEnabled?: boolean;
+    });
     /**
      * 전체 인덱싱 파이프라인 실행
      * @param projectPath - 프로젝트 루트 경로
@@ -89,6 +93,17 @@ export declare class Indexer {
      * @returns ChangedFileSet
      */
     private getChangedFilesByHash;
+    /**
+     * 보강 주석 생성 (optional step)
+     *
+     * ParsedFile 목록을 받아 AnnotationGenerator로 보강 주석을 생성하고,
+     * AnnotationManager로 저장한다.
+     *
+     * @param projectPath - 프로젝트 루트 경로
+     * @param parsedFiles - 파싱된 파일 목록
+     * @param projectId - 프로젝트 ID
+     */
+    private generateAnnotations;
     /**
      * Git 정보 가져오기
      */

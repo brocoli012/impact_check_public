@@ -18,5 +18,18 @@ export declare class AnnotationsCommand implements Command {
     private readonly args;
     constructor(args: string[]);
     execute(): Promise<CommandResult>;
+    /**
+     * generate 서브커맨드 처리
+     */
+    private handleGenerate;
+    /**
+     * view 서브커맨드 처리
+     */
+    private handleView;
+    /**
+     * 활성 프로젝트 정보를 가져온다.
+     * @throws {ProjectNotFoundError} 프로젝트가 설정되지 않았거나 찾을 수 없을 때
+     */
+    private getActiveProject;
 }
 //# sourceMappingURL=annotations.d.ts.map

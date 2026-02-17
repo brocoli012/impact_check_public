@@ -6,6 +6,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConfidenceScorer = void 0;
 const scoring_1 = require("../../types/scoring");
+const annotation_loader_1 = require("../annotations/annotation-loader");
 const logger_1 = require("../../utils/logger");
 /**
  * ConfidenceScorer - 4개 Layer 기반 신뢰도 점수 산출
@@ -26,15 +27,23 @@ class ConfidenceScorer {
      * 4개 Layer 기반 신뢰도 점수 산출
      * @param result - 보강된 분석 결과
      * @param index - 코드 인덱스
+     * @param annotations - 보강 주석 맵 (optional, Layer 3 보너스용)
      * @returns 시스템별 신뢰도 점수
      */
-    calculate(result, index) {
+    calculate(result, index, annotations) {
         logger_1.logger.info('Calculating confidence scores...');
+        // 보강 주석 보너스 계산 (있으면)
+        let annotationBonus = 0;
+        if (annotations && annotations.size > 0) {
+            const loader = new annotation_loader_1.AnnotationLoader();
+            annotationBonus = loader.calculateConfidenceBonus(annotations);
+            logger_1.logger.info(`Annotation bonus: +${annotationBonus} points`);
+        }
         // 영향 받는 시스템 식별 (화면 기반)
         const systemMap = this.identifySystems(result, index);
         const confidences = [];
         for (const [systemId, systemName] of systemMap.entries()) {
-            const layers = this.calculateLayerScores(systemId, systemName, result, index);
+            const layers = this.calculateLayerScores(systemId, systemName, result, index, annotationBonus);
             const overallScore = this.calculateOverallScore(layers);
             const grade = this.determineGrade(overallScore);
             const warnings = this.generateWarnings(systemId, systemName, layers);
@@ -76,7 +85,7 @@ class ConfidenceScorer {
     /**
      * Layer별 점수 계산
      */
-    calculateLayerScores(systemId, _systemName, result, index) {
+    calculateLayerScores(systemId, _systemName, result, index, annotationBonus = 0) {
         return {
             layer1Structure: {
                 score: this.calculateStructureScore(systemId, result, index),
@@ -89,9 +98,9 @@ class ConfidenceScorer {
                 details: this.getDependencyDetails(systemId, result, index),
             },
             layer3Policy: {
-                score: this.calculatePolicyScore(systemId, result),
+                score: this.calculatePolicyScore(systemId, result, annotationBonus),
                 weight: 0.20,
-                details: this.getPolicyDetails(systemId, result),
+                details: this.getPolicyDetails(systemId, result, annotationBonus),
             },
             layer4Analysis: {
                 score: this.calculateAnalysisQualityScore(result),
@@ -153,8 +162,11 @@ class ConfidenceScorer {
     }
     /**
      * Layer 3: 정책/주석 점수
+     * @param _systemId - 시스템 ID
+     * @param result - 보강된 분석 결과
+     * @param annotationBonus - 보강 주석 보너스 (0~40, 기본 0)
      */
-    calculatePolicyScore(_systemId, result) {
+    calculatePolicyScore(_systemId, result, annotationBonus = 0) {
         let score = 50; // 기본값
         // 정책 경고가 있으면 정책 분석이 가동된 것
         if (result.policyWarnings.length > 0)
@@ -167,6 +179,8 @@ class ConfidenceScorer {
         // 기획 확인 사항이 있으면 분석 품질 향상
         if (result.planningChecks.length > 0)
             score += 10;
+        // 보강 주석 보너스 합산
+        score += annotationBonus;
         return Math.min(100, Math.max(0, score));
     }
     /**
@@ -254,8 +268,12 @@ class ConfidenceScorer {
     getDependencyDetails(_systemId, _result, index) {
         return `Nodes: ${index.dependencies.graph.nodes.length}, Edges: ${index.dependencies.graph.edges.length}`;
     }
-    getPolicyDetails(_systemId, result) {
-        return `Policy warnings: ${result.policyWarnings.length}, Policy changes: ${result.policyChanges.length}`;
+    getPolicyDetails(_systemId, result, annotationBonus = 0) {
+        const base = `Policy warnings: ${result.policyWarnings.length}, Policy changes: ${result.policyChanges.length}`;
+        if (annotationBonus > 0) {
+            return `${base}, Annotation bonus: +${annotationBonus}`;
+        }
+        return base;
     }
     getAnalysisQualityDetails(result) {
         return `Rule-based analysis. Tasks: ${result.tasks.length}, Checks: ${result.planningChecks.length}`;

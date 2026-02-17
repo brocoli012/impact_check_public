@@ -47,6 +47,7 @@ const owner_mapper_1 = require("./owner-mapper");
 const confidence_scorer_1 = require("./confidence-scorer");
 const result_manager_1 = require("./result-manager");
 const indexer_1 = require("../indexing/indexer");
+const annotation_loader_1 = require("../annotations/annotation-loader");
 const file_1 = require("../../utils/file");
 const logger_1 = require("../../utils/logger");
 const path = __importStar(require("path"));
@@ -145,10 +146,22 @@ class AnalysisPipeline {
             policyWarnings,
             ownerNotifications,
         };
+        // 보강 주석 로드 (선택적)
+        let annotations;
+        try {
+            const annotationLoader = new annotation_loader_1.AnnotationLoader(basePath);
+            annotations = await annotationLoader.loadForProject(projectId);
+            if (annotations.size > 0) {
+                logger_1.logger.info(`보강 주석 ${annotations.size}개 파일 로드됨`);
+            }
+        }
+        catch (err) {
+            logger_1.logger.debug(`보강 주석 로드 실패 (분석 계속): ${err instanceof Error ? err.message : String(err)}`);
+        }
         // Step 6: 신뢰도 산출
         this.reportProgress(6, totalSteps, '신뢰도 산출 중...');
         logger_1.logger.info('Step 6/6: Calculating confidence...');
-        const confidenceScores = this.confidenceScorer.calculate(enrichedResult, index);
+        const confidenceScores = this.confidenceScorer.calculate(enrichedResult, index, annotations);
         // 낮은 신뢰도 경고 수집
         const lowConfidenceWarnings = confidenceScores
             .filter(c => c.grade === 'low' || c.grade === 'very_low')

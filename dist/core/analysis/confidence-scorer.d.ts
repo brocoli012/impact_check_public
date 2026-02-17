@@ -4,6 +4,7 @@
  */
 import { EnrichedResult, SystemConfidence } from '../../types/analysis';
 import { CodeIndex } from '../../types/index';
+import { AnnotationFile } from '../../types/annotations';
 /**
  * ConfidenceScorer - 4개 Layer 기반 신뢰도 점수 산출
  *
@@ -23,9 +24,10 @@ export declare class ConfidenceScorer {
      * 4개 Layer 기반 신뢰도 점수 산출
      * @param result - 보강된 분석 결과
      * @param index - 코드 인덱스
+     * @param annotations - 보강 주석 맵 (optional, Layer 3 보너스용)
      * @returns 시스템별 신뢰도 점수
      */
-    calculate(result: EnrichedResult, index: CodeIndex): SystemConfidence[];
+    calculate(result: EnrichedResult, index: CodeIndex, annotations?: Map<string, AnnotationFile>): SystemConfidence[];
     /**
      * 영향 받는 시스템 식별
      */
@@ -45,6 +47,9 @@ export declare class ConfidenceScorer {
     private calculateDependencyScore;
     /**
      * Layer 3: 정책/주석 점수
+     * @param _systemId - 시스템 ID
+     * @param result - 보강된 분석 결과
+     * @param annotationBonus - 보강 주석 보너스 (0~40, 기본 0)
      */
     private calculatePolicyScore;
     /**

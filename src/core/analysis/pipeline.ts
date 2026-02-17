@@ -22,6 +22,8 @@ import { OwnerMapper } from './owner-mapper';
 import { ConfidenceScorer } from './confidence-scorer';
 import { ResultManager } from './result-manager';
 import { Indexer } from '../indexing/indexer';
+import { AnnotationLoader } from '../annotations/annotation-loader';
+import { AnnotationFile } from '../../types/annotations';
 import { readJsonFile, getProjectDir } from '../../utils/file';
 import { logger } from '../../utils/logger';
 import * as path from 'path';
@@ -156,10 +158,24 @@ export class AnalysisPipeline {
       ownerNotifications,
     };
 
+    // 보강 주석 로드 (선택적)
+    let annotations: Map<string, AnnotationFile> | undefined;
+    try {
+      const annotationLoader = new AnnotationLoader(basePath);
+      annotations = await annotationLoader.loadForProject(projectId);
+      if (annotations.size > 0) {
+        logger.info(`보강 주석 ${annotations.size}개 파일 로드됨`);
+      }
+    } catch (err) {
+      logger.debug(
+        `보강 주석 로드 실패 (분석 계속): ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
     // Step 6: 신뢰도 산출
     this.reportProgress(6, totalSteps, '신뢰도 산출 중...');
     logger.info('Step 6/6: Calculating confidence...');
-    const confidenceScores = this.confidenceScorer.calculate(enrichedResult, index);
+    const confidenceScores = this.confidenceScorer.calculate(enrichedResult, index, annotations);
 
     // 낮은 신뢰도 경고 수집
     const lowConfidenceWarnings = confidenceScores

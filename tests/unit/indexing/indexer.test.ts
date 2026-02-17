@@ -297,6 +297,30 @@ describe('Indexer', () => {
     });
   });
 
+  describe('annotations option', () => {
+    it('should not generate annotations when annotationsEnabled is false (default)', async () => {
+      const defaultIndexer = new Indexer();
+      const { AnnotationGenerator } = await import('../../../src/core/annotations/annotation-generator');
+      const generateBatchSpy = jest.spyOn(AnnotationGenerator.prototype, 'generateBatch');
+
+      await defaultIndexer.fullIndex(FIXTURE_PATH);
+
+      expect(generateBatchSpy).not.toHaveBeenCalled();
+      generateBatchSpy.mockRestore();
+    });
+
+    it('should not generate annotations when annotationsEnabled is explicitly false', async () => {
+      const disabledIndexer = new Indexer({ annotationsEnabled: false });
+      const { AnnotationGenerator } = await import('../../../src/core/annotations/annotation-generator');
+      const generateBatchSpy = jest.spyOn(AnnotationGenerator.prototype, 'generateBatch');
+
+      await disabledIndexer.fullIndex(FIXTURE_PATH);
+
+      expect(generateBatchSpy).not.toHaveBeenCalled();
+      generateBatchSpy.mockRestore();
+    });
+  });
+
   describe('isIndexStale()', () => {
     const projectId = 'test-stale-project';
 

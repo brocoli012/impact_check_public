@@ -4,7 +4,7 @@
   "projectPath": "/Users/youngilkang/AI_project/Kurly_Impact_Checker",
   "mode": "team",
   "createdAt": "2026-02-13T00:00:00Z",
-  "lastUpdatedAt": "2026-02-17T10:00:00Z",
+  "lastUpdatedAt": "2026-02-17T13:00:00Z",
   "currentAgent": {
     "role": "master",
     "allowedTools": ["Task", "TodoWrite", "Read", "AskUserQuestion"]
@@ -46,7 +46,7 @@
       "id": "REQ-004",
       "type": "REQ",
       "title": "어노테이션 시스템",
-      "status": "ready",
+      "status": "done",
       "priority": "HIGH",
       "epic": "EPIC-001"
     },
@@ -195,12 +195,26 @@
         "qaResult": "PASS",
         "matchRate": "100%"
       }
+    },
+    {
+      "phase": "REQ-004: 어노테이션 시스템",
+      "status": "done",
+      "completedAt": "2026-02-17",
+      "summary": {
+        "modules": ["AnnotationManager", "AnnotationGenerator", "AnnotationLoader", "AnnotationsCommand", "ConfidenceScorer보너스", "Pipeline통합", "Indexer통합"],
+        "tests": 772,
+        "newTests": 111,
+        "taskCount": "5/5 done (TASK-012~016)",
+        "tpoComplexity": "8/10",
+        "qaResult": "PASS",
+        "matchRate": "100%"
+      }
     }
   ],
   "currentPhase": {
-    "phase": "REQ-004: 어노테이션 시스템",
+    "phase": "REQ-005: 다중 쿼리 모드",
     "status": "ready",
-    "description": "YAML 보강 주석 생성, AnnotationManager/Generator, CLI generate/view, 파이프라인 통합. TASK-012~016."
+    "description": "PolicyCheckCommand, AskCommand, SummaryCommand 3개 신규 CLI 명령어. TASK-017~020."
   },
   "sessionHistory": [
     {
@@ -418,6 +432,42 @@
       "timestamp": "2026-02-17T10:00:00Z",
       "agent": "master",
       "description": "REQ-003 증분 인덱스 & 자동 갱신 완료 - 5 TASK 전체 done, QA PASS"
+    },
+    {
+      "action": "req004_dev_start",
+      "timestamp": "2026-02-17T10:30:00Z",
+      "agent": "developer",
+      "description": "REQ-004 TASK-012+013 병렬 개발 시작 - AnnotationManager, AnnotationGenerator"
+    },
+    {
+      "action": "req004_task012_013_complete",
+      "timestamp": "2026-02-17T11:30:00Z",
+      "agent": "developer",
+      "description": "TASK-012+013 완료 - AnnotationManager(YAML CRUD, 25테스트), AnnotationGenerator(규칙기반 분석, 48테스트), 734 테스트"
+    },
+    {
+      "action": "req004_task014_complete",
+      "timestamp": "2026-02-17T12:00:00Z",
+      "agent": "developer",
+      "description": "TASK-014 완료 - AnnotationsCommand generate/view 실체, AnnotationLoader, 29 신규 테스트 (760)"
+    },
+    {
+      "action": "req004_task015_complete",
+      "timestamp": "2026-02-17T12:30:00Z",
+      "agent": "developer",
+      "description": "TASK-015 완료 - ConfidenceScorer Layer3 보너스, Indexer/Pipeline 보강 주석 통합, 12 신규 테스트 (772)"
+    },
+    {
+      "action": "req004_qa_pass",
+      "timestamp": "2026-02-17T13:00:00Z",
+      "agent": "qa",
+      "description": "REQ-004 QA PASS - 11/11 AC 충족, 772 테스트, 빌드 성공, matchRate 100%"
+    },
+    {
+      "action": "req004_complete",
+      "timestamp": "2026-02-17T13:00:00Z",
+      "agent": "master",
+      "description": "REQ-004 어노테이션 시스템 완료 - 5 TASK 전체 done, QA PASS"
     }
   ],
   "documents": {

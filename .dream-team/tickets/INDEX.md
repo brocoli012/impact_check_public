@@ -4,9 +4,9 @@
 
 | 상태 | 개수 |
 |------|------|
-| Done | 8 (MVP 5 Phase + Post-MVP + REQ-002 + REQ-003) |
+| Done | 9 (MVP 5 Phase + Post-MVP + REQ-002 + REQ-003 + REQ-004) |
 | In Progress | 0 |
-| Ready | 4 (REQ-004~007) |
+| Ready | 3 (REQ-005~007) |
 
 ## 활성 EPIC
 
@@ -22,7 +22,7 @@
 | REQ-001 | REQ | Kurly Impact Checker MVP 개발 | done | CRITICAL |
 | REQ-002 | REQ | Claude Native Analysis - AI 직접 분석 전환 | done | CRITICAL |
 | REQ-003 | REQ | 증분 인덱스 & 자동 갱신 | done | CRITICAL |
-| REQ-004 | REQ | 어노테이션 시스템 | ready | HIGH |
+| REQ-004 | REQ | 어노테이션 시스템 | done | HIGH |
 | REQ-005 | REQ | 다중 쿼리 모드 | ready | HIGH |
 | REQ-006 | REQ | 웹 대시보드 확장 - 정책 뷰 | ready | MEDIUM |
 | REQ-007 | REQ | 크로스 프로젝트 임팩트 | ready | MEDIUM |
@@ -79,32 +79,32 @@
 
 **복잡도**: CRITICAL, TASK 5개, QA PASS (661 테스트)
 
-## REQ-004: 어노테이션 시스템 (READY)
+## REQ-004: 어노테이션 시스템 (DONE)
 
-**목표**: 코드 내 @impact 어노테이션 파싱 및 분석 반영
+**목표**: YAML 보강 주석 생성, AnnotationManager/Generator, CLI generate/view, 파이프라인 통합
 
 | TASK | 내용 | 상태 | 의존성 |
 |------|------|------|--------|
-| TASK-012 | 어노테이션 파서 구현 | ready | - |
-| TASK-013 | 어노테이션 스키마 정의 | ready | - |
-| TASK-014 | 분석 엔진 어노테이션 통합 | ready | TASK-012, 013 |
-| TASK-015 | 어노테이션 테스트 + QA | ready | TASK-014 |
+| TASK-012 | AnnotationManager (YAML CRUD, sourceHash, userModified 병합) | done | - |
+| TASK-013 | AnnotationGenerator (규칙 기반 코드 분석) | done | - |
+| TASK-014 | AnnotationsCommand 실체 + AnnotationLoader | done | TASK-012, 013 |
+| TASK-015 | 파이프라인 통합 + Layer 3 보너스 | done | TASK-014 |
+| TASK-016 | QA PASS (AC 11/11, matchRate 100%) | done | TASK-015 |
 
-**복잡도**: HIGH, TASK 4개
+**복잡도**: HIGH (8/10), TASK 5개, QA PASS (772 테스트)
 
 ## REQ-005: 다중 쿼리 모드 (READY)
 
-**목표**: 복수 기획서 동시 분석 및 교차 영향도 비교
+**목표**: PolicyCheckCommand, AskCommand, SummaryCommand 3개 신규 CLI 명령어
 
 | TASK | 내용 | 상태 | 의존성 |
 |------|------|------|--------|
-| TASK-016 | 다중 쿼리 CLI 인터페이스 | ready | - |
-| TASK-017 | 병렬 분석 파이프라인 | ready | TASK-016 |
-| TASK-018 | 교차 영향도 비교 엔진 | ready | TASK-017 |
-| TASK-019 | 다중 쿼리 결과 병합 | ready | TASK-018 |
+| TASK-017 | 다중 쿼리 CLI 인터페이스 | ready | - |
+| TASK-018 | 병렬 분석 파이프라인 | ready | TASK-017 |
+| TASK-019 | 교차 영향도 비교 엔진 | ready | TASK-018 |
 | TASK-020 | 다중 쿼리 테스트 + QA | ready | TASK-019 |
 
-**복잡도**: HIGH, TASK 5개
+**복잡도**: HIGH, TASK 4개
 
 ## REQ-006: 웹 대시보드 확장 - 정책 뷰 (READY)
 
@@ -152,9 +152,10 @@
 - **Post-MVP**: 4건 완료 (대화형, 플러그인, LLM 제거, README)
 - **REQ-002**: 완료 (601 테스트, QA PASS)
 - **REQ-003**: 완료 (661 테스트, QA PASS, 5/5 TASK done)
-- **현재 작업**: REQ-004 착수 대기 (어노테이션 시스템)
-- **대기 중**: REQ-004~007 (Ready, 개발 대기)
-- **전체 TASK**: 23개 (REQ-003: 5 done, REQ-004: 4, REQ-005: 5, REQ-006: 4, REQ-007: 5)
+- **REQ-004**: 완료 (772 테스트, QA PASS, 5/5 TASK done)
+- **현재 작업**: REQ-005 TASK-017~020 대기 (다중 쿼리 모드)
+- **대기 중**: REQ-005~007 (Ready, 개발 대기)
+- **전체 TASK**: 23개 (REQ-003: 5 done, REQ-004: 5 done, REQ-005: 4, REQ-006: 4, REQ-007: 5)
 - **GitHub**: https://github.com/brocoli012/impact_checker
 
 ---

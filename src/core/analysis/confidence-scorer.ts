@@ -13,6 +13,8 @@ import {
   ConfidenceGrade,
   CONFIDENCE_WEIGHTS,
 } from '../../types/scoring';
+import { AnnotationFile } from '../../types/annotations';
+import { AnnotationLoader } from '../annotations/annotation-loader';
 import { logger } from '../../utils/logger';
 
 /**
@@ -34,13 +36,23 @@ export class ConfidenceScorer {
    * 4개 Layer 기반 신뢰도 점수 산출
    * @param result - 보강된 분석 결과
    * @param index - 코드 인덱스
+   * @param annotations - 보강 주석 맵 (optional, Layer 3 보너스용)
    * @returns 시스템별 신뢰도 점수
    */
   calculate(
     result: EnrichedResult,
     index: CodeIndex,
+    annotations?: Map<string, AnnotationFile>,
   ): SystemConfidence[] {
     logger.info('Calculating confidence scores...');
+
+    // 보강 주석 보너스 계산 (있으면)
+    let annotationBonus = 0;
+    if (annotations && annotations.size > 0) {
+      const loader = new AnnotationLoader();
+      annotationBonus = loader.calculateConfidenceBonus(annotations);
+      logger.info(`Annotation bonus: +${annotationBonus} points`);
+    }
 
     // 영향 받는 시스템 식별 (화면 기반)
     const systemMap = this.identifySystems(result, index);
@@ -48,7 +60,7 @@ export class ConfidenceScorer {
     const confidences: SystemConfidence[] = [];
 
     for (const [systemId, systemName] of systemMap.entries()) {
-      const layers = this.calculateLayerScores(systemId, systemName, result, index);
+      const layers = this.calculateLayerScores(systemId, systemName, result, index, annotationBonus);
       const overallScore = this.calculateOverallScore(layers);
       const grade = this.determineGrade(overallScore);
 
@@ -107,6 +119,7 @@ export class ConfidenceScorer {
     _systemName: string,
     result: EnrichedResult,
     index: CodeIndex,
+    annotationBonus: number = 0,
   ): LayerScore {
     return {
       layer1Structure: {
@@ -120,9 +133,9 @@ export class ConfidenceScorer {
         details: this.getDependencyDetails(systemId, result, index),
       },
       layer3Policy: {
-        score: this.calculatePolicyScore(systemId, result),
+        score: this.calculatePolicyScore(systemId, result, annotationBonus),
         weight: 0.20 as const,
-        details: this.getPolicyDetails(systemId, result),
+        details: this.getPolicyDetails(systemId, result, annotationBonus),
       },
       layer4Analysis: {
         score: this.calculateAnalysisQualityScore(result),
@@ -195,10 +208,14 @@ export class ConfidenceScorer {
 
   /**
    * Layer 3: 정책/주석 점수
+   * @param _systemId - 시스템 ID
+   * @param result - 보강된 분석 결과
+   * @param annotationBonus - 보강 주석 보너스 (0~40, 기본 0)
    */
   private calculatePolicyScore(
     _systemId: string,
     result: EnrichedResult,
+    annotationBonus: number = 0,
   ): number {
     let score = 50; // 기본값
 
@@ -213,6 +230,9 @@ export class ConfidenceScorer {
 
     // 기획 확인 사항이 있으면 분석 품질 향상
     if (result.planningChecks.length > 0) score += 10;
+
+    // 보강 주석 보너스 합산
+    score += annotationBonus;
 
     return Math.min(100, Math.max(0, score));
   }
@@ -329,8 +349,12 @@ export class ConfidenceScorer {
     return `Nodes: ${index.dependencies.graph.nodes.length}, Edges: ${index.dependencies.graph.edges.length}`;
   }
 
-  private getPolicyDetails(_systemId: string, result: EnrichedResult): string {
-    return `Policy warnings: ${result.policyWarnings.length}, Policy changes: ${result.policyChanges.length}`;
+  private getPolicyDetails(_systemId: string, result: EnrichedResult, annotationBonus: number = 0): string {
+    const base = `Policy warnings: ${result.policyWarnings.length}, Policy changes: ${result.policyChanges.length}`;
+    if (annotationBonus > 0) {
+      return `${base}, Annotation bonus: +${annotationBonus}`;
+    }
+    return base;
   }
 
   private getAnalysisQualityDetails(result: EnrichedResult): string {

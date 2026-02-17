@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { AnalysisPipeline } from '../../../src/core/analysis/pipeline';
 import { Indexer } from '../../../src/core/indexing/indexer';
+import { AnnotationLoader } from '../../../src/core/annotations/annotation-loader';
 import { CodeIndex } from '../../../src/types/index';
 import { SpecInput } from '../../../src/core/spec/spec-parser';
 import { ensureDir, writeJsonFile } from '../../../src/utils/file';
@@ -423,6 +424,52 @@ describe('AnalysisPipeline', () => {
         projectId,
         tmpDir,
       );
+    });
+  });
+
+  describe('annotation loading integration', () => {
+    const defaultInput: SpecInput = {
+      type: 'text',
+      content: '# 테스트 기획서\n\n1. 기능 추가',
+    };
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should attempt to load annotations during run()', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+      const loadSpy = jest.spyOn(AnnotationLoader.prototype, 'loadForProject')
+        .mockResolvedValue(new Map());
+
+      await pipeline.run(defaultInput, projectId, tmpDir);
+
+      expect(loadSpy).toHaveBeenCalledWith(projectId);
+    });
+
+    it('should work normally when no annotations exist', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+      jest.spyOn(AnnotationLoader.prototype, 'loadForProject')
+        .mockResolvedValue(new Map());
+
+      const result = await pipeline.run(defaultInput, projectId, tmpDir);
+
+      expect(result.analysisId).toBeDefined();
+      expect(result.confidenceScores).toBeDefined();
+      expect(result.confidenceScores.length).toBeGreaterThan(0);
+    });
+
+    it('should fallback gracefully when annotation loading fails', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+      jest.spyOn(AnnotationLoader.prototype, 'loadForProject')
+        .mockRejectedValue(new Error('Annotation load error'));
+
+      // Should NOT throw - should fallback
+      const result = await pipeline.run(defaultInput, projectId, tmpDir);
+
+      expect(result.analysisId).toBeDefined();
+      expect(result.confidenceScores).toBeDefined();
+      expect(result.confidenceScores.length).toBeGreaterThan(0);
     });
   });
 });

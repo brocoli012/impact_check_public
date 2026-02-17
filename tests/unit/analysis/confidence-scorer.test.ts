@@ -7,6 +7,7 @@ import { ConfidenceScorer } from '../../../src/core/analysis/confidence-scorer';
 import { EnrichedResult } from '../../../src/types/analysis';
 import { CodeIndex } from '../../../src/types/index';
 import { CONFIDENCE_WEIGHTS } from '../../../src/types/scoring';
+import { AnnotationFile } from '../../../src/types/annotations';
 
 /** 최소한의 CodeIndex 생성 */
 function createMinimalIndex(): CodeIndex {
@@ -307,6 +308,185 @@ describe('ConfidenceScorer', () => {
       const confidences = confidenceScorer.calculate(result, index);
 
       expect(confidences[0].layers.layer4Analysis.details).toContain('Rule-based analysis');
+    });
+  });
+
+  describe('Layer 3 annotation bonus', () => {
+    /** 테스트용 AnnotationFile 생성 */
+    function createTestAnnotation(options?: {
+      confidence?: number;
+      policiesCount?: number;
+      userModified?: boolean;
+    }): AnnotationFile {
+      const opts = {
+        confidence: 0.8,
+        policiesCount: 0,
+        userModified: false,
+        ...options,
+      };
+
+      const policies = Array.from({ length: opts.policiesCount }, (_, i) => ({
+        name: `Policy ${i}`,
+        description: `Test policy ${i}`,
+        confidence: 0.7,
+        category: 'test',
+        inferred_from: 'test',
+      }));
+
+      return {
+        file: 'test.ts',
+        system: 'test',
+        lastAnalyzed: '2024-01-01T00:00:00Z',
+        sourceHash: 'abc123',
+        analyzerVersion: '1.0.0',
+        model: 'rule-based-v1',
+        fileSummary: {
+          description: 'Test file',
+          confidence: opts.confidence,
+          businessDomain: 'test',
+          keywords: [],
+        },
+        annotations: [
+          {
+            line: 1,
+            endLine: 10,
+            function: 'testFunc',
+            signature: 'testFunc(): void',
+            original_comment: null,
+            enriched_comment: 'Test',
+            confidence: opts.confidence,
+            type: 'business_logic',
+            userModified: opts.userModified,
+            lastModifiedBy: null,
+            inferred_from: 'test',
+            policies,
+            relatedFunctions: [],
+            relatedApis: [],
+          },
+        ],
+      };
+    }
+
+    it('should add +15 bonus when annotations exist', () => {
+      const result = createTestEnrichedResult();
+      const index = createRichIndex();
+
+      const annotations = new Map<string, AnnotationFile>();
+      annotations.set('test.ts', createTestAnnotation({ confidence: 0.5, policiesCount: 0 }));
+
+      const withAnnotations = confidenceScorer.calculate(result, index, annotations);
+      const withoutAnnotations = confidenceScorer.calculate(result, index);
+
+      // Layer 3 점수가 최소 15점 이상 높아야 함
+      const layer3With = withAnnotations[0].layers.layer3Policy.score;
+      const layer3Without = withoutAnnotations[0].layers.layer3Policy.score;
+      expect(layer3With).toBeGreaterThanOrEqual(layer3Without + 15);
+    });
+
+    it('should add +10 bonus when avg confidence >= 0.7', () => {
+      const result = createTestEnrichedResult();
+      const index = createRichIndex();
+
+      const highConfAnnotations = new Map<string, AnnotationFile>();
+      highConfAnnotations.set('test.ts', createTestAnnotation({ confidence: 0.8 }));
+
+      const lowConfAnnotations = new Map<string, AnnotationFile>();
+      lowConfAnnotations.set('test.ts', createTestAnnotation({ confidence: 0.5 }));
+
+      const highConf = confidenceScorer.calculate(result, index, highConfAnnotations);
+      const lowConf = confidenceScorer.calculate(result, index, lowConfAnnotations);
+
+      const highLayer3 = highConf[0].layers.layer3Policy.score;
+      const lowLayer3 = lowConf[0].layers.layer3Policy.score;
+      // High confidence should be 10 points more than low confidence
+      expect(highLayer3).toBe(lowLayer3 + 10);
+    });
+
+    it('should add +10 bonus when policies >= 5', () => {
+      const result = createTestEnrichedResult();
+      const index = createRichIndex();
+
+      const manyPolicies = new Map<string, AnnotationFile>();
+      manyPolicies.set('test.ts', createTestAnnotation({ confidence: 0.5, policiesCount: 5 }));
+
+      const fewPolicies = new Map<string, AnnotationFile>();
+      fewPolicies.set('test.ts', createTestAnnotation({ confidence: 0.5, policiesCount: 2 }));
+
+      const manyResult = confidenceScorer.calculate(result, index, manyPolicies);
+      const fewResult = confidenceScorer.calculate(result, index, fewPolicies);
+
+      const manyLayer3 = manyResult[0].layers.layer3Policy.score;
+      const fewLayer3 = fewResult[0].layers.layer3Policy.score;
+      expect(manyLayer3).toBe(fewLayer3 + 10);
+    });
+
+    it('should add +5 bonus when userModified exists', () => {
+      const result = createTestEnrichedResult();
+      const index = createRichIndex();
+
+      const userModAnnotations = new Map<string, AnnotationFile>();
+      userModAnnotations.set('test.ts', createTestAnnotation({
+        confidence: 0.5,
+        policiesCount: 0,
+        userModified: true,
+      }));
+
+      const noModAnnotations = new Map<string, AnnotationFile>();
+      noModAnnotations.set('test.ts', createTestAnnotation({
+        confidence: 0.5,
+        policiesCount: 0,
+        userModified: false,
+      }));
+
+      const userModResult = confidenceScorer.calculate(result, index, userModAnnotations);
+      const noModResult = confidenceScorer.calculate(result, index, noModAnnotations);
+
+      const userModLayer3 = userModResult[0].layers.layer3Policy.score;
+      const noModLayer3 = noModResult[0].layers.layer3Policy.score;
+      expect(userModLayer3).toBe(noModLayer3 + 5);
+    });
+
+    it('should cap Layer 3 score at 100', () => {
+      const result = createTestEnrichedResult({
+        hasPolicyWarnings: true,
+        hasDetailedRationale: true,
+      });
+      const index = createRichIndex();
+
+      // Give maximum annotation bonus: +15 +10 +10 +5 = 40
+      const maxAnnotations = new Map<string, AnnotationFile>();
+      maxAnnotations.set('test.ts', createTestAnnotation({
+        confidence: 0.9,
+        policiesCount: 10,
+        userModified: true,
+      }));
+
+      const confidences = confidenceScorer.calculate(result, index, maxAnnotations);
+      const layer3Score = confidences[0].layers.layer3Policy.score;
+      expect(layer3Score).toBeLessThanOrEqual(100);
+    });
+
+    it('should work identically without annotations (backward compatibility)', () => {
+      const result = createTestEnrichedResult();
+      const index = createRichIndex();
+
+      const withUndefined = confidenceScorer.calculate(result, index, undefined);
+      const withEmpty = confidenceScorer.calculate(result, index, new Map());
+      const withoutParam = confidenceScorer.calculate(result, index);
+
+      expect(withUndefined[0].layers.layer3Policy.score).toBe(withoutParam[0].layers.layer3Policy.score);
+      expect(withEmpty[0].layers.layer3Policy.score).toBe(withoutParam[0].layers.layer3Policy.score);
+    });
+
+    it('should include annotation bonus in details when present', () => {
+      const result = createTestEnrichedResult();
+      const index = createRichIndex();
+
+      const annotations = new Map<string, AnnotationFile>();
+      annotations.set('test.ts', createTestAnnotation());
+
+      const confidences = confidenceScorer.calculate(result, index, annotations);
+      expect(confidences[0].layers.layer3Policy.details).toContain('Annotation bonus');
     });
   });
 });

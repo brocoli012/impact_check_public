@@ -44,6 +44,8 @@ const scanner_1 = require("./scanner");
 const typescript_parser_1 = require("./parsers/typescript-parser");
 const graph_builder_1 = require("./graph-builder");
 const policy_extractor_1 = require("./policy-extractor");
+const annotation_generator_1 = require("../annotations/annotation-generator");
+const annotation_manager_1 = require("../annotations/annotation-manager");
 const file_1 = require("../../utils/file");
 const logger_1 = require("../../utils/logger");
 /**
@@ -55,14 +57,16 @@ const logger_1 = require("../../utils/logger");
  *   3. PolicyExtractor -> 정책 추출
  *   4. DependencyGraphBuilder.build() -> 의존성 그래프
  *   5. 결과 조합 -> CodeIndex
- *   6. JSON 직렬화 -> .impact/projects/{id}/index/ 저장
+ *   6. (optional) 보강 주석 생성 (annotationsEnabled일 때만)
+ *   7. JSON 직렬화 -> .impact/projects/{id}/index/ 저장
  */
 class Indexer {
-    constructor() {
+    constructor(options) {
         this.scanner = new scanner_1.FileScanner();
         this.parsers = [new typescript_parser_1.TypeScriptParser()];
         this.graphBuilder = new graph_builder_1.DependencyGraphBuilder();
         this.policyExtractor = new policy_extractor_1.PolicyExtractor();
+        this.annotationsEnabled = options?.annotationsEnabled ?? false;
     }
     /**
      * 전체 인덱싱 파이프라인 실행
@@ -130,6 +134,10 @@ class Indexer {
             policies: allPolicies,
             dependencies: dependencyGraph,
         };
+        // Step 6 (optional): 보강 주석 생성
+        if (this.annotationsEnabled) {
+            await this.generateAnnotations(resolvedPath, parsedFiles, path.basename(resolvedPath));
+        }
         logger_1.logger.info('Indexing complete!');
         return codeIndex;
     }
@@ -262,6 +270,10 @@ class Indexer {
             policies: allPolicies,
             dependencies: dependencyGraph,
         };
+        // Optional: 변경된 파일의 보강 주석 갱신
+        if (this.annotationsEnabled && newParsedFiles.length > 0) {
+            await this.generateAnnotations(resolvedPath, newParsedFiles, effectiveProjectId);
+        }
         logger_1.logger.info('Incremental update complete!');
         return updatedIndex;
     }
@@ -612,6 +624,45 @@ class Indexer {
             deleted,
             method: 'hash-compare',
         };
+    }
+    /**
+     * 보강 주석 생성 (optional step)
+     *
+     * ParsedFile 목록을 받아 AnnotationGenerator로 보강 주석을 생성하고,
+     * AnnotationManager로 저장한다.
+     *
+     * @param projectPath - 프로젝트 루트 경로
+     * @param parsedFiles - 파싱된 파일 목록
+     * @param projectId - 프로젝트 ID
+     */
+    async generateAnnotations(projectPath, parsedFiles, projectId) {
+        try {
+            logger_1.logger.info(`Generating annotations for ${parsedFiles.length} files...`);
+            const generator = new annotation_generator_1.AnnotationGenerator();
+            const manager = new annotation_manager_1.AnnotationManager();
+            const files = parsedFiles.map((pf) => ({
+                filePath: pf.filePath,
+                parsedFile: pf,
+            }));
+            const annotationMap = await generator.generateBatch(files, projectPath);
+            for (const [filePath, annotationFile] of annotationMap) {
+                // 기존 보강 주석이 있으면 userModified 보존 병합
+                const existing = await manager.load(projectId, filePath);
+                if (existing) {
+                    const merged = await manager.merge(existing, annotationFile);
+                    await manager.save(projectId, filePath, merged);
+                }
+                else {
+                    await manager.save(projectId, filePath, annotationFile);
+                }
+            }
+            await manager.updateMeta(projectId);
+            logger_1.logger.info(`Annotations generated for ${annotationMap.size} files`);
+        }
+        catch (err) {
+            // 보강 주석 생성 실패는 인덱싱을 중단하지 않음
+            logger_1.logger.warn(`Annotation generation failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+        }
     }
     /**
      * Git 정보 가져오기
