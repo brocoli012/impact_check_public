@@ -4,28 +4,28 @@
 
 | 상태 | 개수 |
 |------|------|
-| Done | 10 (MVP 5 Phase + Post-MVP + REQ-002 + REQ-003 + REQ-004 + REQ-005) |
+| Done | 12 (MVP 5 Phase + Post-MVP + REQ-002 + REQ-003 + REQ-004 + REQ-005 + REQ-006 + REQ-007) |
 | In Progress | 0 |
-| Ready | 2 (REQ-006~007) |
+| Ready | 0 |
 
 ## 활성 EPIC
 
 | EPIC | 제목 | REQ 수 | 상태 |
 |------|------|--------|------|
-| EPIC-001 | Kurly Impact Checker | 7 | in_progress |
+| EPIC-001 | Kurly Impact Checker | 7 | done |
 
 ## 티켓 목록
 
 | 티켓 | 유형 | 제목 | 상태 | 우선순위 |
 |------|------|------|------|----------|
-| EPIC-001 | EPIC | Kurly Impact Checker | in_progress | - |
+| EPIC-001 | EPIC | Kurly Impact Checker | done | - |
 | REQ-001 | REQ | Kurly Impact Checker MVP 개발 | done | CRITICAL |
 | REQ-002 | REQ | Claude Native Analysis - AI 직접 분석 전환 | done | CRITICAL |
 | REQ-003 | REQ | 증분 인덱스 & 자동 갱신 | done | CRITICAL |
 | REQ-004 | REQ | 어노테이션 시스템 | done | HIGH |
 | REQ-005 | REQ | 다중 쿼리 모드 | done | HIGH |
-| REQ-006 | REQ | 웹 대시보드 확장 - 정책 뷰 | ready | MEDIUM |
-| REQ-007 | REQ | 크로스 프로젝트 임팩트 | ready | MEDIUM |
+| REQ-006 | REQ | 웹 대시보드 확장 - 정책 뷰 | done | MEDIUM |
+| REQ-007 | REQ | 크로스 프로젝트 임팩트 | done | MEDIUM |
 
 ## MVP 개발 Phase 현황
 
@@ -106,32 +106,32 @@
 
 **복잡도**: HIGH (7/10), TASK 4개, QA PASS (849 테스트)
 
-## REQ-006: 웹 대시보드 확장 - 정책 뷰 (READY)
+## REQ-006: 웹 대시보드 확장 - 정책 뷰 (DONE)
 
 **목표**: 정책 매칭 결과 시각화 및 정책 관리 UI
 
 | TASK | 내용 | 상태 | 의존성 |
 |------|------|------|--------|
-| TASK-021 | 정책 목록 뷰 컴포넌트 | ready | - |
-| TASK-022 | 정책-코드 매핑 시각화 | ready | TASK-021 |
-| TASK-023 | 정책 필터 및 검색 | ready | TASK-021 |
-| TASK-024 | 정책 뷰 테스트 + QA | ready | TASK-022, 023 |
+| TASK-021 | 정책 목록 뷰 컴포넌트 | done | - |
+| TASK-022 | 정책-코드 매핑 시각화 | done | TASK-021 |
+| TASK-023 | 정책 필터 및 검색 | done | TASK-021 |
+| TASK-024 | 정책 뷰 테스트 + QA | done | TASK-022, 023 |
 
-**복잡도**: MEDIUM, TASK 4개
+**복잡도**: MEDIUM (7/10), TASK 4개, QA PASS (1149 테스트)
 
-## REQ-007: 크로스 프로젝트 임팩트 (READY)
+## REQ-007: 크로스 프로젝트 임팩트 (DONE)
 
 **목표**: 여러 프로젝트 간 의존성 분석 및 영향도 추적
 
 | TASK | 내용 | 상태 | 의존성 |
 |------|------|------|--------|
-| TASK-025 | 프로젝트 간 의존성 스캐너 | ready | - |
-| TASK-026 | 크로스 프로젝트 그래프 빌더 | ready | TASK-025 |
-| TASK-027 | 크로스 임팩트 분석 엔진 | ready | TASK-026 |
-| TASK-028 | 크로스 프로젝트 대시보드 뷰 | ready | TASK-027 |
-| TASK-029 | 크로스 프로젝트 테스트 + QA | ready | TASK-028 |
+| TASK-025 | 프로젝트 간 의존성 스캐너 | done | - |
+| TASK-026 | 크로스 프로젝트 그래프 빌더 | done | TASK-025 |
+| TASK-027 | 크로스 임팩트 분석 엔진 | done | TASK-026 |
+| TASK-028 | 크로스 프로젝트 대시보드 뷰 | done | TASK-027 |
+| TASK-029 | 크로스 프로젝트 테스트 + QA | done | TASK-028 |
 
-**복잡도**: MEDIUM, TASK 5개
+**복잡도**: MEDIUM (9/10), TASK 5개, QA PASS (1149 테스트)
 
 ## 문서 승인 현황
 
@@ -148,16 +148,30 @@
 
 ## 현재 상태 요약
 
+- **EPIC-001**: 전체 완료 - 7 REQ / 29 TASK 완료
 - **MVP**: 완료 (588 -> 580 테스트, LLM 테스트 39건 삭제 + 웹 31건 추가)
 - **Post-MVP**: 4건 완료 (대화형, 플러그인, LLM 제거, README)
 - **REQ-002**: 완료 (601 테스트, QA PASS)
 - **REQ-003**: 완료 (661 테스트, QA PASS, 5/5 TASK done)
 - **REQ-004**: 완료 (772 테스트, QA PASS, 5/5 TASK done)
 - **REQ-005**: 완료 (849 테스트, QA PASS, 4/4 TASK done)
-- **현재 작업**: REQ-006+007 병렬 착수 대기 (TASK-021~029)
-- **대기 중**: REQ-006~007 (Ready, 개발 대기)
-- **전체 TASK**: 23개 (REQ-003: 5 done, REQ-004: 5 done, REQ-005: 4 done, REQ-006: 4, REQ-007: 5)
+- **REQ-006**: 완료 (1149 테스트, QA PASS, 4/4 TASK done)
+- **REQ-007**: 완료 (1149 테스트, QA PASS, 5/5 TASK done)
+- **테스트**: Root 978 (43 suites) + Web 171 (16 files) = 1,149 total
+- **전체 TASK**: 29개 done (REQ-002: 6, REQ-003: 5, REQ-004: 5, REQ-005: 4, REQ-006: 4, REQ-007: 5)
 - **GitHub**: https://github.com/brocoli012/impact_checker
+
+## 전체 달성 요약
+
+| 항목 | 수치 |
+|------|------|
+| EPIC | 1/1 done (EPIC-001) |
+| REQ | 7/7 done (REQ-001~007) |
+| TASK | 29/29 done (TASK-001~029) |
+| 테스트 | 1,149 (Root 978 + Web 171) |
+| QA | 전 REQ PASS, matchRate 100% |
+| MVP Phase | 5/5 done |
+| Post-MVP | 4/4 done |
 
 ---
 *최종 업데이트: 2026-02-17*

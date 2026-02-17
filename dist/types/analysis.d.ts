@@ -3,6 +3,7 @@
  * @description 분석 결과 타입 정의 - 영향도 분석 파이프라인의 입출력 타입
  */
 import { UniqueId, FilePath, ISODateString } from './common';
+import { CrossProjectImpact } from '../core/cross-project/types';
 /** 파싱된 기획서 */
 export interface ParsedSpec {
     /** 기획 제목 */
@@ -253,6 +254,8 @@ export interface ConfidenceEnrichedResult extends EnrichedResult {
     confidenceScores: SystemConfidence[];
     /** 낮은 신뢰도 경고 목록 */
     lowConfidenceWarnings: ConfidenceWarning[];
+    /** 크로스 프로젝트 영향도 (optional) */
+    crossProjectImpact?: CrossProjectImpact;
 }
 /** 시스템별 신뢰도 */
 export interface SystemConfidence {

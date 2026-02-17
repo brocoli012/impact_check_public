@@ -4,6 +4,7 @@
  */
 
 import { UniqueId, FilePath, ISODateString } from './common';
+import { CrossProjectImpact } from '../core/cross-project/types';
 
 // ============================================================
 // Step 1: 기획서 파싱 결과 타입
@@ -301,6 +302,8 @@ export interface ConfidenceEnrichedResult extends EnrichedResult {
   confidenceScores: SystemConfidence[];
   /** 낮은 신뢰도 경고 목록 */
   lowConfidenceWarnings: ConfidenceWarning[];
+  /** 크로스 프로젝트 영향도 (optional) */
+  crossProjectImpact?: CrossProjectImpact;
 }
 
 /** 시스템별 신뢰도 */

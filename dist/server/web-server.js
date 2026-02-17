@@ -50,6 +50,9 @@ const fs = __importStar(require("fs"));
 const net = __importStar(require("net"));
 const result_manager_1 = require("../core/analysis/result-manager");
 const config_manager_1 = require("../config/config-manager");
+const indexer_1 = require("../core/indexing/indexer");
+const annotation_loader_1 = require("../core/annotations/annotation-loader");
+const cross_project_manager_1 = require("../core/cross-project/cross-project-manager");
 const logger_1 = require("../utils/logger");
 const file_1 = require("../utils/file");
 /** Express 라우트 파라미터에서 안전하게 문자열을 추출 */
@@ -260,6 +263,220 @@ function createApp(basePath) {
         catch (error) {
             logger_1.logger.error(`Failed to update checklist item:`, error);
             res.status(500).json({ error: 'Failed to update checklist item' });
+        }
+    });
+    // ============================================================
+    // 정책 (Policy) API 엔드포인트
+    // ============================================================
+    const indexer = new indexer_1.Indexer();
+    // AnnotationManager expects basePath to be the .impact directory itself
+    const impactBase = basePath || process.env.HOME || process.env.USERPROFILE || '.';
+    const annotationLoader = new annotation_loader_1.AnnotationLoader(path.join(impactBase, '.impact'));
+    /**
+     * GET /api/policies - 정책 목록 조회
+     * 쿼리 파라미터: ?category=배송 (카테고리 필터), ?search=무료 (검색)
+     */
+    app.get('/api/policies', async (req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.status(404).json({ error: 'No active project' });
+                return;
+            }
+            const index = await indexer.loadIndex(projectId, basePath);
+            if (!index) {
+                res.status(404).json({ error: 'No index found. Run indexing first.' });
+                return;
+            }
+            let policies = index.policies || [];
+            // 카테고리 필터
+            const category = req.query.category;
+            if (category) {
+                policies = policies.filter(p => p.category === category);
+            }
+            // 검색 필터
+            const search = req.query.search;
+            if (search) {
+                const lowerSearch = search.toLowerCase();
+                policies = policies.filter(p => p.name.toLowerCase().includes(lowerSearch) ||
+                    p.description.toLowerCase().includes(lowerSearch));
+            }
+            // 카테고리 목록 추출 (필터 전 전체 인덱스에서)
+            const allPolicies = index.policies || [];
+            const categories = [...new Set(allPolicies.map(p => p.category))].sort();
+            res.json({
+                policies: policies.map((p, idx) => ({
+                    id: p.id || `policy_${idx}`,
+                    name: p.name,
+                    category: p.category,
+                    description: p.description,
+                    file: p.filePath,
+                    confidence: 0,
+                })),
+                total: policies.length,
+                categories,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get policies:', error);
+            res.status(500).json({ error: 'Failed to get policies' });
+        }
+    });
+    /**
+     * GET /api/policies/:id - 특정 정책 상세 정보 반환
+     * 보강 주석 데이터 포함
+     */
+    app.get('/api/policies/:id', async (req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.status(404).json({ error: 'No active project' });
+                return;
+            }
+            const index = await indexer.loadIndex(projectId, basePath);
+            if (!index) {
+                res.status(404).json({ error: 'No index found. Run indexing first.' });
+                return;
+            }
+            const policyId = getParam(req.params, 'id');
+            const policies = index.policies || [];
+            // ID 또는 배열 인덱스로 검색
+            let policy = policies.find(p => p.id === policyId);
+            if (!policy) {
+                // policy_N 형식이면 인덱스로 찾기
+                const indexMatch = policyId.match(/^policy_(\d+)$/);
+                if (indexMatch) {
+                    const idx = parseInt(indexMatch[1], 10);
+                    if (idx >= 0 && idx < policies.length) {
+                        policy = policies[idx];
+                    }
+                }
+            }
+            if (!policy) {
+                res.status(404).json({ error: 'Policy not found' });
+                return;
+            }
+            // 보강 주석 로드 시도
+            let annotation = null;
+            try {
+                annotation = await annotationLoader.loadForFile(projectId, policy.filePath);
+            }
+            catch {
+                // 보강 주석 로드 실패는 무시
+            }
+            const result = {
+                policy: {
+                    id: policy.id,
+                    name: policy.name,
+                    category: policy.category,
+                    description: policy.description,
+                    source: policy.source,
+                    sourceText: policy.sourceText,
+                    filePath: policy.filePath,
+                    lineNumber: policy.lineNumber,
+                    relatedComponents: policy.relatedComponents,
+                    relatedApis: policy.relatedApis,
+                    relatedModules: policy.relatedModules,
+                    extractedAt: policy.extractedAt,
+                },
+            };
+            if (annotation) {
+                result.annotation = {
+                    file: annotation.file,
+                    system: annotation.system,
+                    lastAnalyzed: annotation.lastAnalyzed,
+                    fileSummary: annotation.fileSummary,
+                    annotations: annotation.annotations.map(a => ({
+                        function: a.function,
+                        signature: a.signature,
+                        enriched_comment: a.enriched_comment,
+                        confidence: a.confidence,
+                        type: a.type,
+                        policies: a.policies,
+                        relatedFunctions: a.relatedFunctions,
+                        relatedApis: a.relatedApis,
+                    })),
+                };
+            }
+            res.json(result);
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to get policy ${getParam(req.params, 'id')}:`, error);
+            res.status(500).json({ error: 'Failed to get policy' });
+        }
+    });
+    /**
+     * GET /api/analysis/policy-changes - 분석 결과의 policyChanges 목록 반환
+     */
+    app.get('/api/analysis/policy-changes', async (_req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.json({ policyChanges: [], message: 'No active project' });
+                return;
+            }
+            const latestResult = await resultManager.getLatest(projectId);
+            if (!latestResult) {
+                res.json({ policyChanges: [], message: 'No analysis results found' });
+                return;
+            }
+            res.json({
+                policyChanges: latestResult.policyChanges || [],
+                analysisId: latestResult.analysisId,
+                analyzedAt: latestResult.analyzedAt,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get policy changes:', error);
+            res.status(500).json({ error: 'Failed to get policy changes' });
+        }
+    });
+    // ============================================================
+    // 크로스 프로젝트 (Cross Project) API 엔드포인트
+    // ============================================================
+    const crossProjectManager = new cross_project_manager_1.CrossProjectManager(path.join(basePath || process.env.HOME || process.env.USERPROFILE || '.', '.impact'));
+    /**
+     * GET /api/cross-project/links - 전체 프로젝트 의존성 목록 조회
+     */
+    app.get('/api/cross-project/links', async (_req, res) => {
+        try {
+            const links = await crossProjectManager.getLinks();
+            res.json({ links, total: links.length });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get cross-project links:', error);
+            res.status(500).json({ error: 'Failed to get cross-project links' });
+        }
+    });
+    /**
+     * GET /api/cross-project/links/:projectId - 특정 프로젝트의 의존성 조회
+     */
+    app.get('/api/cross-project/links/:projectId', async (req, res) => {
+        try {
+            const projectId = getParam(req.params, 'projectId');
+            if (!isValidId(projectId)) {
+                res.status(400).json({ error: 'Invalid project ID' });
+                return;
+            }
+            const links = await crossProjectManager.getLinks(projectId);
+            res.json({ links, total: links.length });
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to get links for project ${getParam(req.params, 'projectId')}:`, error);
+            res.status(500).json({ error: 'Failed to get cross-project links' });
+        }
+    });
+    /**
+     * GET /api/cross-project/groups - 프로젝트 그룹 목록 조회
+     */
+    app.get('/api/cross-project/groups', async (_req, res) => {
+        try {
+            const groups = await crossProjectManager.getGroups();
+            res.json({ groups, total: groups.length });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get cross-project groups:', error);
+            res.status(500).json({ error: 'Failed to get cross-project groups' });
         }
     });
     // ============================================================

@@ -1,10 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useResultStore } from '../stores/resultStore';
 import { useLatestResult } from '../hooks/useAnalysisResult';
 import ScoreHeader from '../components/dashboard/ScoreHeader';
 import KpiCards from '../components/dashboard/KpiCards';
 import ScreenBarChart from '../components/dashboard/BarChart';
 import DonutChart from '../components/dashboard/DonutChart';
+import CrossProjectDiagram from '../components/cross-project/CrossProjectDiagram';
+import CrossProjectSummary from '../components/cross-project/CrossProjectSummary';
+import type { ProjectLink } from '../components/cross-project/CrossProjectDiagram';
+import type { ProjectGroup } from '../components/cross-project/CrossProjectSummary';
 import { CONFIDENCE_COLORS } from '../utils/colors';
 import type { ConfidenceGrade } from '../types';
 
@@ -20,6 +24,28 @@ function Dashboard() {
   useLatestResult();
 
   const { currentResult, isLoading, error } = useResultStore();
+
+  /** 크로스 프로젝트 데이터 */
+  const [crossProjectLinks, setCrossProjectLinks] = useState<ProjectLink[]>([]);
+  const [crossProjectGroups, setCrossProjectGroups] = useState<ProjectGroup[]>([]);
+
+  useEffect(() => {
+    async function fetchCrossProjectData() {
+      try {
+        const [linksRes, groupsRes] = await Promise.all([
+          fetch('/api/cross-project/links'),
+          fetch('/api/cross-project/groups'),
+        ]);
+        const linksData = await linksRes.json();
+        const groupsData = await groupsRes.json();
+        setCrossProjectLinks(linksData.links || []);
+        setCrossProjectGroups(groupsData.groups || []);
+      } catch {
+        // 크로스 프로젝트 데이터 로드 실패는 무시 (선택적 섹션)
+      }
+    }
+    fetchCrossProjectData();
+  }, []);
 
   /** 낮은 신뢰도 시스템 목록 */
   const lowConfSystems = useMemo(() => {
@@ -187,6 +213,21 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Cross Project Impact Section - 크로스 프로젝트 영향 */}
+      {(crossProjectLinks.length > 0 || crossProjectGroups.length > 0) && (
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
+          <h3 className="text-sm font-bold text-gray-900 mb-4">크로스 프로젝트 영향</h3>
+          <div className="grid grid-cols-3 gap-6">
+            <div className="col-span-2">
+              <CrossProjectDiagram links={crossProjectLinks} />
+            </div>
+            <div className="col-span-1">
+              <CrossProjectSummary links={crossProjectLinks} groups={crossProjectGroups} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

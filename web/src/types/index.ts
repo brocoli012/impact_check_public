@@ -179,6 +179,140 @@ export interface ChecklistData {
   items: ChecklistItem[];
 }
 
+/** 정책 (Policy) - 인덱싱된 정책 규칙 */
+export interface Policy {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  confidence: number;
+  affectedFiles: string[];
+  relatedTaskIds: string[];
+  source: string;
+}
+
+/** 정책 상세 (Policy Detail) */
+export interface PolicyDetail extends Policy {
+  rules: PolicyRule[];
+  changeHistory: PolicyChangeHistory[];
+  relatedPolicies: string[];
+  /** 보강 주석 데이터 (annotation API 응답에서 합산) */
+  annotation?: PolicyAnnotation | null;
+}
+
+/** 보강 주석 데이터 */
+export interface PolicyAnnotation {
+  file: string;
+  system: string;
+  lastAnalyzed: string;
+  fileSummary: {
+    description: string;
+    confidence: number;
+    businessDomain: string;
+    keywords: string[];
+  };
+  annotations: PolicyFunctionAnnotation[];
+}
+
+/** 함수별 보강 주석 */
+export interface PolicyFunctionAnnotation {
+  function: string;
+  signature: string;
+  enriched_comment: string;
+  confidence: number;
+  type: string;
+  policies: InferredPolicyDetail[];
+  relatedFunctions: string[];
+  relatedApis: string[];
+}
+
+/** 추론된 정책 상세 (보강 주석에서 추출) */
+export interface InferredPolicyDetail {
+  name: string;
+  description: string;
+  confidence: number;
+  category: string;
+  inferred_from: string;
+  conditions?: PolicyCondition[];
+  defaultResult?: string;
+  exceptionHandling?: string | null;
+  inputVariables?: PolicyVariable[];
+  outputVariables?: PolicyVariable[];
+  constants?: PolicyConstant[];
+  internalVariables?: PolicyVariable[];
+  constraints?: PolicyConstraint[];
+  dataSources?: PolicyDataSource[];
+  reviewItems?: PolicyReviewItem[];
+}
+
+/** 조건 분기 항목 */
+export interface PolicyCondition {
+  order: number;
+  type: 'if' | 'else_if' | 'else';
+  condition: string;
+  conditionCode: string;
+  result: string;
+  resultValue: string;
+}
+
+/** 변수 정보 */
+export interface PolicyVariable {
+  name: string;
+  type: string;
+  description: string;
+}
+
+/** 상수값 정보 */
+export interface PolicyConstant {
+  name: string;
+  value: string;
+  type: string;
+  description: string;
+  source: 'hardcoded' | 'config_file' | 'env_variable' | 'db_query' | 'api_call';
+  codeLocation: string;
+}
+
+/** 제약사항 */
+export interface PolicyConstraint {
+  severity: 'warning' | 'info' | 'critical';
+  type: string;
+  description: string;
+  recommendation: string;
+  relatedCode: string;
+}
+
+/** 데이터 출처 */
+export interface PolicyDataSource {
+  variableName: string;
+  sourceType: string;
+  sourceDetail: string;
+  description: string;
+}
+
+/** 기획자 확인 항목 */
+export interface PolicyReviewItem {
+  priority: 'high' | 'medium' | 'low';
+  category: string;
+  question: string;
+  context: string;
+  relatedConstraint: string | null;
+}
+
+/** 정책 규칙 */
+export interface PolicyRule {
+  id: string;
+  condition: string;
+  action: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+/** 정책 변경 이력 */
+export interface PolicyChangeHistory {
+  date: string;
+  changeType: 'new' | 'modify' | 'remove';
+  description: string;
+}
+
 /** API 응답 래퍼 */
 export interface ApiResponse<T> {
   result?: T;

@@ -1,0 +1,156 @@
+/**
+ * @module web/pages/Policies
+ * @description 정책 목록 페이지 - 필터 + 카드 목록 + 상세 패널 레이아웃
+ */
+
+import { useEffect, useMemo } from 'react';
+import { usePolicyStore } from '../stores/policyStore';
+import { useResultStore } from '../stores/resultStore';
+import { useEnsureResult } from '../hooks/useEnsureResult';
+import PolicyCard from '../components/policies/PolicyCard';
+import PolicyFilter from '../components/policies/PolicyFilter';
+import PolicyDetail from '../components/policies/PolicyDetail';
+
+function Policies() {
+  useEnsureResult();
+  const currentResult = useResultStore((s) => s.currentResult);
+
+  const {
+    policies,
+    selectedPolicy,
+    searchQuery,
+    selectedCategory,
+    loading,
+    error,
+    fetchPolicies,
+    fetchPolicyDetail,
+    clearSelection,
+  } = usePolicyStore();
+
+  // 프로젝트 ID 기반 정책 목록 로드
+  useEffect(() => {
+    if (currentResult) {
+      fetchPolicies(currentResult.analysisId);
+    }
+  }, [currentResult, fetchPolicies]);
+
+  // 필터링된 정책 목록
+  const filteredPolicies = useMemo(() => {
+    let filtered = policies;
+
+    // 카테고리 필터
+    if (selectedCategory) {
+      filtered = filtered.filter((p) => p.category === selectedCategory);
+    }
+
+    // 검색어 필터
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q),
+      );
+    }
+
+    return filtered;
+  }, [policies, selectedCategory, searchQuery]);
+
+  const handlePolicyClick = (policyId: string) => {
+    if (currentResult) {
+      fetchPolicyDetail(currentResult.analysisId, policyId);
+    }
+  };
+
+  if (!currentResult) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-gray-400">데이터 로딩 중...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-xl font-bold text-gray-900">
+          정책 목록
+        </h2>
+        <p className="text-sm text-gray-500 mt-1">
+          {currentResult.specTitle}
+        </p>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-sm text-amber-700">{error}</p>
+        </div>
+      )}
+
+      {/* Filter bar */}
+      <PolicyFilter
+        resultCount={filteredPolicies.length}
+        totalCount={policies.length}
+      />
+
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">정책 목록을 불러오는 중...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Main content area */}
+      {!loading && (
+        <div className="flex gap-6">
+          {/* Left: Policy card list */}
+          <div className="flex-1">
+            {filteredPolicies.length === 0 ? (
+              <div className="text-center py-12">
+                <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                <p className="text-sm text-gray-500">
+                  {policies.length === 0
+                    ? '정책이 없습니다. 먼저 인덱싱을 실행해주세요.'
+                    : '검색 조건에 맞는 정책이 없습니다.'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredPolicies.map((policy) => (
+                  <PolicyCard
+                    key={policy.id}
+                    policy={policy}
+                    isSelected={selectedPolicy?.id === policy.id}
+                    onClick={() => handlePolicyClick(policy.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Selected policy detail panel */}
+          {selectedPolicy && (
+            <PolicyDetail
+              policy={selectedPolicy}
+              onClose={clearSelection}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default Policies;

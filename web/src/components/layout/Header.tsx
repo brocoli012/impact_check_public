@@ -7,6 +7,7 @@ const NAV_TABS = [
   { to: '/checklist', label: '체크리스트' },
   { to: '/owners', label: '담당자' },
   { to: '/tickets', label: '티켓' },
+  { to: '/policies', label: '정책' },
 ] as const;
 
 function Header() {

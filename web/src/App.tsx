@@ -7,6 +7,7 @@ import FlowChart from './pages/FlowChart';
 import Checklist from './pages/Checklist';
 import Owners from './pages/Owners';
 import Tickets from './pages/Tickets';
+import Policies from './pages/Policies';
 import { useResultStore } from './stores/resultStore';
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
                 <Route path="/checklist" element={<Checklist />} />
                 <Route path="/owners" element={<Owners />} />
                 <Route path="/tickets" element={<Tickets />} />
+                <Route path="/policies" element={<Policies />} />
               </Routes>
             </ErrorBoundary>
           </main>

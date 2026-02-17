@@ -9,6 +9,9 @@ import { Command, CommandResult, ResultCode } from '../types/common';
 import { ProjectsConfig } from '../types/index';
 import { readJsonFile, writeJsonFile, getImpactDir, getProjectDir } from '../utils/file';
 import { ResultManager } from '../core/analysis/result-manager';
+import { CrossProjectManager } from '../core/cross-project/cross-project-manager';
+import { LinkType } from '../core/cross-project/types';
+import { Indexer } from '../core/indexing/indexer';
 import { logger } from '../utils/logger';
 
 /**
@@ -19,6 +22,13 @@ import { logger } from '../utils/logger';
  *   /impact projects --switch <name>  - 활성 프로젝트 전환
  *   /impact projects --remove <name>  - 프로젝트 등록 해제
  *   /impact projects --info <name>    - 프로젝트 상세 조회
+ *   /impact projects --link <source> <target> --type <type>  - 의존성 등록
+ *   /impact projects --unlink <source> <target>              - 의존성 해제
+ *   /impact projects --links [projectId]                     - 의존성 목록 조회
+ *   /impact projects --detect-links                          - API 경로 기반 자동 의존성 감지
+ *   /impact projects --group <name> --add <project-id>       - 그룹에 프로젝트 추가
+ *   /impact projects --group <name> --remove <project-id>    - 그룹에서 프로젝트 제거
+ *   /impact projects --groups                                - 전체 그룹 목록 조회
  */
 export class ProjectsCommand implements Command {
   readonly name = 'projects';
@@ -33,6 +43,18 @@ export class ProjectsCommand implements Command {
     try {
       const projectsPath = path.join(getImpactDir(), 'projects.json');
       const config = this.loadProjectsConfig(projectsPath);
+
+      // --groups 처리 (목록 조회 - --group보다 먼저 체크)
+      const groupsIdx = this.args.indexOf('--groups');
+      if (groupsIdx !== -1) {
+        return await this.handleGroupsList();
+      }
+
+      // --group 처리 (추가/제거 - --remove, --add와 조합되므로 단독 --remove보다 먼저 처리)
+      const groupIdx = this.args.indexOf('--group');
+      if (groupIdx !== -1) {
+        return await this.handleGroup();
+      }
 
       // --switch 처리
       const switchIdx = this.args.indexOf('--switch');
@@ -74,6 +96,30 @@ export class ProjectsCommand implements Command {
           };
         }
         return await this.handleInfo(config, projectName);
+      }
+
+      // --link 처리
+      const linkIdx = this.args.indexOf('--link');
+      if (linkIdx !== -1) {
+        return await this.handleLink();
+      }
+
+      // --unlink 처리
+      const unlinkIdx = this.args.indexOf('--unlink');
+      if (unlinkIdx !== -1) {
+        return await this.handleUnlink();
+      }
+
+      // --links 처리
+      const linksIdx = this.args.indexOf('--links');
+      if (linksIdx !== -1) {
+        return await this.handleLinks();
+      }
+
+      // --detect-links 처리
+      const detectLinksIdx = this.args.indexOf('--detect-links');
+      if (detectLinksIdx !== -1) {
+        return await this.handleDetectLinks(config);
       }
 
       // 기본: 목록 조회
@@ -254,6 +300,284 @@ export class ProjectsCommand implements Command {
       code: ResultCode.SUCCESS,
       message: `Showing project info: ${project.id}`,
       data: { project, indexedFileCount, analysisCount: results.length },
+    };
+  }
+
+  /**
+   * 크로스 프로젝트 의존성 등록
+   */
+  private async handleLink(): Promise<CommandResult> {
+    const linkIdx = this.args.indexOf('--link');
+    const source = this.args[linkIdx + 1];
+    const target = this.args[linkIdx + 2];
+
+    if (!source || !target) {
+      logger.error('소스와 대상 프로젝트 ID를 지정해주세요.');
+      return {
+        code: ResultCode.FAILURE,
+        message: 'Source and target project IDs are required for --link.',
+      };
+    }
+
+    const typeIdx = this.args.indexOf('--type');
+    const typeStr = typeIdx !== -1 ? this.args[typeIdx + 1] : undefined;
+
+    const validTypes: LinkType[] = [
+      'api-consumer', 'api-provider', 'shared-library',
+      'shared-types', 'event-publisher', 'event-subscriber',
+    ];
+
+    if (!typeStr || !validTypes.includes(typeStr as LinkType)) {
+      logger.error(`유효한 의존성 유형을 지정해주세요: ${validTypes.join(', ')}`);
+      return {
+        code: ResultCode.FAILURE,
+        message: `Valid --type is required. Options: ${validTypes.join(', ')}`,
+      };
+    }
+
+    const manager = new CrossProjectManager();
+    const link = await manager.link(source, target, typeStr as LinkType);
+
+    logger.header('의존성 등록');
+    console.log(`\n  ${link.source} -> ${link.target} (${link.type})`);
+    console.log('');
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: `Link created: ${link.source} -> ${link.target}`,
+      data: { link },
+    };
+  }
+
+  /**
+   * 크로스 프로젝트 의존성 해제
+   */
+  private async handleUnlink(): Promise<CommandResult> {
+    const unlinkIdx = this.args.indexOf('--unlink');
+    const source = this.args[unlinkIdx + 1];
+    const target = this.args[unlinkIdx + 2];
+
+    if (!source || !target) {
+      logger.error('소스와 대상 프로젝트 ID를 지정해주세요.');
+      return {
+        code: ResultCode.FAILURE,
+        message: 'Source and target project IDs are required for --unlink.',
+      };
+    }
+
+    const manager = new CrossProjectManager();
+    const removed = await manager.unlink(source, target);
+
+    if (!removed) {
+      logger.error(`의존성을 찾을 수 없습니다: ${source} <-> ${target}`);
+      return {
+        code: ResultCode.FAILURE,
+        message: `Link not found: ${source} <-> ${target}`,
+      };
+    }
+
+    logger.success(`의존성 해제 완료: ${source} <-> ${target}`);
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: `Link removed: ${source} <-> ${target}`,
+      data: { source, target },
+    };
+  }
+
+  /**
+   * 크로스 프로젝트 의존성 목록 조회
+   */
+  private async handleLinks(): Promise<CommandResult> {
+    const linksIdx = this.args.indexOf('--links');
+    const projectId = this.args[linksIdx + 1];
+
+    const manager = new CrossProjectManager();
+    const links = await manager.getLinks(projectId);
+
+    logger.header('프로젝트 의존성 목록');
+
+    if (links.length === 0) {
+      console.log('\n등록된 의존성이 없습니다.');
+      console.log('의존성 등록: /impact projects --link <source> <target> --type <type>');
+    } else {
+      console.log('');
+      for (const link of links) {
+        const apiInfo = link.apis && link.apis.length > 0
+          ? ` [APIs: ${link.apis.join(', ')}]`
+          : '';
+        console.log(`  ${link.source} -> ${link.target} (${link.type})${apiInfo}`);
+      }
+      console.log(`\n총 ${links.length}개의 의존성이 등록되어 있습니다.`);
+    }
+    console.log('');
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: `Listed ${links.length} links.`,
+      data: { links },
+    };
+  }
+
+  /**
+   * API 경로 기반 자동 의존성 감지
+   */
+  private async handleDetectLinks(config: ProjectsConfig): Promise<CommandResult> {
+    const projectIds = config.projects.map(p => p.id);
+
+    if (projectIds.length < 2) {
+      logger.warn('의존성 감지에는 최소 2개의 등록된 프로젝트가 필요합니다.');
+      console.log('\n등록된 프로젝트가 부족합니다 (최소 2개 필요).');
+      console.log('프로젝트 등록: /impact init <project_path>');
+      console.log('');
+      return {
+        code: ResultCode.SUCCESS,
+        message: 'Not enough projects for detect-links (minimum 2 required).',
+        data: { detectedLinks: [] },
+      };
+    }
+
+    const indexer = new Indexer();
+    const manager = new CrossProjectManager();
+    const detectedLinks = await manager.detectLinks(indexer, projectIds);
+
+    logger.header('자동 의존성 감지 결과');
+
+    if (detectedLinks.length === 0) {
+      console.log('\n감지된 의존성이 없습니다.');
+      console.log('프로젝트들의 인덱스가 최신인지 확인해주세요: /impact reindex');
+    } else {
+      console.log('');
+      for (const link of detectedLinks) {
+        const apiInfo = link.apis && link.apis.length > 0
+          ? ` [APIs: ${link.apis.join(', ')}]`
+          : '';
+        console.log(`  ${link.source} -> ${link.target} (${link.type})${apiInfo}`);
+      }
+      console.log(`\n총 ${detectedLinks.length}개의 의존성이 감지되었습니다.`);
+      console.log('이 의존성을 등록하시겠습니까?');
+      console.log('등록: /impact projects --link <source> <target> --type <type>');
+    }
+    console.log('');
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: `Detected ${detectedLinks.length} links.`,
+      data: { detectedLinks },
+    };
+  }
+
+  /**
+   * 그룹 목록 조회
+   */
+  private async handleGroupsList(): Promise<CommandResult> {
+    const manager = new CrossProjectManager();
+    const groups = await manager.getGroups();
+
+    logger.header('프로젝트 그룹 목록');
+
+    if (groups.length === 0) {
+      console.log('\n등록된 그룹이 없습니다.');
+      console.log('그룹 추가: /impact projects --group <name> --add <project-id>');
+    } else {
+      console.log('');
+      for (const group of groups) {
+        console.log(`  ${group.name}: ${group.projects.length > 0 ? group.projects.join(', ') : '(비어있음)'}`);
+      }
+      console.log(`\n총 ${groups.length}개의 그룹이 등록되어 있습니다.`);
+    }
+    console.log('');
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: `Listed ${groups.length} groups.`,
+      data: { groups },
+    };
+  }
+
+  /**
+   * 그룹에 프로젝트 추가/제거
+   */
+  private async handleGroup(): Promise<CommandResult> {
+    const groupIdx = this.args.indexOf('--group');
+    const groupName = this.args[groupIdx + 1];
+
+    if (!groupName) {
+      logger.error('그룹 이름을 지정해주세요.');
+      return {
+        code: ResultCode.FAILURE,
+        message: 'Group name is required for --group.',
+      };
+    }
+
+    const manager = new CrossProjectManager();
+
+    // --add 처리
+    const addIdx = this.args.indexOf('--add');
+    if (addIdx !== -1) {
+      const projectId = this.args[addIdx + 1];
+      if (!projectId) {
+        logger.error('추가할 프로젝트 ID를 지정해주세요.');
+        return {
+          code: ResultCode.FAILURE,
+          message: 'Project ID is required for --add.',
+        };
+      }
+
+      const existingGroup = await manager.getGroup(groupName);
+      const projects = existingGroup ? [...existingGroup.projects] : [];
+
+      if (!projects.includes(projectId)) {
+        projects.push(projectId);
+      }
+
+      const group = await manager.addGroup(groupName, projects);
+      logger.success(`그룹 '${groupName}'에 프로젝트 '${projectId}'를 추가했습니다.`);
+
+      return {
+        code: ResultCode.SUCCESS,
+        message: `Added ${projectId} to group ${groupName}.`,
+        data: { group },
+      };
+    }
+
+    // --remove 처리
+    const removeIdx = this.args.indexOf('--remove');
+    if (removeIdx !== -1) {
+      const projectId = this.args[removeIdx + 1];
+      if (!projectId) {
+        logger.error('제거할 프로젝트 ID를 지정해주세요.');
+        return {
+          code: ResultCode.FAILURE,
+          message: 'Project ID is required for --remove.',
+        };
+      }
+
+      const existingGroup = await manager.getGroup(groupName);
+      if (!existingGroup) {
+        logger.error(`그룹을 찾을 수 없습니다: ${groupName}`);
+        return {
+          code: ResultCode.FAILURE,
+          message: `Group not found: ${groupName}`,
+        };
+      }
+
+      const projects = existingGroup.projects.filter(p => p !== projectId);
+      const group = await manager.addGroup(groupName, projects);
+      logger.success(`그룹 '${groupName}'에서 프로젝트 '${projectId}'를 제거했습니다.`);
+
+      return {
+        code: ResultCode.SUCCESS,
+        message: `Removed ${projectId} from group ${groupName}.`,
+        data: { group },
+      };
+    }
+
+    // --add, --remove 없이 --group만 사용한 경우
+    logger.error('--add 또는 --remove 옵션을 지정해주세요.');
+    return {
+      code: ResultCode.FAILURE,
+      message: '--add or --remove is required with --group.',
     };
   }
 
