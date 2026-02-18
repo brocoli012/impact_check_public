@@ -835,6 +835,18 @@
       "timestamp": "2026-02-18T16:00:00Z",
       "agent": "developer",
       "description": "SKILL.md 통일 - skills/kic/SKILL.md(483줄) 삭제, 루트 SKILL.md(704줄)만 유지, 오해 문구 제거, 1457테스트"
+    },
+    {
+      "action": "feat_annotations_output",
+      "timestamp": "2026-02-18T17:00:00Z",
+      "agent": "developer",
+      "description": "annotations view --output 옵션 추가 - md 파일 저장, generateSingleFileMd/generateStatsMd 리팩토링, 5 신규 테스트, 1462테스트, 커밋 129bcbb"
+    },
+    {
+      "action": "docs_web_build_prerequisite",
+      "timestamp": "2026-02-18T17:30:00Z",
+      "agent": "developer",
+      "description": "web/dist 빌드 사전 조건 안내 - SKILL.md/CLAUDE.md/web-server.ts/view.ts 4개 파일 수정, 1462테스트, 커밋 53f19b4"
     }
   ],
   "documents": {
