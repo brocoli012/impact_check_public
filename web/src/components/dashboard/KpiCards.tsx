@@ -24,6 +24,7 @@ interface KpiCardData {
   color: string;
   route: string;
   urgencyBadge: UrgencyBadge;
+  detailLine?: string;
 }
 
 /**
@@ -98,6 +99,17 @@ function KpiCards({ result }: KpiCardsProps) {
   const feTasks = result.tasks.filter((t) => t.type === 'FE').length;
   const beTasks = result.tasks.filter((t) => t.type === 'BE').length;
 
+  // detailLine 생성
+  const maxGrade = result.screenScores.length > 0
+    ? result.screenScores.reduce((max, s) => {
+        const order = ['Low', 'Medium', 'High', 'Critical'];
+        return order.indexOf(s.grade) > order.indexOf(max) ? s.grade : max;
+      }, result.screenScores[0].grade)
+    : undefined;
+
+  const highCheckCount = result.planningChecks.filter((c) => c.priority === 'high').length;
+  const criticalPolicyCount = result.policyWarnings.filter((w) => w.severity === 'critical').length;
+
   const cards: KpiCardData[] = [
     {
       label: '영향 화면',
@@ -106,6 +118,7 @@ function KpiCards({ result }: KpiCardsProps) {
       color: '#6366F1',
       route: '/flow',
       urgencyBadge: null,
+      detailLine: maxGrade ? `최고 등급: ${maxGrade}` : undefined,
     },
     {
       label: '총 작업',
@@ -114,6 +127,7 @@ function KpiCards({ result }: KpiCardsProps) {
       color: '#3B82F6',
       route: '/tickets',
       urgencyBadge: null,
+      detailLine: result.tasks.length > 0 ? `FE ${feTasks}개 \u00B7 BE ${beTasks}개` : undefined,
     },
     {
       label: '기획 확인',
@@ -122,6 +136,7 @@ function KpiCards({ result }: KpiCardsProps) {
       color: '#F59E0B',
       route: '/checklist',
       urgencyBadge: getCheckUrgencyBadge(result),
+      detailLine: highCheckCount > 0 ? `high ${highCheckCount}건` : undefined,
     },
     {
       label: '정책 경고',
@@ -130,6 +145,7 @@ function KpiCards({ result }: KpiCardsProps) {
       color: '#EF4444',
       route: '/policies',
       urgencyBadge: getPolicyUrgencyBadge(result),
+      detailLine: criticalPolicyCount > 0 ? `critical ${criticalPolicyCount}건` : undefined,
     },
     {
       label: '확인 요청',
@@ -190,6 +206,11 @@ function KpiCards({ result }: KpiCardsProps) {
                 <p className="text-xs text-gray-400">{card.subtitle}</p>
               )}
             </div>
+            {card.detailLine && (
+              <p data-testid={`kpi-detail-${card.route.replace('/', '')}`} className="text-[10px] text-gray-400 truncate mt-1">
+                {card.detailLine}
+              </p>
+            )}
             <p className="mt-2 text-xs text-gray-400 group-hover:text-purple-600 transition-colors">
               자세히 보기 &gt;
             </p>

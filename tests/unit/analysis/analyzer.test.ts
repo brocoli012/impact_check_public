@@ -521,6 +521,85 @@ describe('ImpactAnalyzer', () => {
     });
   });
 
+  describe('sourceRequirementIds / sourceFeatureIds (REQ-009: traceability)', () => {
+    it('should include sourceFeatureIds on FE tasks', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
+
+      const feTasks = result.affectedScreens[0].tasks;
+      expect(feTasks.length).toBeGreaterThan(0);
+
+      // FE task from feature F-001 should have sourceFeatureIds = ['F-001']
+      const feTask = feTasks[0];
+      expect(feTask.sourceFeatureIds).toBeDefined();
+      expect(feTask.sourceFeatureIds).toContain('F-001');
+    });
+
+    it('should include sourceRequirementIds on FE tasks when requirements match', async () => {
+      const specWithReqs: ParsedSpec = {
+        ...spec,
+        requirements: [
+          {
+            id: 'REQ-001',
+            name: '장바구니 수량 변경 요구사항',
+            description: '장바구니에서 수량을 직접 입력하여 변경할 수 있어야 한다',
+            priority: 'must',
+            relatedFeatures: ['F-001'],
+          },
+        ],
+      };
+
+      const result = await analyzer.analyze(specWithReqs, matched, index);
+
+      const feTasks = result.affectedScreens[0].tasks;
+      expect(feTasks.length).toBeGreaterThan(0);
+
+      // Task title/description contains "장바구니" which overlaps with REQ-001 name/description
+      const feTask = feTasks[0];
+      expect(feTask.sourceRequirementIds).toBeDefined();
+      expect(feTask.sourceRequirementIds!.length).toBeGreaterThan(0);
+      expect(feTask.sourceRequirementIds).toContain('REQ-001');
+    });
+
+    it('should include sourceFeatureIds on BE tasks', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
+
+      const beTasks = result.tasks.filter(t => t.type === 'BE');
+      expect(beTasks.length).toBeGreaterThan(0);
+
+      // BE tasks should also have sourceFeatureIds (matched via keyword overlap)
+      const beTask = beTasks[0];
+      expect(beTask.sourceFeatureIds).toBeDefined();
+      // sourceFeatureIds may or may not match depending on keyword overlap
+      expect(Array.isArray(beTask.sourceFeatureIds)).toBe(true);
+    });
+
+    it('should include sourceRequirementIds on BE tasks', async () => {
+      const result = await analyzer.analyze(spec, matched, index);
+
+      const beTasks = result.tasks.filter(t => t.type === 'BE');
+      expect(beTasks.length).toBeGreaterThan(0);
+
+      const beTask = beTasks[0];
+      expect(beTask.sourceRequirementIds).toBeDefined();
+      expect(Array.isArray(beTask.sourceRequirementIds)).toBe(true);
+    });
+
+    it('should return empty sourceRequirementIds when no requirements in spec', async () => {
+      const specNoReqs: ParsedSpec = {
+        ...spec,
+        requirements: [],
+      };
+
+      const result = await analyzer.analyze(specNoReqs, matched, index);
+
+      const allTasks = result.tasks;
+      for (const task of allTasks) {
+        expect(task.sourceRequirementIds).toBeDefined();
+        expect(task.sourceRequirementIds).toHaveLength(0);
+      }
+    });
+  });
+
   describe('hasOverlap stop words (M8)', () => {
     it('should NOT match when only common Korean stop words overlap', async () => {
       // "변경 필요 작업" vs "변경 처리 확인" - only stop words overlap

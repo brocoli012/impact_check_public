@@ -77,16 +77,23 @@ class ImpactAnalyzer {
             const relatedApis = matched.apis
                 .filter(a => a.matchScore > 0.5)
                 .map(a => a.id);
+            // REQ-009: 출처 요구사항/기능 ID 매칭
+            const taskTitle = `[FE] ${feature.name} - ${screenName}`;
+            const taskDescription = `${screenName}에서 ${feature.description}`;
+            const sourceRequirementIds = this.matchRequirementIds(spec, taskTitle, taskDescription);
+            const sourceFeatureIds = [feature.id];
             tasks.push({
                 id: taskId,
-                title: `[FE] ${feature.name} - ${screenName}`,
+                title: taskTitle,
                 type: 'FE',
                 actionType: feature.actionType,
-                description: `${screenName}에서 ${feature.description}`,
+                description: taskDescription,
                 affectedFiles,
                 relatedApis,
                 planningChecks: [],
                 rationale: `기획서 기능 "${feature.name}"이 화면 "${screenName}"에 영향. 매칭 기반 분석.`,
+                sourceRequirementIds,
+                sourceFeatureIds,
             });
         }
         return tasks;
@@ -111,7 +118,7 @@ class ImpactAnalyzer {
     /**
      * 추가 작업 생성 (API/BE 작업)
      */
-    generateAdditionalTasks(_spec, matched, index, _existingScreens) {
+    generateAdditionalTasks(spec, matched, index, _existingScreens) {
         const tasks = [];
         let counter = 100;
         // 매칭된 API에 대한 BE 작업
@@ -121,16 +128,23 @@ class ImpactAnalyzer {
             counter++;
             const apiInfo = index.apis.find(a => a.id === api.id);
             const affectedFiles = apiInfo ? [apiInfo.filePath] : [];
+            // REQ-009: 출처 요구사항/기능 ID 매칭
+            const taskTitle = `[BE] API 수정 - ${api.name}`;
+            const taskDescription = `API ${api.name} 수정이 필요할 수 있습니다.`;
+            const sourceRequirementIds = this.matchRequirementIds(spec, taskTitle, taskDescription);
+            const sourceFeatureIds = this.matchFeatureIds(spec, taskTitle, taskDescription);
             tasks.push({
                 id: `T-${String(counter).padStart(3, '0')}`,
-                title: `[BE] API 수정 - ${api.name}`,
+                title: taskTitle,
                 type: 'BE',
                 actionType: 'modify',
-                description: `API ${api.name} 수정이 필요할 수 있습니다.`,
+                description: taskDescription,
                 affectedFiles,
                 relatedApis: [api.id],
                 planningChecks: [],
                 rationale: `매칭된 API "${api.name}" (score: ${api.matchScore.toFixed(2)})`,
+                sourceRequirementIds,
+                sourceFeatureIds,
             });
         }
         return tasks;
@@ -213,6 +227,38 @@ class ImpactAnalyzer {
         const words1 = text1.split(/[\s,]+/).filter(w => w.length >= 2 && !ImpactAnalyzer.KOREAN_STOP_WORDS.has(w));
         const words2 = text2.split(/[\s,]+/).filter(w => w.length >= 2 && !ImpactAnalyzer.KOREAN_STOP_WORDS.has(w));
         return words1.some(w => words2.includes(w));
+    }
+    /**
+     * 출처 요구사항 ID 매칭 (REQ-009)
+     *
+     * Task의 제목/설명과 요구사항의 이름/설명 간 키워드 오버랩으로 매칭합니다.
+     */
+    matchRequirementIds(spec, taskTitle, taskDescription) {
+        const taskText = [taskTitle, taskDescription].join(' ').toLowerCase();
+        return spec.requirements
+            .filter(req => {
+            const reqKeywords = [req.name, ...req.description.split(/[\s,]+/)]
+                .map(k => k.toLowerCase())
+                .filter(k => k.length > 2 && !ImpactAnalyzer.KOREAN_STOP_WORDS.has(k));
+            return reqKeywords.some(k => taskText.includes(k));
+        })
+            .map(req => req.id);
+    }
+    /**
+     * 출처 기능 ID 매칭 (REQ-009)
+     *
+     * Task의 제목/설명과 기능의 이름/키워드 간 키워드 오버랩으로 매칭합니다.
+     */
+    matchFeatureIds(spec, taskTitle, taskDescription) {
+        const taskText = [taskTitle, taskDescription].join(' ').toLowerCase();
+        return spec.features
+            .filter(feat => {
+            const featKeywords = [feat.name, ...feat.keywords]
+                .map(k => k.toLowerCase())
+                .filter(k => k.length > 2 && !ImpactAnalyzer.KOREAN_STOP_WORDS.has(k));
+            return featKeywords.some(k => taskText.includes(k));
+        })
+            .map(feat => feat.id);
     }
     /**
      * 인덱스에서 유효한 파일 경로 집합을 구축

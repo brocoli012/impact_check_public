@@ -252,6 +252,70 @@ describe('AnalysisPipeline', () => {
       expect(progressSteps).toEqual([1, 2, 3, 4, 5, 6]);
     });
 
+    it('should include parsedSpec in result (REQ-009)', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+
+      const input: SpecInput = {
+        type: 'text',
+        content: '# 장바구니 수량 변경 기능 개선\n\n1. 장바구니 화면에서 수량 직접 입력 기능 추가\n수량 입력 필드 추가',
+      };
+
+      const result = await pipeline.run(input, projectId, tmpDir);
+
+      // parsedSpec should be preserved in the final result
+      expect(result.parsedSpec).toBeDefined();
+      expect(result.parsedSpec!.title).toBeTruthy();
+      expect(Array.isArray(result.parsedSpec!.features)).toBe(true);
+      expect(Array.isArray(result.parsedSpec!.requirements)).toBe(true);
+      expect(Array.isArray(result.parsedSpec!.keywords)).toBe(true);
+    });
+
+    it('should include analysisSummary in result (REQ-009)', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+
+      const input: SpecInput = {
+        type: 'text',
+        content: '# 장바구니 수량 변경 기능 개선\n\n1. 장바구니 화면에서 수량 직접 입력 기능 추가\n수량 입력 필드 추가',
+      };
+
+      const result = await pipeline.run(input, projectId, tmpDir);
+
+      // analysisSummary should be generated
+      expect(result.analysisSummary).toBeDefined();
+      expect(result.analysisSummary!.overview).toBeTruthy();
+      expect(typeof result.analysisSummary!.overview).toBe('string');
+      expect(Array.isArray(result.analysisSummary!.keyFindings)).toBe(true);
+      expect(Array.isArray(result.analysisSummary!.riskAreas)).toBe(true);
+    });
+
+    it('should preserve parsedSpec and analysisSummary after saveResult (REQ-009)', async () => {
+      const pipeline = new AnalysisPipeline(tmpDir);
+
+      const input: SpecInput = {
+        type: 'text',
+        content: '# 기획서\n\n1. 장바구니 기능 수정\ncart 관련 변경',
+      };
+
+      const result = await pipeline.run(input, projectId, tmpDir);
+      const resultId = await pipeline.saveResult(result, projectId);
+
+      // 저장된 파일 로드하여 parsedSpec/analysisSummary 확인
+      const resultPath = path.join(
+        tmpDir,
+        '.impact',
+        'projects',
+        projectId,
+        'results',
+        `${resultId}.json`,
+      );
+      const savedContent = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+
+      expect(savedContent.parsedSpec).toBeDefined();
+      expect(savedContent.parsedSpec.title).toBeTruthy();
+      expect(savedContent.analysisSummary).toBeDefined();
+      expect(savedContent.analysisSummary.overview).toBeTruthy();
+    });
+
     it('should throw error when index not found', async () => {
       const pipeline = new AnalysisPipeline(tmpDir);
 

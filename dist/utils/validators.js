@@ -58,6 +58,42 @@ function validateImpactResult(data) {
             message: `grade must be one of: ${VALID_GRADES.join(', ')}`,
         });
     }
+    // parsedSpec: optional, 있으면 object with title(string)
+    if (obj['parsedSpec'] !== undefined) {
+        if (typeof obj['parsedSpec'] !== 'object' || obj['parsedSpec'] === null) {
+            errors.push({
+                field: 'parsedSpec',
+                message: 'parsedSpec must be an object when present',
+            });
+        }
+        else {
+            const ps = obj['parsedSpec'];
+            if (typeof ps['title'] !== 'string' || ps['title'].length === 0) {
+                errors.push({
+                    field: 'parsedSpec.title',
+                    message: 'parsedSpec.title must be a non-empty string',
+                });
+            }
+        }
+    }
+    // analysisSummary: optional, 있으면 object with overview(string)
+    if (obj['analysisSummary'] !== undefined) {
+        if (typeof obj['analysisSummary'] !== 'object' || obj['analysisSummary'] === null) {
+            errors.push({
+                field: 'analysisSummary',
+                message: 'analysisSummary must be an object when present',
+            });
+        }
+        else {
+            const as_ = obj['analysisSummary'];
+            if (typeof as_['overview'] !== 'string' || as_['overview'].length === 0) {
+                errors.push({
+                    field: 'analysisSummary.overview',
+                    message: 'analysisSummary.overview must be a non-empty string',
+                });
+            }
+        }
+    }
     return { valid: errors.length === 0, errors };
 }
 /**

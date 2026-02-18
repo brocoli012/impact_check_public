@@ -173,10 +173,14 @@ class AnalysisPipeline {
             reason: c.warnings.join('; ') || '분석 데이터가 불충분합니다.',
             action: c.recommendations.join('; ') || '인덱스를 갱신하세요.',
         }));
+        // 분석 요약 생성 (REQ-009)
+        const analysisSummary = this.buildAnalysisSummary(parsedSpec, enrichedResult);
         const finalResult = {
             ...enrichedResult,
             confidenceScores,
             lowConfidenceWarnings,
+            parsedSpec,
+            analysisSummary,
         };
         logger_1.logger.info('Analysis pipeline complete!');
         return finalResult;
@@ -250,6 +254,41 @@ class AnalysisPipeline {
             logger_1.logger.warn(`인덱스 자동 갱신 실패, 기존 인덱스 사용: ${err instanceof Error ? err.message : String(err)}`);
             return currentIndex;
         }
+    }
+    /**
+     * 분석 요약 생성 (REQ-009)
+     *
+     * ParsedSpec과 EnrichedResult를 기반으로 분석 요약을 생성합니다.
+     */
+    buildAnalysisSummary(spec, result) {
+        const featureCount = spec.features.length;
+        const screenCount = result.affectedScreens.length;
+        const taskCount = result.tasks.length;
+        const highImpactScreens = result.affectedScreens
+            .filter(s => s.impactLevel === 'high' || s.impactLevel === 'critical');
+        const overview = `"${spec.title}" 기획에 대해 ${featureCount}개 기능, ${screenCount}개 화면, ${taskCount}개 작업이 식별되었습니다. 종합 등급: ${result.grade}.`;
+        const keyFindings = [];
+        if (highImpactScreens.length > 0) {
+            keyFindings.push(`고영향 화면 ${highImpactScreens.length}개: ${highImpactScreens.map(s => s.screenName).join(', ')}`);
+        }
+        if (result.policyWarnings.length > 0) {
+            keyFindings.push(`정책 경고 ${result.policyWarnings.length}건 발생`);
+        }
+        if (spec.ambiguities.length > 0) {
+            keyFindings.push(`기획 불명확 사항 ${spec.ambiguities.length}건 확인 필요`);
+        }
+        if (result.tasks.filter(t => t.type === 'BE').length > 0) {
+            keyFindings.push(`백엔드 작업 ${result.tasks.filter(t => t.type === 'BE').length}건 포함`);
+        }
+        const riskAreas = [];
+        if (highImpactScreens.length > 0) {
+            riskAreas.push(...highImpactScreens.map(s => `화면 "${s.screenName}" (${s.impactLevel})`));
+        }
+        const criticalWarnings = result.policyWarnings.filter(w => w.severity === 'critical');
+        if (criticalWarnings.length > 0) {
+            riskAreas.push(...criticalWarnings.map(w => `정책: ${w.policyName} - ${w.message}`));
+        }
+        return { overview, keyFindings, riskAreas };
     }
     /**
      * 진행률 보고

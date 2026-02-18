@@ -141,6 +141,10 @@ export interface Task {
     planningChecks: string[];
     /** 분석 근거 */
     rationale: string;
+    /** 출처 요구사항 ID 목록 (REQ-009: 트레이서빌리티) */
+    sourceRequirementIds?: string[];
+    /** 출처 기능 ID 목록 (REQ-009: 트레이서빌리티) */
+    sourceFeatureIds?: string[];
 }
 /** 기획 확인 사항 */
 export interface Check {
@@ -256,6 +260,10 @@ export interface ConfidenceEnrichedResult extends EnrichedResult {
     lowConfidenceWarnings: ConfidenceWarning[];
     /** 크로스 프로젝트 영향도 (optional) */
     crossProjectImpact?: CrossProjectImpact;
+    /** 파싱된 기획서 원본 (REQ-009: 트레이서빌리티) */
+    parsedSpec?: ParsedSpec;
+    /** 분석 요약 (REQ-009) */
+    analysisSummary?: AnalysisSummary;
 }
 /** 시스템별 신뢰도 */
 export interface SystemConfidence {
@@ -288,5 +296,14 @@ export interface ConfidenceWarning {
     reason: string;
     /** 조치 안내 */
     action: string;
+}
+/** 분석 요약 */
+export interface AnalysisSummary {
+    /** 개요 */
+    overview: string;
+    /** 주요 발견 사항 */
+    keyFindings: string[];
+    /** 위험 영역 */
+    riskAreas: string[];
 }
 //# sourceMappingURL=analysis.d.ts.map

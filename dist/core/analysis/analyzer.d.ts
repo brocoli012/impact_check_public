@@ -49,6 +49,18 @@ export declare class ImpactAnalyzer {
      */
     private hasOverlap;
     /**
+     * 출처 요구사항 ID 매칭 (REQ-009)
+     *
+     * Task의 제목/설명과 요구사항의 이름/설명 간 키워드 오버랩으로 매칭합니다.
+     */
+    private matchRequirementIds;
+    /**
+     * 출처 기능 ID 매칭 (REQ-009)
+     *
+     * Task의 제목/설명과 기능의 이름/키워드 간 키워드 오버랩으로 매칭합니다.
+     */
+    private matchFeatureIds;
+    /**
      * 인덱스에서 유효한 파일 경로 집합을 구축
      *
      * files, screens, components, apis, models, policies의

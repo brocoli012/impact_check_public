@@ -7,6 +7,9 @@ import KpiCards from '../components/dashboard/KpiCards';
 import ScreenBarChart from '../components/dashboard/BarChart';
 import DonutChart from '../components/dashboard/DonutChart';
 import ActionGuide from '../components/dashboard/ActionGuide';
+import CriticalAlertBanner from '../components/dashboard/CriticalAlertBanner';
+import AnalysisSummaryCard from '../components/dashboard/AnalysisSummaryCard';
+import SpecSourcePanel from '../components/dashboard/SpecSourcePanel';
 import CrossProjectDiagram from '../components/cross-project/CrossProjectDiagram';
 import CrossProjectSummary from '../components/cross-project/CrossProjectSummary';
 import type { ProjectLink } from '../components/cross-project/CrossProjectDiagram';
@@ -68,6 +71,34 @@ function Dashboard() {
     return Math.round((sum / currentResult.confidenceScores.length) * 100);
   }, [currentResult]);
 
+  /** Impact Flow 데이터 (ScoreHeader용) */
+  const impactFlow = useMemo(() => {
+    if (!currentResult) return undefined;
+    const actionCounts = { new: 0, modify: 0, config: 0 };
+    for (const task of currentResult.tasks) {
+      if (task.actionType in actionCounts) {
+        actionCounts[task.actionType as keyof typeof actionCounts]++;
+      }
+    }
+    return {
+      actionCounts,
+      affectedScreenCount: currentResult.affectedScreens.length,
+      totalTaskCount: currentResult.tasks.length,
+    };
+  }, [currentResult]);
+
+  /** Critical 정책 경고 (CriticalAlertBanner용) */
+  const criticalPolicies = useMemo(() => {
+    if (!currentResult) return [];
+    return currentResult.policyWarnings.filter((w) => w.severity === 'critical');
+  }, [currentResult]);
+
+  /** High priority 기획 확인 (CriticalAlertBanner용) */
+  const highPriorityChecks = useMemo(() => {
+    if (!currentResult) return [];
+    return currentResult.planningChecks.filter((c) => c.priority === 'high');
+  }, [currentResult]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -100,13 +131,23 @@ function Dashboard() {
         </div>
       )}
 
+      <CriticalAlertBanner
+        criticalPolicies={criticalPolicies}
+        highPriorityChecks={highPriorityChecks}
+      />
+
       <ScoreHeader
         totalScore={currentResult.totalScore}
         grade={currentResult.grade}
         specTitle={currentResult.specTitle}
         analyzedAt={currentResult.analyzedAt}
         recommendation={currentResult.recommendation}
+        impactFlow={impactFlow}
       />
+
+      {currentResult.analysisSummary && (
+        <AnalysisSummaryCard summary={currentResult.analysisSummary} />
+      )}
 
       <ActionGuide
         grade={currentResult.grade}
@@ -127,6 +168,11 @@ function Dashboard() {
           <DonutChart tasks={currentResult.tasks} />
         </div>
       </div>
+
+      {/* SpecSourcePanel - 기획서 원문 (parsedSpec이 있을 때만) */}
+      {currentResult.parsedSpec && (
+        <SpecSourcePanel parsedSpec={currentResult.parsedSpec} tasks={currentResult.tasks} />
+      )}
 
       {/* Confidence Warning Banner - 낮은 신뢰도 시스템이 있을 때만 표시 */}
       {lowConfSystems.length > 0 && (

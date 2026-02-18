@@ -1,9 +1,9 @@
 /**
  * @module web/pages/Tickets
- * @description 작업 티켓 목록 페이지 - FE/BE 필터, 등급 필터, 검색
+ * @description 작업 티켓 목록 페이지 - FE/BE 필터, 등급 필터, 요구사항 필터, 검색
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useResultStore } from '../stores/resultStore';
 import { useEnsureResult } from '../hooks/useEnsureResult';
@@ -16,6 +16,7 @@ import DependencyDiagram from '../components/tickets/DependencyDiagram';
 interface TicketFilter {
   typeFilter: 'all' | TaskType;
   gradeFilter: Grade | 'all';
+  requirementFilter: string;
   searchQuery: string;
 }
 
@@ -23,8 +24,9 @@ function Tickets() {
   useEnsureResult();
   const currentResult = useResultStore((s) => s.currentResult);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialType = searchParams.get('type');
+  const initialRequirement = searchParams.get('requirement');
 
   const [filter, setFilter] = useState<TicketFilter>({
     typeFilter:
@@ -32,8 +34,31 @@ function Tickets() {
         ? (initialType as TaskType)
         : 'all',
     gradeFilter: 'all',
+    requirementFilter: initialRequirement ?? 'all',
     searchQuery: '',
   });
+
+  // 요구사항 목록 (드롭다운 옵션)
+  const requirements = useMemo(() => {
+    return currentResult?.parsedSpec?.requirements ?? [];
+  }, [currentResult]);
+
+  // 요구사항 필터 변경 핸들러 (URL 파라미터 동기화)
+  const handleRequirementChange = useCallback(
+    (value: string) => {
+      setFilter((f) => ({ ...f, requirementFilter: value }));
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === 'all') {
+          next.delete('requirement');
+        } else {
+          next.set('requirement', value);
+        }
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
 
   // 작업별 점수 맵 생성
   const taskScoreMap = useMemo(() => {
@@ -71,6 +96,11 @@ function Tickets() {
       if (filter.gradeFilter !== 'all') {
         const ts = taskScoreMap.get(task.id);
         if (ts && ts.grade !== filter.gradeFilter) return false;
+      }
+
+      // Requirement filter
+      if (filter.requirementFilter !== 'all') {
+        if (!task.sourceRequirementIds?.includes(filter.requirementFilter)) return false;
       }
 
       // Search filter
@@ -218,6 +248,30 @@ function Tickets() {
               </button>
             ))}
           </div>
+
+          {/* Requirement filter */}
+          {requirements.length > 0 && (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500 mr-1">요구사항별:</span>
+              <select
+                data-testid="requirement-filter-select"
+                value={filter.requirementFilter}
+                onChange={(e) => handleRequirementChange(e.target.value)}
+                className={`px-2 py-1 rounded text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                  filter.requirementFilter !== 'all'
+                    ? 'bg-purple-100 text-purple-700 border-purple-300'
+                    : 'bg-gray-100 text-gray-600 border-gray-200'
+                }`}
+              >
+                <option value="all">전체</option>
+                {requirements.map((req) => (
+                  <option key={req.id} value={req.id}>
+                    {req.id}: {req.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Search */}
           <div className="flex-1 min-w-[200px]">

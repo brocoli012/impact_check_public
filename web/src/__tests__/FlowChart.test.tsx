@@ -32,6 +32,7 @@ describe('FlowChart Page', () => {
         gradeFilter: ['Low', 'Medium', 'High', 'Critical'],
         searchQuery: '',
         workTypeFilter: 'all',
+        requirementFilter: null,
       },
       expandedNodeIds: new Set(),
       selectedNodeId: null,
@@ -76,6 +77,14 @@ describe('FlowChart Page', () => {
     const searchInput = screen.getByPlaceholderText('노드 이름/파일 경로 검색...');
     expect(searchInput).toBeInTheDocument();
   });
+
+  it('should render requirement filter dropdown when parsedSpec has requirements', () => {
+    renderWithRouter(<FlowChart />);
+
+    // Mock data now includes parsedSpec with requirements
+    const dropdown = screen.getByLabelText('요구사항 필터');
+    expect(dropdown).toBeInTheDocument();
+  });
 });
 
 describe('flowTransformer', () => {
@@ -85,6 +94,7 @@ describe('flowTransformer', () => {
     gradeFilter: ['Low' as const, 'Medium' as const, 'High' as const, 'Critical' as const],
     searchQuery: '',
     workTypeFilter: 'all' as const,
+    requirementFilter: null,
   };
 
   it('should transform mock data into nodes and edges', () => {

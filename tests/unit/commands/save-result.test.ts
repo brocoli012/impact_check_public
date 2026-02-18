@@ -216,6 +216,67 @@ describe('SaveResultCommand', () => {
     expect(savedData.analysisMethod).toBe('rule-based');
   });
 
+  it('should save result with parsedSpec and analysisSummary (REQ-009)', async () => {
+    const data = createValidResultJson();
+    data['parsedSpec'] = {
+      title: 'Test Spec',
+      requirements: [],
+      features: [{ id: 'F-001', name: 'Feature', description: 'desc', targetScreen: '', actionType: 'new', keywords: [] }],
+      businessRules: [],
+      targetScreens: [],
+      keywords: [],
+      ambiguities: [],
+    };
+    data['analysisSummary'] = {
+      overview: 'Test overview for analysis',
+      keyFindings: ['finding1'],
+      riskAreas: ['risk1'],
+    };
+    const filePath = path.join(tmpDir, 'result-with-req009.json');
+    fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
+
+    mockLoad.mockResolvedValue(undefined);
+    mockGetActiveProject.mockReturnValue('test-project');
+
+    const cmd = new SaveResultCommand(['--file', filePath]);
+    const result = await cmd.execute();
+
+    expect(result.code).toBe(ResultCode.SUCCESS);
+
+    // Verify parsedSpec and analysisSummary were preserved in saved data
+    const savedData = mockSave.mock.calls[0][0];
+    expect(savedData.parsedSpec).toBeDefined();
+    expect(savedData.parsedSpec.title).toBe('Test Spec');
+    expect(savedData.analysisSummary).toBeDefined();
+    expect(savedData.analysisSummary.overview).toBe('Test overview for analysis');
+  });
+
+  it('should reject invalid parsedSpec structure', async () => {
+    const data = createValidResultJson();
+    data['parsedSpec'] = 'not-an-object';
+    const filePath = path.join(tmpDir, 'invalid-parsedspec.json');
+    fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
+
+    const cmd = new SaveResultCommand(['--file', filePath]);
+    const result = await cmd.execute();
+
+    expect(result.code).toBe(ResultCode.FAILURE);
+    expect(result.message).toContain('parsedSpec');
+  });
+
+  it('should reject invalid analysisSummary structure', async () => {
+    const data = createValidResultJson();
+    data['analysisSummary'] = 'not-an-object';
+    const filePath = path.join(tmpDir, 'invalid-summary.json');
+    fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
+
+    const cmd = new SaveResultCommand(['--file', filePath]);
+    const result = await cmd.execute();
+
+    expect(result.code).toBe(ResultCode.FAILURE);
+    expect(result.message).toContain('analysisSummary');
+  });
+
   it('should return FAILURE for specific validation errors', async () => {
     const data = createValidResultJson();
     data['totalScore'] = 'not-a-number';

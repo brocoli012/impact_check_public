@@ -16,6 +16,8 @@ export interface FlowFilterState {
   searchQuery: string;
   /** 작업 유형 필터: 'all' | 'new' | 'modify' */
   workTypeFilter: 'all' | 'new' | 'modify';
+  /** 요구사항 필터: 선택된 요구사항 ID (null이면 전체 표시) */
+  requirementFilter: string | null;
 }
 
 /** 플로우 스토어 상태 */
@@ -39,6 +41,8 @@ interface FlowState {
   collapseAll: () => void;
   /** 등급 필터 토글 */
   toggleGradeFilter: (grade: Grade) => void;
+  /** 요구사항 필터 설정 */
+  setRequirementFilter: (reqId: string | null) => void;
 }
 
 /** 기본 필터 상태 */
@@ -47,6 +51,7 @@ const defaultFilter: FlowFilterState = {
   gradeFilter: ['Low', 'Medium', 'High', 'Critical'],
   searchQuery: '',
   workTypeFilter: 'all',
+  requirementFilter: null,
 };
 
 /** 플로우 스토어 */
@@ -86,4 +91,9 @@ export const useFlowStore = create<FlowState>((set) => ({
         : [...current, grade];
       return { filter: { ...state.filter, gradeFilter: next } };
     }),
+
+  setRequirementFilter: (reqId) =>
+    set((state) => ({
+      filter: { ...state.filter, requirementFilter: reqId },
+    })),
 }));

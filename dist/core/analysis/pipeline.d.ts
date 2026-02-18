@@ -92,6 +92,12 @@ export declare class AnalysisPipeline {
      */
     private autoRefreshIndex;
     /**
+     * 분석 요약 생성 (REQ-009)
+     *
+     * ParsedSpec과 EnrichedResult를 기반으로 분석 요약을 생성합니다.
+     */
+    private buildAnalysisSummary;
+    /**
      * 진행률 보고
      */
     private reportProgress;

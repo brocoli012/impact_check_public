@@ -4,17 +4,33 @@
   "projectPath": "/Users/youngilkang/AI_project/Kurly_Impact_Checker",
   "mode": "team",
   "createdAt": "2026-02-13T00:00:00Z",
-  "lastUpdatedAt": "2026-02-17T17:00:00Z",
+  "lastUpdatedAt": "2026-02-18T10:00:00Z",
   "currentAgent": {
     "role": "master",
-    "allowedTools": ["Task", "TodoWrite", "Read", "AskUserQuestion"]
+    "allowedTools": [
+      "Task",
+      "TodoWrite",
+      "Read",
+      "AskUserQuestion"
+    ]
   },
   "epics": [
     {
       "id": "EPIC-001",
       "title": "Kurly Impact Checker",
-      "status": "done",
-      "reqs": ["REQ-001", "REQ-002", "REQ-003", "REQ-004", "REQ-005", "REQ-006", "REQ-007"]
+      "status": "in_progress",
+      "reqs": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ-006",
+        "REQ-007",
+        "REQ-008",
+        "REQ-009",
+        "REQ-010"
+      ]
     }
   ],
   "activeTickets": [
@@ -73,6 +89,30 @@
       "status": "done",
       "priority": "MEDIUM",
       "epic": "EPIC-001"
+    },
+    {
+      "id": "REQ-008",
+      "type": "REQ",
+      "title": "대시보드 액션 가이드 및 네비게이션 개선",
+      "status": "done",
+      "priority": "HIGH",
+      "epic": "EPIC-001"
+    },
+    {
+      "id": "REQ-009",
+      "type": "REQ",
+      "title": "분석 종합 결과지 - 대시보드 인과 관계 시각화",
+      "status": "in_progress",
+      "priority": "HIGH",
+      "epic": "EPIC-001"
+    },
+    {
+      "id": "REQ-010",
+      "type": "REQ",
+      "title": "멀티프로젝트 식별 & 정책 문서 생성",
+      "status": "planned",
+      "priority": "HIGH",
+      "epic": "EPIC-001"
     }
   ],
   "violations": [],
@@ -96,7 +136,13 @@
       "status": "done",
       "completedAt": "2026-02-15",
       "summary": {
-        "modules": ["FileScanner", "TypeScriptParser", "DependencyGraphBuilder", "PolicyExtractor", "Indexer"],
+        "modules": [
+          "FileScanner",
+          "TypeScriptParser",
+          "DependencyGraphBuilder",
+          "PolicyExtractor",
+          "Indexer"
+        ],
         "tests": 353,
         "indexingTests": 89,
         "tpoComplexity": "7/10",
@@ -110,7 +156,17 @@
       "status": "done",
       "completedAt": "2026-02-15",
       "summary": {
-        "modules": ["SpecParser", "IndexMatcher", "ImpactAnalyzer", "Scorer", "PolicyMatcher", "OwnerMapper", "ConfidenceScorer", "AnalysisPipeline", "ResultManager"],
+        "modules": [
+          "SpecParser",
+          "IndexMatcher",
+          "ImpactAnalyzer",
+          "Scorer",
+          "PolicyMatcher",
+          "OwnerMapper",
+          "ConfidenceScorer",
+          "AnalysisPipeline",
+          "ResultManager"
+        ],
         "tests": 472,
         "analysisTests": 143,
         "tpoComplexity": "7/10",
@@ -125,7 +181,19 @@
       "status": "done",
       "completedAt": "2026-02-15",
       "summary": {
-        "modules": ["WebServer", "ViewCommand", "Dashboard", "FlowChart", "Checklist", "Owners", "Tickets", "DetailPanel", "8CustomNodes", "FilterBar", "ErrorBoundary"],
+        "modules": [
+          "WebServer",
+          "ViewCommand",
+          "Dashboard",
+          "FlowChart",
+          "Checklist",
+          "Owners",
+          "Tickets",
+          "DetailPanel",
+          "8CustomNodes",
+          "FilterBar",
+          "ErrorBoundary"
+        ],
         "tests": 529,
         "webTests": 48,
         "serverTests": 10,
@@ -140,7 +208,17 @@
       "status": "done",
       "completedAt": "2026-02-15",
       "summary": {
-        "modules": ["TicketsCommand", "DemoCommand", "OwnersCommand", "ProjectsCommand", "PoliciesCommand", "HelpCommand", "SessionManager", "RetryUtil", "README"],
+        "modules": [
+          "TicketsCommand",
+          "DemoCommand",
+          "OwnersCommand",
+          "ProjectsCommand",
+          "PoliciesCommand",
+          "HelpCommand",
+          "SessionManager",
+          "RetryUtil",
+          "README"
+        ],
         "tests": 580,
         "newTests": 59,
         "integrationTests": 20,
@@ -155,7 +233,12 @@
       "status": "done",
       "completedAt": "2026-02-16",
       "summary": {
-        "modules": ["LLM removal", "Conversational mode", "Plugin deployment", "README overhaul"],
+        "modules": [
+          "LLM removal",
+          "Conversational mode",
+          "Plugin deployment",
+          "README overhaul"
+        ],
         "changes": "122 files changed, +700/-5253 lines",
         "tests": 580,
         "deletedFiles": 12,
@@ -171,7 +254,13 @@
       "status": "done",
       "completedAt": "2026-02-17",
       "summary": {
-        "modules": ["ExportIndexCommand", "SaveResultCommand", "IndexSummarizer", "Validators", "SKILL.md AI Protocol"],
+        "modules": [
+          "ExportIndexCommand",
+          "SaveResultCommand",
+          "IndexSummarizer",
+          "Validators",
+          "SKILL.md AI Protocol"
+        ],
         "tests": 601,
         "newTests": 21,
         "newFiles": 6,
@@ -187,7 +276,13 @@
       "status": "done",
       "completedAt": "2026-02-17",
       "summary": {
-        "modules": ["getChangedFiles", "incrementalUpdate", "isIndexStale", "autoRefreshIndex", "ReindexCommand改善"],
+        "modules": [
+          "getChangedFiles",
+          "incrementalUpdate",
+          "isIndexStale",
+          "autoRefreshIndex",
+          "ReindexCommand改善"
+        ],
         "tests": 661,
         "newTests": 32,
         "taskCount": "5/5 done (TASK-007~011)",
@@ -201,7 +296,15 @@
       "status": "done",
       "completedAt": "2026-02-17",
       "summary": {
-        "modules": ["AnnotationManager", "AnnotationGenerator", "AnnotationLoader", "AnnotationsCommand", "ConfidenceScorer보너스", "Pipeline통합", "Indexer통합"],
+        "modules": [
+          "AnnotationManager",
+          "AnnotationGenerator",
+          "AnnotationLoader",
+          "AnnotationsCommand",
+          "ConfidenceScorer보너스",
+          "Pipeline통합",
+          "Indexer통합"
+        ],
         "tests": 772,
         "newTests": 111,
         "taskCount": "5/5 done (TASK-012~016)",
@@ -215,7 +318,12 @@
       "status": "done",
       "completedAt": "2026-02-17",
       "summary": {
-        "modules": ["PolicyCheckCommand", "AskCommand", "SummaryCommand", "SKILL.md확장"],
+        "modules": [
+          "PolicyCheckCommand",
+          "AskCommand",
+          "SummaryCommand",
+          "SKILL.md확장"
+        ],
         "tests": 849,
         "newTests": 77,
         "taskCount": "4/4 done (TASK-017~020)",
@@ -229,7 +337,16 @@
       "status": "done",
       "completedAt": "2026-02-17",
       "summary": {
-        "modules": ["Express정책API", "Policies페이지", "PolicyCard", "PolicyFilter", "PolicyDetail", "ConditionFlow", "PolicyGraph", "policyStore"],
+        "modules": [
+          "Express정책API",
+          "Policies페이지",
+          "PolicyCard",
+          "PolicyFilter",
+          "PolicyDetail",
+          "ConditionFlow",
+          "PolicyGraph",
+          "policyStore"
+        ],
         "tests": 1149,
         "newTests": 94,
         "taskCount": "4/4 done (TASK-021~024)",
@@ -243,7 +360,15 @@
       "status": "done",
       "completedAt": "2026-02-17",
       "summary": {
-        "modules": ["CrossProjectManager", "ApiContractChecker", "CrossAnalyzer", "CrossAnalyzeCommand", "CrossProjectDiagram", "CrossProjectSummary", "Dashboard통합"],
+        "modules": [
+          "CrossProjectManager",
+          "ApiContractChecker",
+          "CrossAnalyzer",
+          "CrossAnalyzeCommand",
+          "CrossProjectDiagram",
+          "CrossProjectSummary",
+          "Dashboard통합"
+        ],
         "tests": 1149,
         "newTests": 108,
         "taskCount": "5/5 done (TASK-025~029)",
@@ -251,12 +376,35 @@
         "qaResult": "PASS",
         "matchRate": "100%"
       }
+    },
+    {
+      "phase": "REQ-008: 대시보드 UX 개선",
+      "status": "done",
+      "completedAt": "2026-02-18",
+      "summary": {
+        "modules": [
+          "ActionGuide",
+          "KpiCards",
+          "BarChart",
+          "DonutChart",
+          "Dashboard",
+          "Tickets",
+          "visitedPages"
+        ],
+        "tests": 1258,
+        "newTests": 109,
+        "taskCount": "5/5 done (TASK-030~034)",
+        "tpoComplexity": "6/10",
+        "feedbackRounds": 10,
+        "qaResult": "PASS",
+        "matchRate": "100%"
+      }
     }
   ],
   "currentPhase": {
-    "phase": "EPIC-001 완료",
-    "status": "done",
-    "description": "REQ-001~007 전체 완료. 7개 REQ, 29 TASK done."
+    "phase": "REQ-009: 분석 종합 결과지",
+    "status": "in_progress",
+    "description": "v2.1: SKILL.md 프로토콜 확장(parsedSpec/analysisSummary/sourceRequirementIds) + SpecSourcePanel + AnalysisSummaryCard + 요구사항 필터(Tickets/FlowChart) + Flow Strip + CriticalAlertBanner + KpiCards detailLine. TASK-040~054 (15개, 43점)."
   },
   "sessionHistory": [
     {
@@ -570,6 +718,42 @@
       "timestamp": "2026-02-17T17:00:00Z",
       "agent": "master",
       "description": "EPIC-001 Kurly Impact Checker 전체 완료 - 7 REQ, 29 TASK done, 1149 테스트"
+    },
+    {
+      "action": "req008_approved",
+      "timestamp": "2026-02-18T06:00:00Z",
+      "agent": "master",
+      "description": "REQ-008 개선안 승인 - PM/Designer/TPO 피드백 5회 완료, 결함 3건 + 개선 6건 확정"
+    },
+    {
+      "action": "req008_dev_complete",
+      "timestamp": "2026-02-18T08:00:00Z",
+      "agent": "developer",
+      "description": "REQ-008 TASK-030~033 개발 완료 - ActionGuide/KpiCards/BarChart/DonutChart/Dashboard/Tickets 개선, 109 신규 테스트"
+    },
+    {
+      "action": "req008_qa_pass",
+      "timestamp": "2026-02-18T08:30:00Z",
+      "agent": "qa",
+      "description": "REQ-008 QA PASS - 7/7 AC 충족, 1258 테스트(978 root + 280 web), 빌드 성공"
+    },
+    {
+      "action": "req008_complete",
+      "timestamp": "2026-02-18T09:00:00Z",
+      "agent": "master",
+      "description": "REQ-008 대시보드 UX 개선 완료 - 5 TASK(030~034) done, QA PASS, 커밋 f74c0ec"
+    },
+    {
+      "action": "req009_approved",
+      "timestamp": "2026-02-18T10:00:00Z",
+      "agent": "master",
+      "description": "REQ-009 개선 계획 승인 - PM/Designer/TPO R1~R10 피드백 완료, AC 3건 확정 + 제외 6건"
+    },
+    {
+      "action": "req010_planned",
+      "timestamp": "2026-02-18T12:00:00Z",
+      "agent": "master",
+      "description": "REQ-010 계획 수립 - PM/Designer/TPO R1-R10 피드백 완료, 5 TASK(055~059), 13점. REQ-009 완료 후 진행."
     }
   ],
   "documents": {
@@ -606,6 +790,78 @@
       "status": "Draft",
       "files": 1,
       "path": ".dream-team/docs/02-design/req-003-007.tech-design.md"
+    },
+    "pmSpec2": {
+      "id": "REQ-008",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/01-plan/req-008.pm-spec.md"
+    },
+    "designSpec2": {
+      "id": "REQ-008",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/02-design/req-008.design.md"
+    },
+    "techDesign3": {
+      "id": "REQ-008",
+      "status": "Draft",
+      "files": 1,
+      "path": ".dream-team/docs/02-design/req-008.tech-design.md"
+    },
+    "feedbackR1-R4": {
+      "id": "REQ-008",
+      "status": "Confirmed",
+      "files": 4,
+      "path": ".dream-team/docs/03-feedback/"
+    },
+    "pmSpec3": {
+      "id": "REQ-009",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/01-plan/req-009.pm-spec.md"
+    },
+    "designReview3": {
+      "id": "REQ-009",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/02-design/req-009.design-review.md"
+    },
+    "techDesign4": {
+      "id": "REQ-009",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/02-design/req-009.tech-design.md"
+    },
+    "feedbackR1-R10": {
+      "id": "REQ-009",
+      "status": "Confirmed",
+      "files": 1,
+      "path": ".dream-team/docs/03-feedback/req-009.r1-r10-decisions.md"
+    },
+    "pmSpec4": {
+      "id": "REQ-010",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/01-plan/req-010.pm-spec.md"
+    },
+    "designReview4": {
+      "id": "REQ-010",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/02-design/req-010.design-review.md"
+    },
+    "techDesign5": {
+      "id": "REQ-010",
+      "status": "Approved",
+      "files": 1,
+      "path": ".dream-team/docs/02-design/req-010.tech-design.md"
+    },
+    "feedbackR1-R10_2": {
+      "id": "REQ-010",
+      "status": "Confirmed",
+      "files": 1,
+      "path": ".dream-team/docs/03-feedback/req-010.r1-r10-decisions.md"
     }
   }
 }

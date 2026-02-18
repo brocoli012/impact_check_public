@@ -367,6 +367,23 @@ function createApp(basePath) {
             catch {
                 // 보강 주석 로드 실패는 무시
             }
+            // filePath로 annotation 없으면 relatedModules 기반 fallback 시도
+            if (!annotation && policy.relatedModules && policy.relatedModules.length > 0) {
+                const servicesPaths = [
+                    `src/services/${policy.relatedModules[0]}.ts`,
+                    `src/api/${policy.relatedModules[0]}.ts`,
+                ];
+                for (const fallbackPath of servicesPaths) {
+                    if (annotation)
+                        break;
+                    try {
+                        annotation = await annotationLoader.loadForFile(projectId, fallbackPath);
+                    }
+                    catch {
+                        // 무시
+                    }
+                }
+            }
             // 기본 affectedFiles 구성
             const baseAffectedFiles = [
                 policy.filePath,

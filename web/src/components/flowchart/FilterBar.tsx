@@ -4,12 +4,14 @@
  */
 
 import { useFlowStore } from '../../stores/flowStore';
-import type { Grade, TaskType } from '../../types';
+import type { Grade, TaskType, WebRequirement } from '../../types';
 import { GRADE_COLORS } from '../../utils/colors';
 
 interface FilterBarProps {
   /** 확장 가능한 모든 노드 ID */
   expandableNodeIds: string[];
+  /** 요구사항 목록 (기획서에서 파싱된 요구사항) */
+  requirements?: WebRequirement[];
 }
 
 const TASK_TYPE_OPTIONS: Array<{ value: 'all' | TaskType; label: string }> = [
@@ -20,10 +22,11 @@ const TASK_TYPE_OPTIONS: Array<{ value: 'all' | TaskType; label: string }> = [
 
 const GRADE_OPTIONS: Grade[] = ['Low', 'Medium', 'High', 'Critical'];
 
-export default function FilterBar({ expandableNodeIds }: FilterBarProps) {
+export default function FilterBar({ expandableNodeIds, requirements }: FilterBarProps) {
   const filter = useFlowStore((s) => s.filter);
   const setFilter = useFlowStore((s) => s.setFilter);
   const toggleGradeFilter = useFlowStore((s) => s.toggleGradeFilter);
+  const setRequirementFilter = useFlowStore((s) => s.setRequirementFilter);
   const expandAll = useFlowStore((s) => s.expandAll);
   const collapseAll = useFlowStore((s) => s.collapseAll);
 
@@ -129,6 +132,38 @@ export default function FilterBar({ expandableNodeIds }: FilterBarProps) {
           color: '#334155',
         }}
       />
+
+      {/* 요구사항 필터 드롭다운 */}
+      {requirements && requirements.length > 0 && (
+        <>
+          <div style={{ width: 1, height: 24, background: '#E2E8F0' }} />
+          <select
+            aria-label="요구사항 필터"
+            value={filter.requirementFilter ?? ''}
+            onChange={(e) =>
+              setRequirementFilter(e.target.value === '' ? null : e.target.value)
+            }
+            style={{
+              padding: '4px 8px',
+              fontSize: 12,
+              border: '1px solid #CBD5E1',
+              borderRadius: 6,
+              outline: 'none',
+              color: filter.requirementFilter ? '#334155' : '#94A3B8',
+              background: filter.requirementFilter ? '#EFF6FF' : 'white',
+              cursor: 'pointer',
+              maxWidth: 200,
+            }}
+          >
+            <option value="">전체 요구사항</option>
+            {requirements.map((req) => (
+              <option key={req.id} value={req.id}>
+                {req.id}: {req.name}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
 
       {/* 구분선 */}
       <div style={{ width: 1, height: 24, background: '#E2E8F0' }} />

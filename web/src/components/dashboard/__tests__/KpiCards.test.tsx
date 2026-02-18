@@ -441,6 +441,118 @@ describe('KpiCards', () => {
     });
   });
 
+  /* ---------- detailLine 표시 (TASK-051) ---------- */
+  describe('detailLine 표시', () => {
+    it('작업 항목 카드에 FE/BE 개수 detailLine을 표시한다', () => {
+      renderWithRouter(<KpiCards result={getDefaultResult()} />);
+
+      const detail = screen.getByTestId('kpi-detail-tickets');
+      expect(detail).toBeInTheDocument();
+      expect(detail).toHaveTextContent('FE 1개');
+      expect(detail).toHaveTextContent('BE 1개');
+    });
+
+    it('기획 확인 카드에 high 건수 detailLine을 표시한다', () => {
+      renderWithRouter(<KpiCards result={getDefaultResult()} />);
+
+      const detail = screen.getByTestId('kpi-detail-checklist');
+      expect(detail).toBeInTheDocument();
+      expect(detail).toHaveTextContent('high 1건');
+    });
+
+    it('정책 경고 카드에 critical 건수 detailLine을 표시한다', () => {
+      const result = getDefaultResult({
+        policyWarnings: [
+          {
+            id: 'pw-crit1',
+            policyId: 'p1',
+            policyName: '심각 정책',
+            message: '심각 경고',
+            severity: 'critical',
+            relatedTaskIds: ['t1'],
+          },
+          {
+            id: 'pw-crit2',
+            policyId: 'p2',
+            policyName: '심각 정책 2',
+            message: '심각 경고 2',
+            severity: 'critical',
+            relatedTaskIds: ['t2'],
+          },
+        ],
+      });
+
+      renderWithRouter(<KpiCards result={result} />);
+
+      const detail = screen.getByTestId('kpi-detail-policies');
+      expect(detail).toBeInTheDocument();
+      expect(detail).toHaveTextContent('critical 2건');
+    });
+
+    it('영향 화면 카드에 screenScores가 있으면 최고 등급 detailLine을 표시한다', () => {
+      const result = getDefaultResult({
+        screenScores: [
+          {
+            screenId: 's1',
+            screenName: '화면 A',
+            screenScore: 30,
+            grade: 'Medium',
+            taskScores: [],
+          },
+          {
+            screenId: 's2',
+            screenName: '화면 B',
+            screenScore: 60,
+            grade: 'High',
+            taskScores: [],
+          },
+        ],
+      });
+
+      renderWithRouter(<KpiCards result={result} />);
+
+      const detail = screen.getByTestId('kpi-detail-flow');
+      expect(detail).toBeInTheDocument();
+      expect(detail).toHaveTextContent('최고 등급: High');
+    });
+
+    it('screenScores가 비어있으면 영향 화면 detailLine을 표시하지 않는다', () => {
+      renderWithRouter(<KpiCards result={getDefaultResult()} />);
+
+      expect(screen.queryByTestId('kpi-detail-flow')).not.toBeInTheDocument();
+    });
+
+    it('critical 정책이 없으면 정책 경고 detailLine을 표시하지 않는다', () => {
+      renderWithRouter(<KpiCards result={getDefaultResult()} />);
+
+      // 기본 데이터에는 warning severity만 있음
+      expect(screen.queryByTestId('kpi-detail-policies')).not.toBeInTheDocument();
+    });
+
+    it('모든 값이 0이면 detailLine을 표시하지 않는다', () => {
+      renderWithRouter(<KpiCards result={getEmptyResult()} />);
+
+      expect(screen.queryByTestId('kpi-detail-flow')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('kpi-detail-tickets')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('kpi-detail-checklist')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('kpi-detail-policies')).not.toBeInTheDocument();
+    });
+
+    it('detailLine에 text-[10px] 클래스가 적용된다', () => {
+      renderWithRouter(<KpiCards result={getDefaultResult()} />);
+
+      const detail = screen.getByTestId('kpi-detail-tickets');
+      expect(detail.className).toContain('text-[10px]');
+    });
+
+    it('detailLine에 truncate 클래스가 적용된다', () => {
+      renderWithRouter(<KpiCards result={getDefaultResult()} />);
+
+      const detail = screen.getByTestId('kpi-detail-tickets');
+      expect(detail.className).toContain('truncate');
+    });
+  });
+
   /* ---------- 접근성 ---------- */
   describe('접근성', () => {
     it('각 카드에 role="link"가 설정되어 있다', () => {

@@ -30,6 +30,8 @@ export function getMockResult(): AnalysisResult {
             relatedApis: ['api-cart-list'],
             planningChecks: ['묶음 배송 정책 확인 필요'],
             rationale: '기존 장바구니 UI 구조 변경이 필요합니다.',
+            sourceRequirementIds: ['REQ-001'],
+            sourceFeatureIds: ['FEAT-001'],
           },
           {
             id: 'task-2',
@@ -41,6 +43,8 @@ export function getMockResult(): AnalysisResult {
             relatedApis: ['api-cart-list'],
             planningChecks: [],
             rationale: '새로운 UI에 필요한 데이터 필드가 추가되어야 합니다.',
+            sourceRequirementIds: ['REQ-001'],
+            sourceFeatureIds: ['FEAT-002'],
           },
         ],
       },
@@ -59,6 +63,8 @@ export function getMockResult(): AnalysisResult {
             relatedApis: ['api-checkout'],
             planningChecks: ['결제 수단별 분기 확인 필요'],
             rationale: '장바구니 데이터 구조 변경에 따라 결제 화면도 수정이 필요합니다.',
+            sourceRequirementIds: ['REQ-002'],
+            sourceFeatureIds: ['FEAT-003'],
           },
         ],
       },
@@ -77,6 +83,8 @@ export function getMockResult(): AnalysisResult {
             relatedApis: ['api-cart-add'],
             planningChecks: [],
             rationale: '새로운 장바구니 API에 맞게 인터페이스를 수정합니다.',
+            sourceRequirementIds: ['REQ-001'],
+            sourceFeatureIds: ['FEAT-001'],
           },
         ],
       },
@@ -95,6 +103,8 @@ export function getMockResult(): AnalysisResult {
             relatedApis: ['api-orders'],
             planningChecks: [],
             rationale: '새 데이터 필드를 위젯에 반영합니다.',
+            sourceRequirementIds: ['REQ-003'],
+            sourceFeatureIds: ['FEAT-004'],
           },
           {
             id: 'task-6',
@@ -106,6 +116,8 @@ export function getMockResult(): AnalysisResult {
             relatedApis: ['api-orders'],
             planningChecks: [],
             rationale: 'API 응답에 새 필드를 추가합니다.',
+            sourceRequirementIds: ['REQ-003'],
+            sourceFeatureIds: ['FEAT-004'],
           },
         ],
       },
@@ -121,6 +133,8 @@ export function getMockResult(): AnalysisResult {
         relatedApis: ['api-cart-list'],
         planningChecks: ['묶음 배송 정책 확인 필요'],
         rationale: '기존 장바구니 UI 구조 변경이 필요합니다.',
+        sourceRequirementIds: ['REQ-001'],
+        sourceFeatureIds: ['FEAT-001'],
       },
       {
         id: 'task-2',
@@ -132,6 +146,8 @@ export function getMockResult(): AnalysisResult {
         relatedApis: ['api-cart-list'],
         planningChecks: [],
         rationale: '새로운 UI에 필요한 데이터 필드가 추가되어야 합니다.',
+        sourceRequirementIds: ['REQ-001'],
+        sourceFeatureIds: ['FEAT-002'],
       },
       {
         id: 'task-3',
@@ -143,6 +159,8 @@ export function getMockResult(): AnalysisResult {
         relatedApis: ['api-checkout'],
         planningChecks: ['결제 수단별 분기 확인 필요'],
         rationale: '장바구니 데이터 구조 변경에 따라 결제 화면도 수정이 필요합니다.',
+        sourceRequirementIds: ['REQ-002'],
+        sourceFeatureIds: ['FEAT-003'],
       },
       {
         id: 'task-4',
@@ -154,6 +172,8 @@ export function getMockResult(): AnalysisResult {
         relatedApis: ['api-cart-add'],
         planningChecks: [],
         rationale: '새로운 장바구니 API에 맞게 인터페이스를 수정합니다.',
+        sourceRequirementIds: ['REQ-001'],
+        sourceFeatureIds: ['FEAT-001'],
       },
       {
         id: 'task-5',
@@ -165,6 +185,8 @@ export function getMockResult(): AnalysisResult {
         relatedApis: ['api-orders'],
         planningChecks: [],
         rationale: '새 데이터 필드를 위젯에 반영합니다.',
+        sourceRequirementIds: ['REQ-003'],
+        sourceFeatureIds: ['FEAT-004'],
       },
       {
         id: 'task-6',
@@ -176,6 +198,8 @@ export function getMockResult(): AnalysisResult {
         relatedApis: ['api-orders'],
         planningChecks: [],
         rationale: 'API 응답에 새 필드를 추가합니다.',
+        sourceRequirementIds: ['REQ-003'],
+        sourceFeatureIds: ['FEAT-004'],
       },
     ],
     planningChecks: [
@@ -409,6 +433,74 @@ export function getMockResult(): AnalysisResult {
         action: '주문팀 담당자 리뷰 필수',
       },
     ],
+    parsedSpec: {
+      title: '장바구니 리뉴얼 기획서',
+      requirements: [
+        {
+          id: 'REQ-001',
+          name: '장바구니 UI 개편',
+          description: '장바구니 화면의 레이아웃 및 UX를 전면 개편합니다.',
+          priority: 'high',
+          relatedFeatures: ['FEAT-001', 'FEAT-002'],
+        },
+        {
+          id: 'REQ-002',
+          name: '결제 연동 수정',
+          description: '장바구니 데이터 구조 변경에 따른 결제 화면 수정',
+          priority: 'medium',
+          relatedFeatures: ['FEAT-003'],
+        },
+        {
+          id: 'REQ-003',
+          name: '주문 이력 확장',
+          description: '주문 이력 API에 장바구니 관련 메타데이터 추가',
+          priority: 'low',
+          relatedFeatures: ['FEAT-004'],
+        },
+      ],
+      features: [
+        {
+          id: 'FEAT-001',
+          name: '장바구니 화면 리뉴얼',
+          description: '장바구니 UI 전면 개편',
+          targetScreen: '장바구니 화면',
+          actionType: 'modify',
+          keywords: ['장바구니', 'UI', '리뉴얼'],
+        },
+        {
+          id: 'FEAT-002',
+          name: '장바구니 API 변경',
+          description: '장바구니 조회 API 응답 필드 추가',
+          targetScreen: '장바구니 화면',
+          actionType: 'modify',
+          keywords: ['API', '장바구니'],
+        },
+        {
+          id: 'FEAT-003',
+          name: '결제 화면 연동',
+          description: '결제 화면 장바구니 연동 수정',
+          targetScreen: '결제 화면',
+          actionType: 'modify',
+          keywords: ['결제', '연동'],
+        },
+        {
+          id: 'FEAT-004',
+          name: '주문 이력 위젯',
+          description: '마이페이지 주문 이력 위젯 업데이트',
+          targetScreen: '마이페이지',
+          actionType: 'modify',
+          keywords: ['주문', '위젯'],
+        },
+      ],
+      businessRules: [
+        {
+          id: 'BR-001',
+          description: '장바구니 최대 수량 50개 제한',
+          relatedFeatureIds: ['FEAT-001'],
+        },
+      ],
+      ambiguities: ['묶음 배송 정책 세부 규칙 미정의'],
+    },
   };
 }
 

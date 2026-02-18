@@ -205,6 +205,136 @@ describe('validators', () => {
       });
     });
 
+    describe('parsedSpec validation (REQ-009)', () => {
+      it('should accept missing parsedSpec (optional field)', () => {
+        const data = createValidResult();
+        // parsedSpec not present by default in createValidResult()
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(true);
+      });
+
+      it('should accept valid parsedSpec', () => {
+        const data = createValidResult();
+        data['parsedSpec'] = {
+          title: 'Test Spec',
+          requirements: [],
+          features: [],
+          businessRules: [],
+          targetScreens: [],
+          keywords: [],
+          ambiguities: [],
+        };
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(true);
+      });
+
+      it('should reject non-object parsedSpec', () => {
+        const data = createValidResult();
+        data['parsedSpec'] = 'not-an-object';
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'parsedSpec')).toBe(true);
+      });
+
+      it('should reject null parsedSpec', () => {
+        const data = createValidResult();
+        data['parsedSpec'] = null;
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'parsedSpec')).toBe(true);
+      });
+
+      it('should reject parsedSpec with missing title', () => {
+        const data = createValidResult();
+        data['parsedSpec'] = { requirements: [], features: [] };
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'parsedSpec.title')).toBe(true);
+      });
+
+      it('should reject parsedSpec with empty title', () => {
+        const data = createValidResult();
+        data['parsedSpec'] = { title: '', requirements: [] };
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'parsedSpec.title')).toBe(true);
+      });
+    });
+
+    describe('analysisSummary validation (REQ-009)', () => {
+      it('should accept missing analysisSummary (optional field)', () => {
+        const data = createValidResult();
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(true);
+      });
+
+      it('should accept valid analysisSummary', () => {
+        const data = createValidResult();
+        data['analysisSummary'] = {
+          overview: 'Test overview',
+          keyFindings: ['finding1'],
+          riskAreas: ['risk1'],
+        };
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(true);
+      });
+
+      it('should reject non-object analysisSummary', () => {
+        const data = createValidResult();
+        data['analysisSummary'] = 'not-an-object';
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'analysisSummary')).toBe(true);
+      });
+
+      it('should reject null analysisSummary', () => {
+        const data = createValidResult();
+        data['analysisSummary'] = null;
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'analysisSummary')).toBe(true);
+      });
+
+      it('should reject analysisSummary with missing overview', () => {
+        const data = createValidResult();
+        data['analysisSummary'] = { keyFindings: [], riskAreas: [] };
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'analysisSummary.overview')).toBe(true);
+      });
+
+      it('should reject analysisSummary with empty overview', () => {
+        const data = createValidResult();
+        data['analysisSummary'] = { overview: '', keyFindings: [], riskAreas: [] };
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.field === 'analysisSummary.overview')).toBe(true);
+      });
+    });
+
+    describe('combined parsedSpec + analysisSummary (REQ-009)', () => {
+      it('should accept result with both parsedSpec and analysisSummary', () => {
+        const data = createValidResult();
+        data['parsedSpec'] = {
+          title: 'Combined Test',
+          requirements: [],
+          features: [],
+          businessRules: [],
+          targetScreens: [],
+          keywords: [],
+          ambiguities: [],
+        };
+        data['analysisSummary'] = {
+          overview: 'Combined overview',
+          keyFindings: [],
+          riskAreas: [],
+        };
+        const result = validateImpactResult(data);
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
+      });
+    });
+
     it('should collect multiple errors', () => {
       const data = createValidResult();
       delete data['analysisId'];

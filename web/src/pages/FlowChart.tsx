@@ -24,6 +24,103 @@ import { useFlowStore } from '../stores/flowStore';
 import { useResultStore } from '../stores/resultStore';
 import { useEnsureResult } from '../hooks/useEnsureResult';
 import DetailPanel from '../components/layout/DetailPanel';
+import type { Task } from '../types';
+
+/**
+ * 요구사항 필터에 해당하는 태스크 ID와 화면 ID를 계산
+ */
+function getRelatedIdsForRequirement(
+  requirementFilter: string,
+  allTasks: Task[],
+  affectedScreens: { screenId: string; tasks: Task[] }[],
+): { relatedTaskIds: Set<string>; relatedScreenIds: Set<string> } {
+  const relatedTaskIds = new Set<string>();
+  const relatedScreenIds = new Set<string>();
+
+  // sourceRequirementIds에 해당 요구사항 ID가 포함된 태스크 찾기
+  for (const task of allTasks) {
+    if (task.sourceRequirementIds?.includes(requirementFilter)) {
+      relatedTaskIds.add(task.id);
+    }
+  }
+
+  // 관련 태스크가 속한 화면 찾기
+  for (const screen of affectedScreens) {
+    for (const task of screen.tasks) {
+      if (relatedTaskIds.has(task.id)) {
+        relatedScreenIds.add(screen.screenId);
+        break;
+      }
+    }
+  }
+
+  return { relatedTaskIds, relatedScreenIds };
+}
+
+/**
+ * 요구사항 필터에 따라 노드에 opacity 스타일을 적용
+ */
+function applyRequirementHighlight(
+  nodesArr: Node[],
+  relatedTaskIds: Set<string>,
+  relatedScreenIds: Set<string>,
+): Node[] {
+  return nodesArr.map((node) => {
+    let isRelated = false;
+
+    if (node.type === 'requirement') {
+      // 최상위 Requirement 노드는 항상 표시
+      isRelated = true;
+    } else if (node.type === 'system') {
+      // 시스템 노드는 항상 표시 (하위에 관련 화면이 있을 수 있음)
+      isRelated = true;
+    } else if (node.type === 'screen') {
+      // 화면 노드: 관련 태스크가 속한 화면인지 확인
+      const screenId = node.id.replace('screen-', '');
+      isRelated = relatedScreenIds.has(screenId);
+    } else if (node.type === 'feature') {
+      // Feature 노드: 태스크 ID로 매칭
+      const taskId = node.id.replace('feature-', '');
+      isRelated = relatedTaskIds.has(taskId);
+    } else if (node.type === 'module') {
+      // Module 노드: 부모 태스크 ID 추출 (module-{taskId}-{index})
+      const parts = node.id.replace('module-', '').split('-');
+      // taskId는 마지막 숫자(index)를 제외한 부분
+      parts.pop(); // index 제거
+      const taskId = parts.join('-');
+      isRelated = relatedTaskIds.has(taskId);
+    } else if (node.type === 'check') {
+      // Check 노드: 부모 태스크 ID 추출 (check-{taskId}-{index})
+      const parts = node.id.replace('check-', '').split('-');
+      parts.pop(); // index 제거
+      const taskId = parts.join('-');
+      isRelated = relatedTaskIds.has(taskId);
+    } else if (node.type === 'policy' || node.type === 'policyWarning') {
+      // Policy/PolicyWarning 노드는 dim 처리
+      isRelated = false;
+    }
+
+    if (isRelated) {
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          opacity: 1,
+          transition: 'opacity 0.3s ease',
+        },
+      };
+    } else {
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          opacity: 0.3,
+          transition: 'opacity 0.3s ease',
+        },
+      };
+    }
+  });
+}
 
 function FlowChart() {
   useEnsureResult();
@@ -35,14 +132,33 @@ function FlowChart() {
   const selectNode = useFlowStore((s) => s.selectNode);
   const toggleExpand = useFlowStore((s) => s.toggleExpand);
 
+  // 요구사항 목록
+  const requirements = currentResult?.parsedSpec?.requirements;
+
   // 데이터 변환
   const { nodes: rawNodes, edges: rawEdges, expandableNodeIds } = useMemo(() => {
     if (!currentResult) return { nodes: [], edges: [], expandableNodeIds: [] };
     return transformToFlow(currentResult, expandedNodeIds, filter);
   }, [currentResult, expandedNodeIds, filter]);
 
+  // 요구사항 필터에 따른 하이라이트 적용
+  const highlightedNodes = useMemo(() => {
+    if (!filter.requirementFilter || !currentResult) return rawNodes;
+
+    const { relatedTaskIds, relatedScreenIds } = getRelatedIdsForRequirement(
+      filter.requirementFilter,
+      currentResult.tasks,
+      currentResult.affectedScreens,
+    );
+
+    // 관련 태스크가 없으면 하이라이트 미적용 (전체 표시)
+    if (relatedTaskIds.size === 0) return rawNodes;
+
+    return applyRequirementHighlight(rawNodes, relatedTaskIds, relatedScreenIds);
+  }, [rawNodes, filter.requirementFilter, currentResult]);
+
   // 자동 레이아웃 적용
-  const layoutedNodes = useFlowLayout(rawNodes, rawEdges);
+  const layoutedNodes = useFlowLayout(highlightedNodes, rawEdges);
 
   // React Flow 상태
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
@@ -95,7 +211,7 @@ function FlowChart() {
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
       {/* 필터 바 */}
       <div style={{ marginBottom: 8 }}>
-        <FilterBar expandableNodeIds={expandableNodeIds} />
+        <FilterBar expandableNodeIds={expandableNodeIds} requirements={requirements} />
       </div>
 
       {/* SVG marker definitions (1회만 렌더링) */}

@@ -69,6 +69,10 @@ export interface Task {
   relatedApis: string[];
   planningChecks: string[];
   rationale: string;
+  /** 출처 요구사항 ID 목록 (REQ-009: 트레이서빌리티) */
+  sourceRequirementIds?: string[];
+  /** 출처 기능 ID 목록 (REQ-009: 트레이서빌리티) */
+  sourceFeatureIds?: string[];
 }
 
 /** 기획 확인 사항 */
@@ -121,6 +125,10 @@ export interface AnalysisResult {
   ownerNotifications: OwnerNotification[];
   confidenceScores: SystemConfidence[];
   lowConfidenceWarnings: ConfidenceWarning[];
+  /** 파싱된 기획서 원본 (REQ-009: 트레이서빌리티) */
+  parsedSpec?: WebParsedSpec;
+  /** 분석 요약 (REQ-009) */
+  analysisSummary?: AnalysisSummary;
 }
 
 /** 정책 변경 */
@@ -320,4 +328,52 @@ export interface ApiResponse<T> {
   checklist?: ChecklistData;
   error?: string;
   message?: string;
+}
+
+// ============================================================
+// REQ-009: 기획서 파싱 결과 타입 (웹 표시용)
+// ============================================================
+
+/** 기획서 파싱 결과 (웹 표시용) */
+export interface WebParsedSpec {
+  title?: string;
+  requirements: WebRequirement[];
+  features: WebFeature[];
+  businessRules: WebBusinessRule[];
+  targetScreens?: string[];
+  keywords?: string[];
+  ambiguities: string[];
+}
+
+/** 요구사항 (웹 표시용) */
+export interface WebRequirement {
+  id: string;
+  name: string;
+  description: string;
+  priority: string;
+  relatedFeatures: string[];
+}
+
+/** 기능 (웹 표시용) */
+export interface WebFeature {
+  id: string;
+  name: string;
+  description: string;
+  targetScreen: string;
+  actionType: string;
+  keywords: string[];
+}
+
+/** 비즈니스 규칙 (웹 표시용) */
+export interface WebBusinessRule {
+  id: string;
+  description: string;
+  relatedFeatureIds: string[];
+}
+
+/** 분석 요약 */
+export interface AnalysisSummary {
+  overview: string;
+  keyFindings: string[];
+  riskAreas: string[];
 }
