@@ -33,12 +33,13 @@ export class AnnotationsCommand implements Command {
 
   async execute(): Promise<CommandResult> {
     const subCommand = this.args[0];
-    const targetPath = this.args[1];
 
     if (subCommand === 'generate') {
+      const targetPath = this.args[1];
       return this.handleGenerate(targetPath);
     } else if (subCommand === 'view') {
-      return this.handleView(targetPath);
+      const { targetPath, format } = this.parseViewArgs(this.args.slice(1));
+      return this.handleView(targetPath, format);
     } else {
       // 기본: 도움말 또는 요약 표시
       console.log('\n사용법: /impact annotations [generate [path]] [view [path]]');
@@ -226,7 +227,7 @@ export class AnnotationsCommand implements Command {
   /**
    * view 서브커맨드 처리
    */
-  private async handleView(targetPath?: string): Promise<CommandResult> {
+  private async handleView(targetPath?: string, format: 'yaml' | 'md' = 'yaml'): Promise<CommandResult> {
     try {
       // 1. 활성 프로젝트 확인
       const { projectId } = await this.getActiveProject();
@@ -245,27 +246,31 @@ export class AnnotationsCommand implements Command {
           };
         }
 
-        logger.header(`보강 주석: ${targetPath}`);
-        console.log(`\n시스템: ${annotation.system}`);
-        console.log(`분석 시각: ${annotation.lastAnalyzed}`);
-        console.log(`분석 엔진: ${annotation.analyzerVersion} (${annotation.model})`);
-        console.log(`파일 요약: ${annotation.fileSummary.description}`);
-        console.log('');
-
-        for (const ann of annotation.annotations) {
-          console.log(`  [${ann.type}] ${ann.function}`);
-          console.log(`    주석: ${ann.enriched_comment}`);
-          console.log(`    신뢰도: ${(ann.confidence * 100).toFixed(0)}%`);
-          if (ann.userModified) {
-            console.log(`    (사용자 수정됨)`);
-          }
-          if (ann.policies && ann.policies.length > 0) {
-            console.log(`    정책:`);
-            for (const policy of ann.policies) {
-              console.log(`      - ${policy.name} (${policy.category}, ${(policy.confidence * 100).toFixed(0)}%)`);
-            }
-          }
+        if (format === 'md') {
+          this.printSingleFileMd(annotation);
+        } else {
+          logger.header(`보강 주석: ${targetPath}`);
+          console.log(`\n시스템: ${annotation.system}`);
+          console.log(`분석 시각: ${annotation.lastAnalyzed}`);
+          console.log(`분석 엔진: ${annotation.analyzerVersion} (${annotation.model})`);
+          console.log(`파일 요약: ${annotation.fileSummary.description}`);
           console.log('');
+
+          for (const ann of annotation.annotations) {
+            console.log(`  [${ann.type}] ${ann.function}`);
+            console.log(`    주석: ${ann.enriched_comment}`);
+            console.log(`    신뢰도: ${(ann.confidence * 100).toFixed(0)}%`);
+            if (ann.userModified) {
+              console.log(`    (사용자 수정됨)`);
+            }
+            if (ann.policies && ann.policies.length > 0) {
+              console.log(`    정책:`);
+              for (const policy of ann.policies) {
+                console.log(`      - ${policy.name} (${policy.category}, ${(policy.confidence * 100).toFixed(0)}%)`);
+              }
+            }
+            console.log('');
+          }
         }
 
         return {
@@ -285,47 +290,51 @@ export class AnnotationsCommand implements Command {
           };
         }
 
-        logger.header('보강 주석 통계');
-        console.log(`\n프로젝트: ${projectId}`);
-        console.log(`버전: ${meta.version}`);
-        console.log(`생성: ${meta.createdAt}`);
-        console.log(`업데이트: ${meta.lastUpdatedAt}`);
-        console.log('');
-        console.log(`  전체 파일 수:       ${meta.totalFiles}`);
-        console.log(`  전체 보강 주석 수:  ${meta.totalAnnotations}`);
-        console.log(`  전체 정책 수:       ${meta.totalPolicies}`);
-        console.log(`  평균 신뢰도:        ${(meta.avgConfidence * 100).toFixed(0)}%`);
-        console.log(`  낮은 신뢰도:        ${meta.lowConfidenceCount}건`);
-        console.log(`  사용자 수정:        ${meta.userModifiedCount}건`);
-        console.log('');
-
-        // 시스템별 통계
-        const systemNames = Object.keys(meta.systems);
-        if (systemNames.length > 0) {
-          console.log('  시스템별:');
-          for (const sysName of systemNames) {
-            const sys = meta.systems[sysName];
-            console.log(`    ${sysName}: ${sys.files}파일, ${sys.annotations}주석, ${sys.policies}정책`);
-          }
+        if (format === 'md') {
+          this.printStatsMd(meta);
+        } else {
+          logger.header('보강 주석 통계');
+          console.log(`\n프로젝트: ${projectId}`);
+          console.log(`버전: ${meta.version}`);
+          console.log(`생성: ${meta.createdAt}`);
+          console.log(`업데이트: ${meta.lastUpdatedAt}`);
           console.log('');
-        }
-
-        // 최근 보강 주석 파일 목록 (최신 5개)
-        const allAnnotations = await annotationManager.loadAll(projectId);
-        if (allAnnotations.size > 0) {
-          const sorted = Array.from(allAnnotations.entries())
-            .sort((a, b) => {
-              const dateA = new Date(a[1].lastAnalyzed).getTime();
-              const dateB = new Date(b[1].lastAnalyzed).getTime();
-              return dateB - dateA;
-            })
-            .slice(0, 5);
-
-          console.log('  최근 분석 파일:');
-          for (const [filePath, ann] of sorted) {
-            console.log(`    ${filePath} (${ann.annotations.length}개 함수, ${ann.lastAnalyzed})`);
-          }
+          console.log(`  전체 파일 수:       ${meta.totalFiles}`);
+          console.log(`  전체 보강 주석 수:  ${meta.totalAnnotations}`);
+          console.log(`  전체 정책 수:       ${meta.totalPolicies}`);
+          console.log(`  평균 신뢰도:        ${(meta.avgConfidence * 100).toFixed(0)}%`);
+          console.log(`  낮은 신뢰도:        ${meta.lowConfidenceCount}건`);
+          console.log(`  사용자 수정:        ${meta.userModifiedCount}건`);
           console.log('');
+
+          // 시스템별 통계
+          const systemNames = Object.keys(meta.systems);
+          if (systemNames.length > 0) {
+            console.log('  시스템별:');
+            for (const sysName of systemNames) {
+              const sys = meta.systems[sysName];
+              console.log(`    ${sysName}: ${sys.files}파일, ${sys.annotations}주석, ${sys.policies}정책`);
+            }
+            console.log('');
+          }
+
+          // 최근 보강 주석 파일 목록 (최신 5개)
+          const allAnnotations = await annotationManager.loadAll(projectId);
+          if (allAnnotations.size > 0) {
+            const sorted = Array.from(allAnnotations.entries())
+              .sort((a, b) => {
+                const dateA = new Date(a[1].lastAnalyzed).getTime();
+                const dateB = new Date(b[1].lastAnalyzed).getTime();
+                return dateB - dateA;
+              })
+              .slice(0, 5);
+
+            console.log('  최근 분석 파일:');
+            for (const [filePath, ann] of sorted) {
+              console.log(`    ${filePath} (${ann.annotations.length}개 함수, ${ann.lastAnalyzed})`);
+            }
+            console.log('');
+          }
         }
 
         return {
@@ -348,6 +357,104 @@ export class AnnotationsCommand implements Command {
         message: `Annotations view failed: ${errorMsg}`,
       };
     }
+  }
+
+  /**
+   * 단일 파일 보강 주석을 마크다운 형식으로 출력
+   */
+  private printSingleFileMd(annotation: import('../types/annotations').AnnotationFile): void {
+    const filename = annotation.file.split('/').pop() || annotation.file;
+    console.log(`# ${filename} 어노테이션`);
+    console.log('');
+    console.log('## 파일 요약');
+    console.log(`- **설명**: ${annotation.fileSummary.description}`);
+    console.log(`- **비즈니스 도메인**: ${annotation.fileSummary.businessDomain}`);
+    console.log(`- **신뢰도**: ${(annotation.fileSummary.confidence * 100).toFixed(0)}%`);
+    console.log(`- **키워드**: ${annotation.fileSummary.keywords.join(', ')}`);
+    console.log('');
+    console.log('## 함수 목록');
+
+    for (const ann of annotation.annotations) {
+      console.log('');
+      console.log(`### ${ann.function}`);
+      console.log(`- **타입**: ${ann.type}`);
+      console.log(`- **시그니처**: \`${ann.signature}\``);
+      console.log(`- **설명**: ${ann.enriched_comment}`);
+      console.log(`- **신뢰도**: ${(ann.confidence * 100).toFixed(0)}%`);
+
+      if (ann.policies && ann.policies.length > 0) {
+        console.log('');
+        console.log('#### 관련 정책');
+        for (const policy of ann.policies) {
+          console.log(`- ${policy.name} (${policy.category}, ${(policy.confidence * 100).toFixed(0)}%)`);
+        }
+      }
+
+      if (ann.relatedFunctions && ann.relatedFunctions.length > 0) {
+        console.log('');
+        console.log('#### 관련 함수');
+        for (const fn of ann.relatedFunctions) {
+          console.log(`- ${fn}`);
+        }
+      }
+
+      if (ann.relatedApis && ann.relatedApis.length > 0) {
+        console.log('');
+        console.log('#### 관련 API');
+        for (const api of ann.relatedApis) {
+          console.log(`- ${api}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * 통계를 마크다운 형식으로 출력
+   */
+  private printStatsMd(meta: import('../types/annotations').AnnotationMeta): void {
+    console.log('# 어노테이션 통계');
+    console.log('');
+    console.log('| 항목 | 값 |');
+    console.log('|------|:---:|');
+    console.log(`| 전체 파일 | ${meta.totalFiles}개 |`);
+    console.log(`| 전체 함수 | ${meta.totalAnnotations}개 |`);
+    console.log(`| 추출된 정책 | ${meta.totalPolicies}개 |`);
+    console.log(`| 평균 신뢰도 | ${(meta.avgConfidence * 100).toFixed(0)}% |`);
+
+    const systemNames = Object.keys(meta.systems);
+    if (systemNames.length > 0) {
+      console.log('');
+      console.log('## 시스템별 현황');
+      console.log('| 시스템 | 파일 수 | 함수 수 | 정책 수 |');
+      console.log('|--------|:------:|:------:|:------:|');
+      for (const sysName of systemNames) {
+        const sys = meta.systems[sysName];
+        console.log(`| ${sysName} | ${sys.files} | ${sys.annotations} | ${sys.policies} |`);
+      }
+    }
+  }
+
+  /**
+   * view 서브커맨드의 인자를 파싱한다.
+   * --format md|yaml 옵션과 targetPath를 추출한다.
+   */
+  private parseViewArgs(args: string[]): { targetPath?: string; format: 'yaml' | 'md' } {
+    let format: 'yaml' | 'md' = 'yaml';
+    let targetPath: string | undefined;
+
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--format' && i + 1 < args.length) {
+        const val = args[i + 1];
+        if (val === 'md' || val === 'yaml') {
+          format = val;
+        }
+        i++; // skip the value
+      } else {
+        targetPath = args[i];
+      }
+    }
+
+    return { targetPath, format };
   }
 
   /**

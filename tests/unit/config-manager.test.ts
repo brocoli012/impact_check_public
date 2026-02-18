@@ -109,4 +109,23 @@ describe('ConfigManager', () => {
       expect(config.general.webPort).toBe(DEFAULT_CONFIG.general.webPort);
     });
   });
+
+  describe('getDocsDir()', () => {
+    it('should return correct path with projectId', () => {
+      const docsDir = ConfigManager.getDocsDir('my-project');
+      expect(docsDir).toContain('my-project');
+      expect(docsDir).toContain('.impact');
+      expect(docsDir).toContain('docs');
+    });
+
+    it('should return nested path under .impact/docs/', () => {
+      const docsDir = ConfigManager.getDocsDir('test-proj-123');
+      // Path should be ~/.impact/docs/test-proj-123
+      const parts = docsDir.split(path.sep);
+      const impactIdx = parts.indexOf('.impact');
+      expect(impactIdx).toBeGreaterThan(-1);
+      expect(parts[impactIdx + 1]).toBe('docs');
+      expect(parts[impactIdx + 2]).toBe('test-proj-123');
+    });
+  });
 });

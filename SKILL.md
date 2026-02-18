@@ -141,6 +141,60 @@ node {skill_dir}/dist/index.js export-index [--project <id>]
 - 변경/추가되는 화면 (screens)
 - 불명확한 사항 (ambiguities)
 
+### Step 2.5: 연관 프로젝트 식별 (멀티 프로젝트 시)
+
+등록된 프로젝트가 2개 이상인 경우 실행한다. 1개만 등록된 경우 이 단계를 건너뛴다.
+
+1. **프로젝트 목록 확인**:
+   ```bash
+   node {skill_dir}/dist/index.js projects
+   ```
+
+2. **각 프로젝트의 인덱스 요약 로드**:
+   ```bash
+   node {skill_dir}/dist/index.js export-index --project <projectId> --summary
+   ```
+
+3. **기획서 키워드와 프로젝트 인덱스 비교**:
+   - 기획서 `keywords`, `targetScreens`, features의 `keywords`를 합쳐 키워드 셋(K)을 구성
+   - 각 프로젝트 인덱스에서:
+     - `screens[].name`과 기획서 `targetScreens` 비교
+     - `apis[].path`와 기획서 키워드 비교
+     - `components[].name`과 기획서 키워드 비교
+   - 매칭 항목 수 기반으로 매칭도(%) 산출: `|K ∩ P| / |K| × 100`
+
+4. **매칭도 기준 분류**:
+   - 50% 이상: 자동 포함 (✅ 확정)
+   - 20~49%: 사용자 확인 필요 (❓ 확인)
+   - 20% 미만: 제외
+
+5. **사용자에게 결과 제시**:
+   ```
+   연관 프로젝트 식별 결과:
+     ✅ kurly-app (매칭 85%) - 자동 포함
+     ✅ kurly-api (매칭 72%) - 자동 포함
+     ❓ kurly-admin (매칭 35%) - 포함하시겠습니까?
+     ✖ kurly-docs (매칭 8%) - 제외
+   ```
+
+6. **확정된 프로젝트 목록으로 Step 3~4를 각 프로젝트별 반복 수행**:
+   ```bash
+   # 프로젝트 전환
+   node {skill_dir}/dist/index.js projects --switch <projectId>
+   # Step 3 영향도 분석 수행
+   # Step 4 결과 저장
+   # 다음 프로젝트로 전환 및 반복
+   ```
+
+7. **모든 프로젝트 분석 완료 후 전체 요약 제시**:
+   ```
+   멀티프로젝트 분석 완료 (총 N개 프로젝트)
+     프로젝트A: Medium (32점) - 영향 화면 3개
+     프로젝트B: High (55점) - 영향 화면 5개
+
+   각 프로젝트의 상세 결과는 대시보드에서 확인하세요.
+   ```
+
 ### Step 3: 영향도 분석 수행
 인덱스 + 기획서 내용을 대조하여 직접 분석한다:
 - **기획서 구조화 (parsedSpec)**: 기획서에서 요구사항, 기능, 비즈니스 규칙, 모호점을 추출하여 구조화
@@ -432,6 +486,80 @@ tasks 항목의 optional 필드:
 
 ---
 
+## 정책 문서화 프로토콜
+
+사용자가 "정책 정리", "로직 문서화", "정책 md 생성", "policy docs" 등을 요청하면 아래 프로토콜을 따른다.
+
+### Step 1: 데이터 수집
+```bash
+# 어노테이션 전체 조회 (md 형식)
+node {skill_dir}/dist/index.js annotations view --format md
+
+# 정책 목록 조회
+node {skill_dir}/dist/index.js policies
+```
+
+### Step 2: 시스템별 정책 md 파일 생성
+각 시스템(도메인)별로 md 파일을 Write 도구로 직접 작성한다.
+
+**저장 위치**: `~/.impact/docs/{projectId}/{system}.policy.md`
+
+**md 파일 구조**:
+```markdown
+# {시스템명} 정책 정리
+
+## 정책 요약
+| # | 정책명 | 카테고리 | 신뢰도 | 출처 |
+|:-:|--------|:--------:|:------:|------|
+| 1 | {정책명} | {카테고리} | {N}% | {함수명} |
+
+## 정책 상세
+
+### 1. {정책명}
+- **카테고리**: {카테고리}
+- **설명**: {설명}
+- **신뢰도**: {N}%
+- **출처 함수**: {함수명} ({파일경로})
+
+#### 조건 분기
+| 순서 | 타입 | 조건 | 결과 |
+|:----:|:----:|------|------|
+| 1 | if | {조건} | {결과} |
+| 2 | else_if | {조건} | {결과} |
+| 3 | else | - | {결과} |
+
+#### 입력 변수
+| 변수명 | 타입 | 설명 |
+|--------|------|------|
+
+#### 출력 변수
+| 변수명 | 타입 | 설명 |
+|--------|------|------|
+
+#### 상수값
+| 상수명 | 값 | 출처 | 설명 |
+|--------|-----|------|------|
+
+#### 데이터 출처
+| 변수명 | 출처 타입 | 상세 | 설명 |
+|--------|----------|------|------|
+
+#### 기획자 확인 사항
+- [{우선순위}] {질문} - {컨텍스트}
+```
+
+### Step 3: 결과 안내
+생성된 파일 경로를 사용자에게 안내한다:
+```
+정책 문서 생성 완료:
+  ~/.impact/docs/{projectId}/system-a.policy.md
+  ~/.impact/docs/{projectId}/system-b.policy.md
+
+총 {N}개 시스템, {M}개 정책이 문서화되었습니다.
+```
+
+---
+
 ## 대화형 모드 (Conversational Mode)
 
 ### 활성화 트리거
@@ -527,6 +655,7 @@ tasks 항목의 optional 필드:
 | 담당자 | `node {skill_dir}/dist/index.js owners` | "담당자 확인" |
 | 주석 생성 | `node {skill_dir}/dist/index.js annotations generate` | "주석 생성", "코드 분석 메모" |
 | 프로젝트 전환 | `node {skill_dir}/dist/index.js projects --switch <name>` | "다른 프로젝트" |
+| 정책 문서화 | 정책 문서화 프로토콜 | "정책 정리", "로직 문서화", "정책 md 생성" |
 | 도움말 | `node {skill_dir}/dist/index.js help` | "도움말", "뭘 할 수 있어?" |
 
 ### 분석 결과 응답 형식

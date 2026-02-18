@@ -401,6 +401,118 @@ describe('AnnotationsCommand', () => {
 
       expect(result.code).toBe(ResultCode.NEEDS_CONFIG);
     });
+
+    // --format option tests
+    describe('--format md', () => {
+      it('should output markdown format for single file with --format md', async () => {
+        const annotationFile = createTestAnnotationFile();
+        mockAnnotationLoad.mockResolvedValue(annotationFile);
+
+        const cmd = new AnnotationsCommand(['view', 'src/services/shipping.ts', '--format', 'md']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+
+        const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => call.map(String).join(' ')).join('\n');
+        expect(allOutput).toContain('# shipping.ts 어노테이션');
+        expect(allOutput).toContain('## 파일 요약');
+        expect(allOutput).toContain('- **설명**:');
+        expect(allOutput).toContain('- **비즈니스 도메인**:');
+        expect(allOutput).toContain('- **신뢰도**:');
+        expect(allOutput).toContain('## 함수 목록');
+        expect(allOutput).toContain('### calculateShipping');
+        expect(allOutput).toContain('- **타입**: business_logic');
+        expect(allOutput).toContain('- **시그니처**:');
+      });
+
+      it('should output markdown table for stats mode with --format md', async () => {
+        mockAnnotationGetMeta.mockResolvedValue(createTestMeta());
+
+        const cmd = new AnnotationsCommand(['view', '--format', 'md']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+
+        const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => call.map(String).join(' ')).join('\n');
+        expect(allOutput).toContain('# 어노테이션 통계');
+        expect(allOutput).toContain('| 항목 | 값 |');
+        expect(allOutput).toContain('|------|:---:|');
+        expect(allOutput).toContain('| 전체 파일 | 3개 |');
+        expect(allOutput).toContain('| 전체 함수 | 10개 |');
+        expect(allOutput).toContain('| 추출된 정책 | 5개 |');
+        expect(allOutput).toContain('| 평균 신뢰도 | 75% |');
+        expect(allOutput).toContain('## 시스템별 현황');
+        expect(allOutput).toContain('| delivery |');
+        expect(allOutput).toContain('| payment |');
+      });
+
+      it('should behave same as default with --format yaml', async () => {
+        mockAnnotationGetMeta.mockResolvedValue(createTestMeta());
+
+        const cmd = new AnnotationsCommand(['view', '--format', 'yaml']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+
+        const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => call.map(String).join(' ')).join('\n');
+        // yaml format uses the original output (not markdown tables)
+        expect(allOutput).toContain('보강 주석 통계');
+        expect(allOutput).toContain('전체 파일 수');
+        expect(allOutput).not.toContain('# 어노테이션 통계');
+      });
+
+      it('should default to yaml when no --format is provided', async () => {
+        mockAnnotationGetMeta.mockResolvedValue(createTestMeta());
+
+        const cmd = new AnnotationsCommand(['view']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+
+        const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => call.map(String).join(' ')).join('\n');
+        // Default should be yaml-style output
+        expect(allOutput).toContain('전체 파일 수');
+        expect(allOutput).not.toContain('# 어노테이션 통계');
+      });
+
+      it('should include policies section in single file md format', async () => {
+        const annotationFile = createTestAnnotationFile({
+          annotations: [
+            createTestAnnotation({
+              policies: [
+                {
+                  name: '배송비 정책',
+                  description: '배송비 계산',
+                  confidence: 0.9,
+                  category: '배송',
+                  inferred_from: 'test',
+                },
+                {
+                  name: '무료 배송 정책',
+                  description: '일정 금액 이상 무료 배송',
+                  confidence: 0.8,
+                  category: '프로모션',
+                  inferred_from: 'test',
+                },
+              ],
+            }),
+          ],
+        });
+        mockAnnotationLoad.mockResolvedValue(annotationFile);
+
+        const cmd = new AnnotationsCommand(['view', 'src/services/shipping.ts', '--format', 'md']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+
+        const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => call.map(String).join(' ')).join('\n');
+        expect(allOutput).toContain('#### 관련 정책');
+        expect(allOutput).toContain('배송비 정책');
+        expect(allOutput).toContain('무료 배송 정책');
+        expect(allOutput).toContain('배송');
+        expect(allOutput).toContain('프로모션');
+      });
+    });
   });
 
   // ============================================================

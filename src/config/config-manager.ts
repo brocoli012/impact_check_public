@@ -6,7 +6,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import { AppConfig, DEFAULT_CONFIG } from '../types/config';
-import { ensureDir, readJsonFile, writeJsonFile, fileExists } from '../utils/file';
+import { ensureDir, readJsonFile, writeJsonFile, fileExists, getImpactDir } from '../utils/file';
 import { logger } from '../utils/logger';
 
 /**
@@ -103,5 +103,13 @@ export class ConfigManager {
   reset(): void {
     this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as AppConfig;
     logger.info('Configuration has been reset to defaults.');
+  }
+
+  /**
+   * 정책 문서 저장 디렉토리 경로를 반환한다.
+   * ~/.impact/docs/{projectId}
+   */
+  static getDocsDir(projectId: string): string {
+    return path.join(getImpactDir(), 'docs', projectId);
   }
 }
