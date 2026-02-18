@@ -149,6 +149,11 @@ function Dashboard() {
         <AnalysisSummaryCard summary={currentResult.analysisSummary} />
       )}
 
+      {/* SpecSourcePanel - 기획서 원문 (parsedSpec이 있을 때만) */}
+      {currentResult.parsedSpec && (
+        <SpecSourcePanel parsedSpec={currentResult.parsedSpec} tasks={currentResult.tasks} />
+      )}
+
       <ActionGuide
         grade={currentResult.grade}
         policyWarnings={currentResult.policyWarnings}
@@ -168,11 +173,6 @@ function Dashboard() {
           <DonutChart tasks={currentResult.tasks} />
         </div>
       </div>
-
-      {/* SpecSourcePanel - 기획서 원문 (parsedSpec이 있을 때만) */}
-      {currentResult.parsedSpec && (
-        <SpecSourcePanel parsedSpec={currentResult.parsedSpec} tasks={currentResult.tasks} />
-      )}
 
       {/* Confidence Warning Banner - 낮은 신뢰도 시스템이 있을 때만 표시 */}
       {lowConfSystems.length > 0 && (
