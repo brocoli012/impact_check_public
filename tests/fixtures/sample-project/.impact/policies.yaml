@@ -1,0 +1,413 @@
+# Kurly Impact Checker - 수동 정책 정의 (Mock Data)
+# 이 파일은 리인덱싱 시에도 유지되며 코드 주석 정책과 자동 병합됩니다.
+
+policies:
+  # ============================================================
+  # delivery (배송) - 4개
+  # ============================================================
+  - name: "새벽배송 무료 배송 기준"
+    description: "새벽배송 주문 금액이 40,000원 이상이면 무료 배송, 미만 시 배송비 3,000원 부과"
+    category: "delivery"
+    filePath: "src/services/delivery.ts"
+    relatedComponents:
+      - DeliveryFeeCalculator
+      - CartSummary
+    relatedApis:
+      - /api/delivery/fee
+      - /api/cart/summary
+    relatedModules:
+      - deliveryService
+      - cartService
+
+  - name: "새벽배송 주문 마감 시간"
+    description: "새벽배송 주문 마감 시간은 23:00 KST이며, 마감 이후 주문은 다음날 새벽배송으로 처리"
+    category: "delivery"
+    filePath: "src/services/delivery.ts"
+    relatedComponents:
+      - OrderDeadlineBanner
+      - DeliverySlotSelector
+    relatedApis:
+      - /api/delivery/slots
+      - /api/delivery/deadline
+    relatedModules:
+      - deliveryScheduler
+      - orderService
+
+  - name: "냉동/상온 분리 배송 정책"
+    description: "상품 보관 온도(냉장/냉동/상온)에 따라 별도 패키지로 분리 배송 처리"
+    category: "delivery"
+    filePath: "src/services/delivery.ts"
+    relatedComponents:
+      - PackageSplitter
+      - DeliveryPackageView
+    relatedApis:
+      - /api/delivery/packages
+      - /api/products/storage-type
+    relatedModules:
+      - packageService
+      - productService
+
+  - name: "당일배송 기준"
+    description: "오전 7시 이전 주문 건은 당일 발송 처리, 이후 주문은 익일 발송"
+    category: "delivery"
+    filePath: "src/services/delivery.ts"
+    relatedComponents:
+      - SameDayDeliveryBadge
+      - OrderTimeline
+    relatedApis:
+      - /api/delivery/same-day
+      - /api/orders/dispatch
+    relatedModules:
+      - deliveryScheduler
+      - orderDispatcher
+
+  # ============================================================
+  # pricing (가격) - 3개
+  # ============================================================
+  - name: "상품 가격 표시 정책"
+    description: "모든 상품은 할인가와 원가를 함께 표시하며, 할인율도 퍼센트로 병기"
+    category: "pricing"
+    filePath: "src/services/pricing.ts"
+    relatedComponents:
+      - ProductPrice
+      - ProductCard
+    relatedApis:
+      - /api/products/price
+    relatedModules:
+      - priceFormatter
+      - productService
+
+  - name: "가격 반올림 정책"
+    description: "모든 계산된 가격은 10원 단위로 반올림 처리하여 표시"
+    category: "pricing"
+    filePath: "src/services/pricing.ts"
+    relatedComponents:
+      - PriceDisplay
+      - CartTotal
+    relatedApis:
+      - /api/cart/total
+    relatedModules:
+      - priceCalculator
+
+  - name: "시간대별 동적 가격 조정"
+    description: "특정 시간대(심야 등)에 일부 상품에 추가 할인율을 적용하는 동적 가격 정책"
+    category: "pricing"
+    filePath: "src/services/pricing.ts"
+    relatedComponents:
+      - TimeSaleBanner
+      - DynamicPriceBadge
+    relatedApis:
+      - /api/pricing/dynamic
+      - /api/pricing/time-deals
+    relatedModules:
+      - dynamicPricing
+      - timeDealService
+
+  # ============================================================
+  # discount (할인) - 3개
+  # ============================================================
+  - name: "쿠폰 중복 적용 불가"
+    description: "주문당 최대 1개의 쿠폰만 적용 가능하며, 복수 쿠폰 중복 사용 불가"
+    category: "discount"
+    filePath: "src/services/coupon.ts"
+    relatedComponents:
+      - CouponSelector
+      - OrderCheckout
+    relatedApis:
+      - /api/coupons/apply
+      - /api/coupons/validate
+    relatedModules:
+      - couponService
+      - orderService
+
+  - name: "첫 구매 할인"
+    description: "신규 회원의 첫 주문에 대해 10% 할인 자동 적용"
+    category: "discount"
+    filePath: "src/services/coupon.ts"
+    relatedComponents:
+      - FirstPurchaseBanner
+      - DiscountBadge
+    relatedApis:
+      - /api/promotions/first-purchase
+      - /api/members/status
+    relatedModules:
+      - promotionService
+      - memberService
+
+  - name: "카테고리별 최대 할인율 제한"
+    description: "각 상품 카테고리별로 적용 가능한 최대 할인율 상한을 설정하여 과도한 할인 방지"
+    category: "discount"
+    filePath: "src/services/coupon.ts"
+    relatedComponents:
+      - DiscountCalculator
+      - CategoryDiscountConfig
+    relatedApis:
+      - /api/discounts/category-limits
+    relatedModules:
+      - discountPolicy
+      - categoryService
+
+  # ============================================================
+  # membership (회원) - 3개
+  # ============================================================
+  - name: "퍼플/라벤더 등급 회원 혜택"
+    description: "퍼플/라벤더 등급 회원은 무료배송 기준이 30,000원으로 하향 적용"
+    category: "membership"
+    filePath: "src/services/membership.ts"
+    relatedComponents:
+      - MembershipBadge
+      - DeliveryFeeCalculator
+    relatedApis:
+      - /api/members/grade
+      - /api/delivery/fee
+    relatedModules:
+      - membershipService
+      - deliveryService
+
+  - name: "등급 산정 기준"
+    description: "회원 등급은 최근 3개월간 누적 구매 금액을 기준으로 매월 1일 자동 산정"
+    category: "membership"
+    filePath: "src/services/membership.ts"
+    relatedComponents:
+      - GradeProgressBar
+      - MemberDashboard
+    relatedApis:
+      - /api/members/grade-calculation
+      - /api/members/purchase-history
+    relatedModules:
+      - gradeCalculator
+      - memberService
+
+  - name: "회원 탈퇴 시 적립금 소멸"
+    description: "회원 탈퇴 처리 시 보유 적립금 전액이 즉시 소멸되며 복구 불가"
+    category: "membership"
+    filePath: "src/services/membership.ts"
+    relatedComponents:
+      - WithdrawalConfirmDialog
+      - RewardBalanceWarning
+    relatedApis:
+      - /api/members/withdraw
+      - /api/rewards/balance
+    relatedModules:
+      - memberWithdrawal
+      - rewardService
+
+  # ============================================================
+  # reward (적립금) - 3개
+  # ============================================================
+  - name: "적립금 사용 최소 금액"
+    description: "적립금은 1,000원 이상 보유 시에만 사용 가능하며, 사용 시 전액 또는 부분 사용 선택 가능"
+    category: "reward"
+    filePath: "src/services/reward.ts"
+    relatedComponents:
+      - RewardInput
+      - CheckoutPayment
+    relatedApis:
+      - /api/rewards/use
+      - /api/rewards/balance
+    relatedModules:
+      - rewardService
+      - paymentService
+
+  - name: "적립금 유효기간"
+    description: "적립금은 적립일로부터 1년간 유효하며, 유효기간 만료 시 자동 소멸"
+    category: "reward"
+    filePath: "src/services/reward.ts"
+    relatedComponents:
+      - RewardExpiryNotice
+      - RewardHistory
+    relatedApis:
+      - /api/rewards/expiry
+      - /api/rewards/history
+    relatedModules:
+      - rewardExpiry
+      - notificationService
+
+  - name: "구매 적립률"
+    description: "기본 구매 적립률은 결제 금액의 0.5%이며, 회원 등급에 따라 추가 적립률 적용"
+    category: "reward"
+    filePath: "src/services/reward.ts"
+    relatedComponents:
+      - RewardPreview
+      - OrderComplete
+    relatedApis:
+      - /api/rewards/earn
+      - /api/rewards/rate
+    relatedModules:
+      - rewardCalculator
+      - membershipService
+
+  # ============================================================
+  # security (보안) - 3개
+  # ============================================================
+  - name: "비밀번호 정책"
+    description: "비밀번호는 최소 8자 이상이며 영문, 숫자, 특수문자를 각각 1개 이상 포함해야 함"
+    category: "security"
+    filePath: "src/api/auth.ts"
+    relatedComponents:
+      - PasswordInput
+      - SignupForm
+    relatedApis:
+      - /api/auth/password-validation
+      - /api/auth/signup
+    relatedModules:
+      - passwordValidator
+      - authService
+
+  - name: "로그인 실패 제한"
+    description: "5회 연속 로그인 실패 시 해당 계정을 30분간 잠금 처리"
+    category: "security"
+    filePath: "src/api/auth.ts"
+    relatedComponents:
+      - LoginForm
+      - AccountLockNotice
+    relatedApis:
+      - /api/auth/login
+      - /api/auth/account-lock
+    relatedModules:
+      - loginThrottle
+      - authService
+
+  - name: "개인정보 마스킹"
+    description: "이름, 전화번호, 주소 등 개인정보는 화면 표시 시 부분 마스킹 처리 (예: 홍*동, 010-****-1234)"
+    category: "security"
+    filePath: "src/api/auth.ts"
+    relatedComponents:
+      - MaskedText
+      - UserProfile
+    relatedApis:
+      - /api/members/profile
+    relatedModules:
+      - dataMasker
+      - privacyService
+
+  # ============================================================
+  # quality (품질) - 3개
+  # ============================================================
+  - name: "상품 이미지 최소 해상도"
+    description: "상품 등록 시 이미지는 최소 800x800px 이상이어야 하며, 미달 시 등록 거부"
+    category: "quality"
+    filePath: "src/services/quality.ts"
+    relatedComponents:
+      - ImageUploader
+      - ProductRegistration
+    relatedApis:
+      - /api/products/images/upload
+      - /api/products/images/validate
+    relatedModules:
+      - imageValidator
+      - productRegistration
+
+  - name: "상품 설명 필수 항목"
+    description: "상품 등록 시 원산지, 중량(용량), 유통기한 정보를 필수 입력해야 함"
+    category: "quality"
+    filePath: "src/services/quality.ts"
+    relatedComponents:
+      - ProductDetailForm
+      - RequiredFieldValidator
+    relatedApis:
+      - /api/products/register
+      - /api/products/validate
+    relatedModules:
+      - productValidator
+      - productService
+
+  - name: "리뷰 이미지 용량 제한"
+    description: "리뷰에 첨부하는 이미지는 건당 최대 10MB 이하여야 하며, 초과 시 리사이즈 안내"
+    category: "quality"
+    filePath: "src/services/quality.ts"
+    relatedComponents:
+      - ReviewImageUpload
+      - ReviewForm
+    relatedApis:
+      - /api/reviews/images/upload
+    relatedModules:
+      - reviewImageHandler
+      - reviewService
+
+  # ============================================================
+  # return (반품/교환) - 3개
+  # ============================================================
+  - name: "신선식품 반품 기한"
+    description: "신선식품은 수령 후 24시간 이내에만 반품 신청 가능"
+    category: "return"
+    filePath: "src/services/return.ts"
+    relatedComponents:
+      - ReturnRequestForm
+      - FreshProductNotice
+    relatedApis:
+      - /api/returns/request
+      - /api/returns/eligibility
+    relatedModules:
+      - returnPolicy
+      - freshProductService
+
+  - name: "반품 배송비 정책"
+    description: "단순 변심에 의한 반품은 고객 부담(3,000원), 상품 불량 시 무료 반품"
+    category: "return"
+    filePath: "src/services/return.ts"
+    relatedComponents:
+      - ReturnReasonSelector
+      - ReturnFeeNotice
+    relatedApis:
+      - /api/returns/fee
+      - /api/returns/reason
+    relatedModules:
+      - returnFeeCalculator
+      - returnService
+
+  - name: "환불 처리 기한"
+    description: "반품 상품 확인 후 3영업일 이내 환불 처리 완료"
+    category: "return"
+    filePath: "src/services/return.ts"
+    relatedComponents:
+      - RefundStatusTracker
+      - RefundHistory
+    relatedApis:
+      - /api/refunds/process
+      - /api/refunds/status
+    relatedModules:
+      - refundProcessor
+      - refundService
+
+  # ============================================================
+  # general (일반) - 3개
+  # ============================================================
+  - name: "검색 결과 정렬 기본값"
+    description: "검색 결과는 기본적으로 추천순으로 정렬되며, 최신순/가격순 등으로 전환 가능"
+    category: "general"
+    relatedComponents:
+      - SearchResultSort
+      - SearchPage
+    relatedApis:
+      - /api/search
+      - /api/search/sort
+    relatedModules:
+      - searchService
+      - sortingEngine
+
+  - name: "장바구니 최대 수량"
+    description: "장바구니에 담을 수 있는 한 상품의 최대 수량은 99개로 제한"
+    category: "general"
+    relatedComponents:
+      - CartQuantityInput
+      - CartItem
+    relatedApis:
+      - /api/cart/items
+      - /api/cart/quantity
+    relatedModules:
+      - cartService
+      - cartValidator
+
+  - name: "주문 취소 가능 시간"
+    description: "결제 완료 후 30분 이내에만 주문 취소가 가능하며, 이후에는 고객센터를 통해 처리"
+    category: "general"
+    relatedComponents:
+      - OrderCancelButton
+      - OrderDetail
+    relatedApis:
+      - /api/orders/cancel
+      - /api/orders/status
+    relatedModules:
+      - orderCancellation
+      - orderService

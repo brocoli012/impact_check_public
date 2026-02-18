@@ -14,10 +14,17 @@ import { logger } from '../../utils/logger';
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   'security': ['보안', 'security', '인증', 'auth', '권한', 'permission', '암호화', 'encrypt'],
   'performance': ['성능', 'performance', '캐시', 'cache', '최적화', 'optimize'],
-  'business': ['비즈니스', 'business', '결제', 'payment', '정산', '환불', 'refund'],
+  'business': ['비즈니스', 'business', '결제', 'payment', '정산'],
   'data': ['데이터', 'data', '개인정보', 'privacy', 'PII', 'GDPR'],
   'ui': ['UI', 'UX', '디자인', 'design', '레이아웃', 'layout'],
   'api': ['API', '엔드포인트', 'endpoint', 'REST', 'GraphQL'],
+  'delivery': ['배송', 'delivery', '택배', '새벽배송', '당일배송', '마감'],
+  'pricing': ['가격', 'pricing', 'price', '단가', '원가', '정가'],
+  'discount': ['할인', 'discount', '쿠폰', 'coupon', '프로모션', 'promotion'],
+  'membership': ['회원', 'membership', 'member', '등급', 'grade', '멤버십'],
+  'reward': ['적립', 'reward', '포인트', 'point', '마일리지', 'mileage'],
+  'quality': ['품질', 'quality', '검수', '신선', 'fresh'],
+  'return': ['반품', 'return', '교환', 'exchange', '환불', '반환'],
   'general': [],
 };
 
@@ -144,7 +151,7 @@ export class PolicyExtractor {
               description: p.description || '',
               source: 'manual',
               sourceText: yaml.dump(p),
-              filePath: path.relative(projectPath, yamlPath),
+              filePath: p.filePath || path.relative(projectPath, yamlPath),
               lineNumber: 0,
               category: p.category || this.detectCategory(p.description || ''),
               relatedComponents: p.relatedComponents || [],
@@ -314,6 +321,7 @@ interface YamlPolicy {
   name?: string;
   description?: string;
   category?: string;
+  filePath?: string;
   relatedComponents?: string[];
   relatedApis?: string[];
   relatedModules?: string[];
