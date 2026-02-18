@@ -4,7 +4,7 @@
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, beforeEach } from 'vitest';
 import Tickets from '../pages/Tickets';
 import { useResultStore } from '../stores/resultStore';
@@ -13,6 +13,13 @@ import { getMockResult } from '../utils/mockData';
 /** BrowserRouter로 감싸서 렌더링하는 헬퍼 */
 function renderWithRouter(ui: React.ReactElement) {
   return render(<BrowserRouter>{ui}</BrowserRouter>);
+}
+
+/** MemoryRouter로 초기 URL을 지정하여 렌더링하는 헬퍼 */
+function renderWithMemoryRouter(ui: React.ReactElement, initialEntries: string[]) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>,
+  );
 }
 
 describe('Tickets', () => {
@@ -107,5 +114,54 @@ describe('Tickets', () => {
 
     // Only 결제 related task should be visible
     expect(screen.getByText('결제 화면 장바구니 연동 수정')).toBeInTheDocument();
+  });
+
+  /* ---------- URL query parameter 테스트 (TASK-033 R-02) ---------- */
+  describe('URL query parameter', () => {
+    it('should apply FE type filter when ?type=FE is provided', () => {
+      renderWithMemoryRouter(<Tickets />, ['/tickets?type=FE']);
+
+      // FE filter button should have active style (purple-100 bg)
+      const feButtons = screen.getAllByText('FE');
+      // Filter section FE button should be active
+      const filterFEButton = feButtons.find(
+        (btn) => btn.tagName === 'BUTTON' && btn.className.includes('bg-purple-100'),
+      );
+      expect(filterFEButton).toBeDefined();
+    });
+
+    it('should apply BE type filter when ?type=BE is provided', () => {
+      renderWithMemoryRouter(<Tickets />, ['/tickets?type=BE']);
+
+      // BE filter button should have active style
+      const beButtons = screen.getAllByText('BE');
+      const filterBEButton = beButtons.find(
+        (btn) => btn.tagName === 'BUTTON' && btn.className.includes('bg-purple-100'),
+      );
+      expect(filterBEButton).toBeDefined();
+    });
+
+    it('should default to "all" when ?type has an invalid value', () => {
+      renderWithMemoryRouter(<Tickets />, ['/tickets?type=INVALID']);
+
+      // "전체" buttons should be active for both type and grade
+      const allButtons = screen.getAllByText('전체');
+      const activeAllButtons = allButtons.filter(
+        (btn) => btn.className.includes('bg-purple-100'),
+      );
+      // Both type and grade "전체" should be active
+      expect(activeAllButtons.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should default to "all" when no type param is present', () => {
+      renderWithMemoryRouter(<Tickets />, ['/tickets']);
+
+      // "전체" buttons should be active
+      const allButtons = screen.getAllByText('전체');
+      const activeAllButtons = allButtons.filter(
+        (btn) => btn.className.includes('bg-purple-100'),
+      );
+      expect(activeAllButtons.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

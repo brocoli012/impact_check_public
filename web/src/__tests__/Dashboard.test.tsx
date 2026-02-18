@@ -136,10 +136,12 @@ describe('Dashboard', () => {
     renderWithRouter(<Dashboard />);
 
     await waitFor(() => {
-      // 영향 화면 수
-      expect(screen.getByText(String(mockResult.affectedScreens.length))).toBeInTheDocument();
+      // 영향 화면 수 - KPI 카드에서 값 확인 (getAllByText로 복수 매칭 허용)
+      const screenCountEls = screen.getAllByText(String(mockResult.affectedScreens.length));
+      expect(screenCountEls.length).toBeGreaterThanOrEqual(1);
       // 총 작업 수
-      expect(screen.getByText(String(mockResult.tasks.length))).toBeInTheDocument();
+      const taskCountEls = screen.getAllByText(String(mockResult.tasks.length));
+      expect(taskCountEls.length).toBeGreaterThanOrEqual(1);
     });
   });
 });

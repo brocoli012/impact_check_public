@@ -1,10 +1,12 @@
 import { useMemo, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useResultStore } from '../stores/resultStore';
 import { useLatestResult } from '../hooks/useAnalysisResult';
 import ScoreHeader from '../components/dashboard/ScoreHeader';
 import KpiCards from '../components/dashboard/KpiCards';
 import ScreenBarChart from '../components/dashboard/BarChart';
 import DonutChart from '../components/dashboard/DonutChart';
+import ActionGuide from '../components/dashboard/ActionGuide';
 import CrossProjectDiagram from '../components/cross-project/CrossProjectDiagram';
 import CrossProjectSummary from '../components/cross-project/CrossProjectSummary';
 import type { ProjectLink } from '../components/cross-project/CrossProjectDiagram';
@@ -22,8 +24,12 @@ const CONFIDENCE_BADGE: Record<ConfidenceGrade, string> = {
 
 function Dashboard() {
   useLatestResult();
+  const navigate = useNavigate();
 
   const { currentResult, isLoading, error } = useResultStore();
+
+  /** 신뢰도 경고 배너 - 시스템별 펼침/접힘 상태 */
+  const [expandedSystems, setExpandedSystems] = useState<Set<string>>(new Set());
 
   /** 크로스 프로젝트 데이터 */
   const [crossProjectLinks, setCrossProjectLinks] = useState<ProjectLink[]>([]);
@@ -102,11 +108,20 @@ function Dashboard() {
         recommendation={currentResult.recommendation}
       />
 
+      <ActionGuide
+        grade={currentResult.grade}
+        policyWarnings={currentResult.policyWarnings}
+        planningChecks={currentResult.planningChecks}
+        affectedScreens={currentResult.affectedScreens}
+        tasks={currentResult.tasks}
+        ownerNotifications={currentResult.ownerNotifications}
+      />
+
       <KpiCards result={currentResult} />
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-3 gap-6 items-start">
         <div className="col-span-2">
-          <ScreenBarChart screenScores={currentResult.screenScores} />
+          <ScreenBarChart screenScores={currentResult.screenScores} affectedScreens={currentResult.affectedScreens} />
         </div>
         <div className="col-span-1">
           <DonutChart tasks={currentResult.tasks} />
@@ -135,16 +150,63 @@ function Dashboard() {
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
               />
             </svg>
-            <div>
+            <div className="flex-1">
               <p className="text-sm font-semibold" style={{ color: '#9A3412' }}>
                 낮은 신뢰도 시스템 {lowConfSystems.length}개 - 보완 가이드 확인
               </p>
-              <ul className="mt-1 space-y-0.5">
-                {lowConfSystems.map((sys) => (
-                  <li key={sys.systemId} className="text-xs" style={{ color: '#C2410C' }}>
-                    {sys.systemName} ({Math.round(sys.overallScore * 100)}%)
-                  </li>
-                ))}
+              <ul className="mt-1 space-y-1">
+                {lowConfSystems.map((sys) => {
+                  const isExpanded = expandedSystems.has(sys.systemId);
+                  return (
+                    <li key={sys.systemId}>
+                      <button
+                        data-testid={`confidence-toggle-${sys.systemId}`}
+                        onClick={() => {
+                          setExpandedSystems((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(sys.systemId)) {
+                              next.delete(sys.systemId);
+                            } else {
+                              next.add(sys.systemId);
+                            }
+                            return next;
+                          });
+                        }}
+                        aria-expanded={isExpanded}
+                        className="text-xs font-medium flex items-center gap-1 hover:underline focus:outline-none focus:ring-2 focus:ring-purple-400 rounded"
+                        style={{ color: '#C2410C' }}
+                      >
+                        <svg
+                          className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                        {sys.systemName} ({Math.round(sys.overallScore * 100)}%)
+                      </button>
+                      {isExpanded && sys.recommendations && sys.recommendations.length > 0 && (
+                        <div className="mt-1 ml-4 space-y-1" data-testid={`confidence-recommendations-${sys.systemId}`}>
+                          <ul className="list-disc list-inside space-y-0.5">
+                            {sys.recommendations.map((rec, idx) => (
+                              <li key={idx} className="text-xs" style={{ color: '#9A3412' }}>
+                                {rec}
+                              </li>
+                            ))}
+                          </ul>
+                          <button
+                            onClick={() => navigate('/policies')}
+                            className="text-xs text-purple-600 hover:text-purple-800 hover:underline focus:outline-none focus:ring-2 focus:ring-purple-400 rounded"
+                          >
+                            정책 페이지에서 확인하기 →
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>
@@ -154,7 +216,20 @@ function Dashboard() {
       {/* Confidence Status Section - 시스템별 신뢰도 바 */}
       {currentResult.confidenceScores.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h3 className="text-sm font-bold text-gray-900 mb-4">분석 신뢰도 현황</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-gray-900">분석 신뢰도 현황</h3>
+            <button
+              data-testid="confidence-policy-link"
+              onClick={() => navigate('/policies')}
+              aria-label="정책 확인하기 페이지로 이동"
+              className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-0.5 focus:outline-none focus:ring-2 focus:ring-purple-400 rounded"
+            >
+              정책 확인하기
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
           <div className="space-y-3">
             {currentResult.confidenceScores.map((cs) => {
               const percent = Math.round(cs.overallScore * 100);

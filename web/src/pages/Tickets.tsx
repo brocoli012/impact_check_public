@@ -4,6 +4,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useResultStore } from '../stores/resultStore';
 import { useEnsureResult } from '../hooks/useEnsureResult';
 import { GRADE_COLORS } from '../utils/colors';
@@ -22,8 +23,14 @@ function Tickets() {
   useEnsureResult();
   const currentResult = useResultStore((s) => s.currentResult);
 
+  const [searchParams] = useSearchParams();
+  const initialType = searchParams.get('type');
+
   const [filter, setFilter] = useState<TicketFilter>({
-    typeFilter: 'all',
+    typeFilter:
+      initialType && ['FE', 'BE'].includes(initialType)
+        ? (initialType as TaskType)
+        : 'all',
     gradeFilter: 'all',
     searchQuery: '',
   });
