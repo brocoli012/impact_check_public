@@ -51,7 +51,12 @@ export const usePolicyStore = create<PolicyState>()((set) => ({
       const params = new URLSearchParams({ projectId });
       const response = await fetch(`/api/policies?${params.toString()}`);
       const data = await response.json();
-      const policies: Policy[] = data.policies || [];
+      const policies: Policy[] = (data.policies || []).map((p: any) => ({
+        ...p,
+        affectedFiles: p.affectedFiles || [p.file].filter(Boolean),
+        relatedTaskIds: p.relatedTaskIds || [],
+        source: p.source || 'comment',
+      }));
 
       // 카테고리 목록 추출
       const categorySet = new Set<string>();

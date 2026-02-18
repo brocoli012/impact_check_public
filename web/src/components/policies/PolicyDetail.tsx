@@ -23,21 +23,44 @@ interface PolicyDetailProps {
   onClose: () => void;
 }
 
+/** 카테고리 매핑 (영어 → 한국어) */
+const CATEGORY_MAP: Record<string, string> = {
+  delivery: '배송',
+  pricing: '가격',
+  discount: '할인',
+  membership: '회원',
+  reward: '적립금',
+  security: '보안',
+  quality: '품질',
+  return: '반품/교환',
+  general: '일반',
+};
+
 /** 보강 주석에서 현재 정책에 해당하는 InferredPolicy 찾기 */
 function findMatchingInferredPolicy(
   policy: PolicyDetailType,
 ): InferredPolicyDetail | null {
   if (!policy.annotation?.annotations) return null;
 
+  const korCategory = CATEGORY_MAP[policy.category] || policy.category;
+
   for (const ann of policy.annotation.annotations) {
     for (const p of ann.policies) {
-      if (p.name === policy.name || p.category === policy.category) {
-        return p;
-      }
+      // 이름 정확 매칭
+      if (p.name === policy.name) return p;
+      // 카테고리 매칭 (한국어 변환 후)
+      if (p.category === korCategory) return p;
+      // 부분 문자열 매칭
+      if (
+        p.name && policy.name && (
+          p.name.includes(policy.name.slice(0, 6)) ||
+          policy.name.includes(p.name.slice(0, 6))
+        )
+      ) return p;
     }
   }
 
-  // 첫 번째 정책이라도 반환
+  // 최종 fallback: 첫 번째 annotation의 첫 번째 policy 반환
   for (const ann of policy.annotation.annotations) {
     if (ann.policies.length > 0) {
       return ann.policies[0];
@@ -150,11 +173,11 @@ function PolicyDetailComponent({ policy, onClose }: PolicyDetailProps) {
           </div>
 
           {/* 관련 파일 목록 */}
-          {policy.affectedFiles.length > 0 && (
+          {(policy.affectedFiles || []).length > 0 && (
             <div>
               <SectionTitle>관련 파일</SectionTitle>
               <div className="space-y-0.5">
-                {policy.affectedFiles.map((file) => (
+                {(policy.affectedFiles || []).map((file) => (
                   <p key={file} className="text-[11px] text-gray-500 font-mono truncate" title={file}>
                     {file}
                   </p>
@@ -264,7 +287,7 @@ function PolicyDetailComponent({ policy, onClose }: PolicyDetailProps) {
             <SectionTitle>영향 범위</SectionTitle>
             <PolicyGraph
               policyName={policy.name}
-              affectedFiles={policy.affectedFiles}
+              affectedFiles={policy.affectedFiles || []}
             />
           </div>
         </div>

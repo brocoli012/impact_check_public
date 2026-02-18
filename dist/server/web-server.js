@@ -312,6 +312,9 @@ function createApp(basePath) {
                     description: p.description,
                     file: p.filePath,
                     confidence: 0,
+                    affectedFiles: [p.filePath, ...(p.relatedComponents || [])].filter(Boolean),
+                    relatedTaskIds: [],
+                    source: p.source || 'comment',
                 })),
                 total: policies.length,
                 categories,
@@ -364,6 +367,33 @@ function createApp(basePath) {
             catch {
                 // 보강 주석 로드 실패는 무시
             }
+            // 기본 affectedFiles 구성
+            const baseAffectedFiles = [
+                policy.filePath,
+                ...(policy.relatedComponents || []).map((c) => `src/components/${c}.tsx`),
+                ...(policy.relatedApis || []).map((a) => `src/api${a}.ts`),
+            ].filter(Boolean);
+            // annotation에서 impactScope 기반 파일 경로 수집
+            const impactFiles = [];
+            if (annotation) {
+                for (const ann of annotation.annotations) {
+                    for (const pol of ann.policies) {
+                        const scope = pol.impactScope;
+                        if (scope) {
+                            for (const caller of scope.callers || []) {
+                                if (caller.filePath)
+                                    impactFiles.push(caller.filePath);
+                            }
+                            for (const callee of scope.callees || []) {
+                                if (callee.filePath)
+                                    impactFiles.push(callee.filePath);
+                            }
+                        }
+                    }
+                }
+            }
+            // 중복 제거한 affectedFiles
+            const affectedFiles = [...new Set([...baseAffectedFiles, ...impactFiles])].filter(Boolean);
             const result = {
                 policy: {
                     id: policy.id,
@@ -378,6 +408,7 @@ function createApp(basePath) {
                     relatedApis: policy.relatedApis,
                     relatedModules: policy.relatedModules,
                     extractedAt: policy.extractedAt,
+                    affectedFiles,
                 },
             };
             if (annotation) {

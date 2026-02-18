@@ -334,6 +334,9 @@ export function createApp(basePath?: string): express.Application {
           description: p.description,
           file: p.filePath,
           confidence: 0,
+          affectedFiles: [p.filePath, ...((p as any).relatedComponents || [])].filter(Boolean),
+          relatedTaskIds: [],
+          source: (p as any).source || 'comment',
         })),
         total: policies.length,
         categories,
@@ -394,6 +397,34 @@ export function createApp(basePath?: string): express.Application {
         // 보강 주석 로드 실패는 무시
       }
 
+      // 기본 affectedFiles 구성
+      const baseAffectedFiles: string[] = [
+        policy.filePath,
+        ...((policy.relatedComponents || []) as string[]).map((c: string) => `src/components/${c}.tsx`),
+        ...((policy.relatedApis || []) as string[]).map((a: string) => `src/api${a}.ts`),
+      ].filter(Boolean) as string[];
+
+      // annotation에서 impactScope 기반 파일 경로 수집
+      const impactFiles: string[] = [];
+      if (annotation) {
+        for (const ann of annotation.annotations) {
+          for (const pol of ann.policies) {
+            const scope = pol.impactScope;
+            if (scope) {
+              for (const caller of scope.callers || []) {
+                if (caller.filePath) impactFiles.push(caller.filePath);
+              }
+              for (const callee of scope.callees || []) {
+                if (callee.filePath) impactFiles.push(callee.filePath);
+              }
+            }
+          }
+        }
+      }
+
+      // 중복 제거한 affectedFiles
+      const affectedFiles = [...new Set([...baseAffectedFiles, ...impactFiles])].filter(Boolean);
+
       const result: Record<string, unknown> = {
         policy: {
           id: policy.id,
@@ -408,6 +439,7 @@ export function createApp(basePath?: string): express.Application {
           relatedApis: policy.relatedApis,
           relatedModules: policy.relatedModules,
           extractedAt: policy.extractedAt,
+          affectedFiles,
         },
       };
 
