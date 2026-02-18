@@ -45,6 +45,7 @@ commands:
 ### /impact view [--stop]
 분석 결과 시각화 웹을 실행합니다.
 실행: node {skill_dir}/dist/index.js view [--stop]
+> **사전 조건**: 웹 대시보드는 빌드가 필요합니다. `cd {skill_dir}/web && npm install && npm run build` 실행 후 사용하세요.
 
 ### /impact tickets [--create] [--detail <id>]
 작업 티켓을 조회하거나 생성합니다.

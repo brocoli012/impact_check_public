@@ -3,7 +3,9 @@
  * @description View 명령어 핸들러 - 분석 결과 시각화 웹을 실행
  */
 
+import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import { exec } from 'child_process';
 import { Command, CommandResult, ResultCode } from '../types/common';
 import { startServer, stopServer, isServerRunning } from '../server/web-server';
@@ -80,6 +82,14 @@ export class ViewCommand implements Command {
         code: ResultCode.SUCCESS,
         message: 'Web server is already running.',
       };
+    }
+
+    // web/dist 빌드 존재 여부 확인
+    const webDistPath = path.join(__dirname, '..', '..', 'web', 'dist');
+    if (!fs.existsSync(webDistPath)) {
+      console.warn('\n⚠️ 웹 대시보드 빌드가 필요합니다. 아래 명령어를 실행해주세요:');
+      console.warn('   cd web && npm install && npm run build');
+      console.warn('');
     }
 
     // 분석 결과가 있는지 확인

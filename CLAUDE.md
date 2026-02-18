@@ -47,6 +47,9 @@ node dist/index.js <command> [args]
 # 웹 대시보드 (개발 모드)
 cd web && npm run dev
 
+# 웹 대시보드 빌드 (프로덕션 - view 명령어용)
+cd web && npm install && npm run build
+
 # 웹 테스트 (Vitest)
 cd web && npm test
 ```

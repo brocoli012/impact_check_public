@@ -647,11 +647,13 @@ export function createApp(basePath?: string): express.Application {
       }
     });
   } else {
+    console.warn('⚠️ 웹 대시보드 빌드가 필요합니다. 아래 명령어를 실행해주세요:');
+    console.warn('   cd web && npm install && npm run build');
     app.get('{*splat}', (req: Request, res: Response) => {
       if (!req.path.startsWith('/api')) {
         res.status(404).json({
           error: 'Web UI not built',
-          message: 'Run: cd web && npm run build',
+          message: 'Run: cd web && npm install && npm run build',
         });
       }
     });
