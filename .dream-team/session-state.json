@@ -102,7 +102,7 @@
       "id": "REQ-009",
       "type": "REQ",
       "title": "분석 종합 결과지 - 대시보드 인과 관계 시각화",
-      "status": "in_progress",
+      "status": "done",
       "priority": "HIGH",
       "epic": "EPIC-001"
     },
@@ -110,7 +110,7 @@
       "id": "REQ-010",
       "type": "REQ",
       "title": "멀티프로젝트 식별 & 정책 문서 생성",
-      "status": "planned",
+      "status": "done",
       "priority": "HIGH",
       "epic": "EPIC-001"
     }
@@ -399,12 +399,57 @@
         "qaResult": "PASS",
         "matchRate": "100%"
       }
+    },
+    {
+      "phase": "REQ-009: 분석 종합 결과지 v2.1",
+      "status": "done",
+      "completedAt": "2026-02-18",
+      "summary": {
+        "modules": [
+          "SKILL.md프로토콜확장",
+          "ParsedSpec보존",
+          "AnalysisSummary",
+          "SpecSourcePanel",
+          "AnalysisSummaryCard",
+          "CriticalAlertBanner",
+          "FlowStrip",
+          "Tickets요구사항필터",
+          "FlowChart요구사항필터",
+          "Dashboard통합"
+        ],
+        "tests": 1411,
+        "newTests": 153,
+        "taskCount": "15/15 done (TASK-040~054)",
+        "tpoComplexity": "7/10",
+        "qaResult": "PASS",
+        "matchRate": "100%"
+      }
+    },
+    {
+      "phase": "REQ-010: 멀티프로젝트 식별 & 정책 문서화",
+      "status": "done",
+      "completedAt": "2026-02-18",
+      "summary": {
+        "modules": [
+          "SKILL.md Step2.5멀티프로젝트",
+          "SKILL.md 정책문서화프로토콜",
+          "annotations --format md",
+          "getDocsDir유틸",
+          "테스트"
+        ],
+        "tests": 1418,
+        "newTests": 7,
+        "taskCount": "5/5 done (TASK-055~059)",
+        "tpoComplexity": "5/10",
+        "qaResult": "PASS",
+        "matchRate": "100%"
+      }
     }
   ],
   "currentPhase": {
-    "phase": "REQ-009: 분석 종합 결과지",
+    "phase": "Post REQ-010: 유지보수 & UX 개선",
     "status": "in_progress",
-    "description": "v2.1: SKILL.md 프로토콜 확장(parsedSpec/analysisSummary/sourceRequirementIds) + SpecSourcePanel + AnalysisSummaryCard + 요구사항 필터(Tickets/FlowChart) + Flow Strip + CriticalAlertBanner + KpiCards detailLine. TASK-040~054 (15개, 43점)."
+    "description": "REQ-001~010 전체 완료. 버그 수정 및 UX 개선 진행 중. 1,457 테스트 전체 통과."
   },
   "sessionHistory": [
     {
@@ -754,6 +799,42 @@
       "timestamp": "2026-02-18T12:00:00Z",
       "agent": "master",
       "description": "REQ-010 계획 수립 - PM/Designer/TPO R1-R10 피드백 완료, 5 TASK(055~059), 13점. REQ-009 완료 후 진행."
+    },
+    {
+      "action": "req009_complete",
+      "timestamp": "2026-02-18T14:00:00Z",
+      "agent": "master",
+      "description": "REQ-009 분석 종합 결과지 v2.1 완료 - 15 TASK(040~054), 1411테스트, 커밋 5121982"
+    },
+    {
+      "action": "req010_qa_pass",
+      "timestamp": "2026-02-18T14:15:00Z",
+      "agent": "qa",
+      "description": "REQ-010 QA PASS - 6/6 AC 충족, 1418 테스트, SKILL.md Step 2.5(7단계 프로토콜), 정책 문서화 프로토콜(3단계), annotations --format md(6 테스트), getDocsDir(2 테스트), LLM API 호출 없음 확인"
+    },
+    {
+      "action": "req010_complete",
+      "timestamp": "2026-02-18T14:30:00Z",
+      "agent": "master",
+      "description": "REQ-010 멀티프로젝트 식별 & 정책 문서화 완료 - 5 TASK(055~059), 1418테스트, 커밋 3929f30"
+    },
+    {
+      "action": "bugfix_ticket_detail",
+      "timestamp": "2026-02-18T15:00:00Z",
+      "agent": "developer",
+      "description": "티켓 상세 사이드패널 + 정책 요구사항 필터 추가 - 39 신규 테스트, 1457테스트, 커밋 cb6d9f9"
+    },
+    {
+      "action": "bugfix_policy_filter",
+      "timestamp": "2026-02-18T15:30:00Z",
+      "agent": "developer",
+      "description": "정책 요구사항 필터 relatedTaskIds 역매핑 수정 - API+프론트엔드 폴백, 1457테스트, 커밋 b2efd38"
+    },
+    {
+      "action": "skill_md_unification",
+      "timestamp": "2026-02-18T16:00:00Z",
+      "agent": "developer",
+      "description": "SKILL.md 통일 - skills/kic/SKILL.md(483줄) 삭제, 루트 SKILL.md(704줄)만 유지, 오해 문구 제거, 1457테스트"
     }
   ],
   "documents": {
