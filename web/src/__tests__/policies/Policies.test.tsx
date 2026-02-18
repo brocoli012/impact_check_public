@@ -72,6 +72,7 @@ function setupDefaultState() {
     categories: ['결제', '배송', '장바구니'],
     searchQuery: '',
     selectedCategory: null,
+    selectedRequirement: null,
     loading: false,
     error: null,
   });
@@ -301,6 +302,135 @@ describe('Policies', () => {
     // After useEnsureResult loads mock data, the page should render properly
     await waitFor(() => {
       expect(screen.getByText('정책 목록')).toBeInTheDocument();
+    });
+  });
+
+  // ── Requirement-based filtering tests ──
+
+  it('should render requirement dropdown when parsedSpec has requirements', async () => {
+    await renderAndWait(<Policies />);
+
+    // The mock result from getMockResult() includes parsedSpec.requirements
+    expect(screen.getByLabelText('요구사항 필터')).toBeInTheDocument();
+    expect(screen.getByText('요구사항:')).toBeInTheDocument();
+  });
+
+  it('should filter policies by selected requirement', async () => {
+    await renderAndWait(<Policies />);
+
+    // Before filtering: all 3 policies visible
+    expect(screen.getByText('장바구니 수량 제한')).toBeInTheDocument();
+    expect(screen.getByText('결제 수단 제한')).toBeInTheDocument();
+    expect(screen.getByText('배송 불가 지역')).toBeInTheDocument();
+
+    // Select REQ-001 filter
+    // In mock data: REQ-001 tasks are task-1, task-2, task-4
+    // policy-1 has relatedTaskIds ['task-1'] → should match
+    // policy-2 has relatedTaskIds ['task-3'] → task-3 is REQ-002 → should NOT match
+    // policy-3 has relatedTaskIds [] → should NOT match
+    act(() => {
+      usePolicyStore.setState({ selectedRequirement: 'REQ-001' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('장바구니 수량 제한')).toBeInTheDocument();
+      expect(screen.queryByText('결제 수단 제한')).not.toBeInTheDocument();
+      expect(screen.queryByText('배송 불가 지역')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should filter policies by REQ-002 showing only payment policy', async () => {
+    await renderAndWait(<Policies />);
+
+    // Select REQ-002 filter
+    // In mock data: REQ-002 tasks are task-3
+    // policy-2 has relatedTaskIds ['task-3'] → should match
+    act(() => {
+      usePolicyStore.setState({ selectedRequirement: 'REQ-002' });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('장바구니 수량 제한')).not.toBeInTheDocument();
+      expect(screen.getByText('결제 수단 제한')).toBeInTheDocument();
+      expect(screen.queryByText('배송 불가 지역')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should show all policies when requirement filter is cleared', async () => {
+    await renderAndWait(<Policies />);
+
+    // Apply filter
+    act(() => {
+      usePolicyStore.setState({ selectedRequirement: 'REQ-001' });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('결제 수단 제한')).not.toBeInTheDocument();
+    });
+
+    // Clear filter
+    act(() => {
+      usePolicyStore.setState({ selectedRequirement: null });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('장바구니 수량 제한')).toBeInTheDocument();
+      expect(screen.getByText('결제 수단 제한')).toBeInTheDocument();
+      expect(screen.getByText('배송 불가 지역')).toBeInTheDocument();
+    });
+  });
+
+  it('should show empty state when requirement has no matching policies', async () => {
+    await renderAndWait(<Policies />);
+
+    // REQ-003 tasks are task-5, task-6 — none of our mockPolicies reference those task IDs
+    act(() => {
+      usePolicyStore.setState({ selectedRequirement: 'REQ-003' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('검색 조건에 맞는 정책이 없습니다.')).toBeInTheDocument();
+    });
+  });
+
+  it('should combine requirement filter with category filter', async () => {
+    // Add a second policy that also links to REQ-001 tasks but has different category
+    const extendedPolicies: Policy[] = [
+      ...mockPolicies,
+      {
+        id: 'policy-4',
+        name: '장바구니 할인 정책',
+        category: '장바구니',
+        description: '장바구니 할인율을 관리합니다.',
+        confidence: 0.7,
+        affectedFiles: [],
+        relatedTaskIds: ['task-1'],
+        source: 'cart-discount-policy.md',
+      },
+    ];
+
+    usePolicyStore.setState({ policies: extendedPolicies });
+    vi.mocked(fetch).mockResolvedValue({
+      json: async () => ({ policies: extendedPolicies }),
+    } as Response);
+
+    await renderAndWait(<Policies />);
+
+    // Apply both REQ-001 and category '장바구니'
+    act(() => {
+      usePolicyStore.setState({
+        selectedRequirement: 'REQ-001',
+        selectedCategory: '장바구니',
+      });
+    });
+
+    await waitFor(() => {
+      // policy-1 (장바구니, task-1 → REQ-001) ✓
+      expect(screen.getByText('장바구니 수량 제한')).toBeInTheDocument();
+      // policy-4 (장바구니, task-1 → REQ-001) ✓
+      expect(screen.getByText('장바구니 할인 정책')).toBeInTheDocument();
+      // policy-2 (결제, task-3 → REQ-002) ✗
+      expect(screen.queryByText('결제 수단 제한')).not.toBeInTheDocument();
     });
   });
 });

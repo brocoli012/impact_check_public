@@ -6,21 +6,28 @@
 import { useState, useEffect } from 'react';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePolicyStore } from '../../stores/policyStore';
+import type { WebRequirement, Task } from '../../types';
 
 interface PolicyFilterProps {
   /** 필터 결과 수 */
   resultCount: number;
   /** 전체 정책 수 */
   totalCount: number;
+  /** 요구사항 목록 (요구사항 필터 드롭다운용) */
+  requirements?: WebRequirement[];
+  /** 작업 목록 (요구사항→작업 매핑용) */
+  tasks?: Task[];
 }
 
-function PolicyFilter({ resultCount, totalCount }: PolicyFilterProps) {
+function PolicyFilter({ resultCount, totalCount, requirements, tasks }: PolicyFilterProps) {
   const {
     categories,
     searchQuery,
     selectedCategory,
+    selectedRequirement,
     setSearchQuery,
     setSelectedCategory,
+    setSelectedRequirement,
   } = usePolicyStore();
 
   const [searchInput, setSearchInput] = useState(searchQuery);
@@ -73,6 +80,26 @@ function PolicyFilter({ resultCount, totalCount }: PolicyFilterProps) {
             )}
           </div>
         </div>
+
+        {/* Requirement filter */}
+        {requirements && requirements.length > 0 && (
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-500 mr-1">요구사항:</span>
+            <select
+              value={selectedRequirement ?? ''}
+              onChange={(e) => setSelectedRequirement(e.target.value || null)}
+              className="px-2 py-1 rounded border border-gray-200 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              aria-label="요구사항 필터"
+            >
+              <option value="">전체 요구사항</option>
+              {requirements.map((req) => (
+                <option key={req.id} value={req.id}>
+                  {req.id}: {req.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Category filter */}
         <div className="flex items-center gap-1">

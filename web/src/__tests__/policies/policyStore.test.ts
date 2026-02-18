@@ -62,6 +62,7 @@ describe('policyStore', () => {
       categories: [],
       searchQuery: '',
       selectedCategory: null,
+      selectedRequirement: null,
       loading: false,
       error: null,
     });
@@ -75,6 +76,7 @@ describe('policyStore', () => {
     expect(state.categories).toEqual([]);
     expect(state.searchQuery).toBe('');
     expect(state.selectedCategory).toBeNull();
+    expect(state.selectedRequirement).toBeNull();
     expect(state.loading).toBe(false);
     expect(state.error).toBeNull();
   });
@@ -160,6 +162,19 @@ describe('policyStore', () => {
     usePolicyStore.getState().setSelectedCategory(null);
 
     expect(usePolicyStore.getState().selectedCategory).toBeNull();
+  });
+
+  it('should set selected requirement', () => {
+    usePolicyStore.getState().setSelectedRequirement('REQ-001');
+
+    expect(usePolicyStore.getState().selectedRequirement).toBe('REQ-001');
+  });
+
+  it('should clear selected requirement', () => {
+    usePolicyStore.getState().setSelectedRequirement('REQ-001');
+    usePolicyStore.getState().setSelectedRequirement(null);
+
+    expect(usePolicyStore.getState().selectedRequirement).toBeNull();
   });
 
   it('should clear selection', () => {

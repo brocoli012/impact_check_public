@@ -15,6 +15,10 @@ interface TicketCardProps {
   taskScore?: TaskScore;
   /** 소속 화면 이름 */
   screenName: string;
+  /** 선택 여부 */
+  selected?: boolean;
+  /** 카드 선택 핸들러 */
+  onSelect?: (taskId: string) => void;
 }
 
 /** 작업 유형 한국어 라벨 */
@@ -24,7 +28,7 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   config: '설정 변경',
 };
 
-function TicketCard({ task, taskScore, screenName }: TicketCardProps) {
+function TicketCard({ task, taskScore, screenName, selected, onSelect }: TicketCardProps) {
   const [showFiles, setShowFiles] = useState(false);
 
   const score = taskScore?.totalScore ?? 0;
@@ -32,7 +36,15 @@ function TicketCard({ task, taskScore, screenName }: TicketCardProps) {
   const gradeColors = GRADE_COLORS[grade];
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
+    <div
+      className={`bg-white rounded-lg border p-4 transition-shadow cursor-pointer ${
+        selected
+          ? 'border-purple-400 ring-2 ring-purple-200 shadow-md'
+          : 'border-gray-200 hover:shadow-md'
+      }`}
+      onClick={() => onSelect?.(task.id)}
+      data-testid={`ticket-card-${task.id}`}
+    >
       {/* Header: Type badge + Task name */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -114,7 +126,10 @@ function TicketCard({ task, taskScore, screenName }: TicketCardProps) {
       {task.affectedFiles.length > 0 && (
         <div className="mt-3">
           <button
-            onClick={() => setShowFiles(!showFiles)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowFiles(!showFiles);
+            }}
             className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
           >
             <svg

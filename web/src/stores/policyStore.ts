@@ -18,6 +18,8 @@ interface PolicyState {
   searchQuery: string;
   /** 선택된 카테고리 필터 */
   selectedCategory: string | null;
+  /** 선택된 요구사항 필터 */
+  selectedRequirement: string | null;
   /** 로딩 상태 */
   loading: boolean;
   /** 에러 메시지 */
@@ -31,6 +33,8 @@ interface PolicyState {
   setSearchQuery: (query: string) => void;
   /** 카테고리 필터 설정 */
   setSelectedCategory: (category: string | null) => void;
+  /** 요구사항 필터 설정 */
+  setSelectedRequirement: (reqId: string | null) => void;
   /** 선택 초기화 */
   clearSelection: () => void;
 }
@@ -42,6 +46,7 @@ export const usePolicyStore = create<PolicyState>()((set) => ({
   categories: [],
   searchQuery: '',
   selectedCategory: null,
+  selectedRequirement: null,
   loading: false,
   error: null,
 
@@ -112,6 +117,8 @@ export const usePolicyStore = create<PolicyState>()((set) => ({
   setSearchQuery: (query: string) => set({ searchQuery: query }),
 
   setSelectedCategory: (category: string | null) => set({ selectedCategory: category }),
+
+  setSelectedRequirement: (reqId: string | null) => set({ selectedRequirement: reqId }),
 
   clearSelection: () => set({ selectedPolicy: null }),
 }));

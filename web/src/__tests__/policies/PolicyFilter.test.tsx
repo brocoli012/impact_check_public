@@ -7,6 +7,51 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import PolicyFilter from '../../components/policies/PolicyFilter';
 import { usePolicyStore } from '../../stores/policyStore';
+import type { WebRequirement, Task } from '../../types';
+
+const mockRequirements: WebRequirement[] = [
+  {
+    id: 'REQ-001',
+    name: '장바구니 UI 개편',
+    description: '장바구니 화면의 레이아웃 및 UX를 전면 개편합니다.',
+    priority: 'high',
+    relatedFeatures: ['FEAT-001', 'FEAT-002'],
+  },
+  {
+    id: 'REQ-002',
+    name: '결제 연동 수정',
+    description: '장바구니 데이터 구조 변경에 따른 결제 화면 수정',
+    priority: 'medium',
+    relatedFeatures: ['FEAT-003'],
+  },
+];
+
+const mockTasks: Task[] = [
+  {
+    id: 'task-1',
+    title: '장바구니 UI 전면 개편',
+    type: 'FE',
+    actionType: 'modify',
+    description: '장바구니 화면의 레이아웃 및 UX를 전면 개편합니다.',
+    affectedFiles: [],
+    relatedApis: [],
+    planningChecks: [],
+    rationale: '',
+    sourceRequirementIds: ['REQ-001'],
+  },
+  {
+    id: 'task-3',
+    title: '결제 화면 장바구니 연동 수정',
+    type: 'FE',
+    actionType: 'modify',
+    description: '결제 화면 수정',
+    affectedFiles: [],
+    relatedApis: [],
+    planningChecks: [],
+    rationale: '',
+    sourceRequirementIds: ['REQ-002'],
+  },
+];
 
 describe('PolicyFilter', () => {
   beforeEach(() => {
@@ -16,6 +61,7 @@ describe('PolicyFilter', () => {
       categories: ['장바구니', '결제', '배송'],
       searchQuery: '',
       selectedCategory: null,
+      selectedRequirement: null,
       loading: false,
       error: null,
     });
@@ -120,5 +166,113 @@ describe('PolicyFilter', () => {
     fireEvent.click(clearButton);
 
     expect(input).toHaveValue('');
+  });
+
+  // ── Requirement dropdown tests ──
+
+  it('should render requirement dropdown when requirements are provided', () => {
+    render(
+      <PolicyFilter
+        resultCount={5}
+        totalCount={10}
+        requirements={mockRequirements}
+        tasks={mockTasks}
+      />,
+    );
+
+    expect(screen.getByText('요구사항:')).toBeInTheDocument();
+    expect(screen.getByLabelText('요구사항 필터')).toBeInTheDocument();
+  });
+
+  it('should not render requirement dropdown when no requirements', () => {
+    render(<PolicyFilter resultCount={5} totalCount={10} />);
+
+    expect(screen.queryByText('요구사항:')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('요구사항 필터')).not.toBeInTheDocument();
+  });
+
+  it('should not render requirement dropdown when requirements array is empty', () => {
+    render(
+      <PolicyFilter
+        resultCount={5}
+        totalCount={10}
+        requirements={[]}
+        tasks={mockTasks}
+      />,
+    );
+
+    expect(screen.queryByText('요구사항:')).not.toBeInTheDocument();
+  });
+
+  it('should list all requirements as options', () => {
+    render(
+      <PolicyFilter
+        resultCount={5}
+        totalCount={10}
+        requirements={mockRequirements}
+        tasks={mockTasks}
+      />,
+    );
+
+    const select = screen.getByLabelText('요구사항 필터');
+    expect(select).toBeInTheDocument();
+
+    // Default option
+    expect(screen.getByText('전체 요구사항')).toBeInTheDocument();
+    // Requirement options
+    expect(screen.getByText('REQ-001: 장바구니 UI 개편')).toBeInTheDocument();
+    expect(screen.getByText('REQ-002: 결제 연동 수정')).toBeInTheDocument();
+  });
+
+  it('should update store when requirement is selected', () => {
+    render(
+      <PolicyFilter
+        resultCount={5}
+        totalCount={10}
+        requirements={mockRequirements}
+        tasks={mockTasks}
+      />,
+    );
+
+    const select = screen.getByLabelText('요구사항 필터');
+    fireEvent.change(select, { target: { value: 'REQ-001' } });
+
+    const state = usePolicyStore.getState();
+    expect(state.selectedRequirement).toBe('REQ-001');
+  });
+
+  it('should reset store when requirement selection is cleared', () => {
+    usePolicyStore.setState({ selectedRequirement: 'REQ-001' });
+
+    render(
+      <PolicyFilter
+        resultCount={5}
+        totalCount={10}
+        requirements={mockRequirements}
+        tasks={mockTasks}
+      />,
+    );
+
+    const select = screen.getByLabelText('요구사항 필터');
+    fireEvent.change(select, { target: { value: '' } });
+
+    const state = usePolicyStore.getState();
+    expect(state.selectedRequirement).toBeNull();
+  });
+
+  it('should reflect current selectedRequirement in dropdown value', () => {
+    usePolicyStore.setState({ selectedRequirement: 'REQ-002' });
+
+    render(
+      <PolicyFilter
+        resultCount={5}
+        totalCount={10}
+        requirements={mockRequirements}
+        tasks={mockTasks}
+      />,
+    );
+
+    const select = screen.getByLabelText('요구사항 필터') as HTMLSelectElement;
+    expect(select.value).toBe('REQ-002');
   });
 });

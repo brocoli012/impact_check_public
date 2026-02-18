@@ -20,6 +20,7 @@ function Policies() {
     selectedPolicy,
     searchQuery,
     selectedCategory,
+    selectedRequirement,
     loading,
     error,
     fetchPolicies,
@@ -34,9 +35,23 @@ function Policies() {
     }
   }, [currentResult, fetchPolicies]);
 
+  // 기획서에서 요구사항 및 작업 목록 추출
+  const requirements = currentResult?.parsedSpec?.requirements;
+  const tasks = currentResult?.tasks;
+
   // 필터링된 정책 목록
   const filteredPolicies = useMemo(() => {
     let filtered = policies;
+
+    // 요구사항 필터: requirement → tasks → policies 체인
+    if (selectedRequirement && tasks) {
+      const relatedTaskIds = tasks
+        .filter((t) => t.sourceRequirementIds?.includes(selectedRequirement))
+        .map((t) => t.id);
+      filtered = filtered.filter((p) =>
+        p.relatedTaskIds.some((tid) => relatedTaskIds.includes(tid)),
+      );
+    }
 
     // 카테고리 필터
     if (selectedCategory) {
@@ -54,7 +69,7 @@ function Policies() {
     }
 
     return filtered;
-  }, [policies, selectedCategory, searchQuery]);
+  }, [policies, selectedRequirement, tasks, selectedCategory, searchQuery]);
 
   const handlePolicyClick = (policyId: string) => {
     if (currentResult) {
@@ -93,6 +108,8 @@ function Policies() {
       <PolicyFilter
         resultCount={filteredPolicies.length}
         totalCount={policies.length}
+        requirements={requirements}
+        tasks={tasks}
       />
 
       {/* Loading state */}
