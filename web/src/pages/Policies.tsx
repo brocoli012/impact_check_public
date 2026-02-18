@@ -48,9 +48,39 @@ function Policies() {
       const relatedTaskIds = tasks
         .filter((t) => t.sourceRequirementIds?.includes(selectedRequirement))
         .map((t) => t.id);
-      filtered = filtered.filter((p) =>
-        p.relatedTaskIds.some((tid) => relatedTaskIds.includes(tid)),
-      );
+      filtered = filtered.filter((p) => {
+        // 1) API에서 받은 relatedTaskIds로 먼저 체크
+        if (p.relatedTaskIds && p.relatedTaskIds.length > 0) {
+          return p.relatedTaskIds.some((tid) => relatedTaskIds.includes(tid));
+        }
+        // 2) 폴백: 정책의 affectedFiles와 해당 tasks의 affectedFiles 교집합 체크
+        const matchedTasks = tasks.filter((t) => relatedTaskIds.includes(t.id));
+        for (const task of matchedTasks) {
+          if (
+            p.affectedFiles?.some((pf) =>
+              task.affectedFiles?.some(
+                (tf) => pf.includes(tf) || tf.includes(pf),
+              ),
+            )
+          ) {
+            return true;
+          }
+        }
+        // 3) 정책 카테고리/이름에서 키워드 매칭
+        const policyText =
+          `${p.name} ${p.description} ${p.category}`.toLowerCase();
+        const matchedTaskTexts = matchedTasks.map(
+          (t) => `${t.title} ${t.description}`.toLowerCase(),
+        );
+        for (const taskText of matchedTaskTexts) {
+          const keywords = taskText
+            .split(/[\s,/]+/)
+            .filter((w) => w.length > 1);
+          const matches = keywords.filter((kw) => policyText.includes(kw));
+          if (matches.length >= 2) return true;
+        }
+        return false;
+      });
     }
 
     // 카테고리 필터
