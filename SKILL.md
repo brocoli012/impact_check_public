@@ -66,9 +66,11 @@ commands:
 시스템별 담당자 및 팀 정보를 관리합니다.
 실행: node {skill_dir}/dist/index.js owners [--add] [--edit <system>] [--remove <system>]
 
-### /impact annotations [generate [path]] [view [path]]
+### /impact annotations [generate [path]] [view [path] [--format md|yaml] [--output <dir>]]
 보강 주석을 생성하거나 기존 보강 주석을 조회합니다.
-실행: node {skill_dir}/dist/index.js annotations [generate [path]] [view [path]]
+- `view --format md|yaml`: 출력 형식 지정 (기본: yaml)
+- `view --output <dir>`: md 파일로 저장 (디렉토리 자동 생성). 단일 파일 지정 시 해당 파일만, 미지정 시 통계 + 전체 파일 저장
+실행: node {skill_dir}/dist/index.js annotations [generate [path]] [view [path] [--format md|yaml] [--output <dir>]]
 
 ### /impact projects [--switch <name>] [--remove <name>] [--archive <name>]
 멀티 프로젝트를 관리합니다 (전환, 제거, 아카이브).

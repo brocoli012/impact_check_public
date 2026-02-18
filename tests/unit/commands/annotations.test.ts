@@ -55,9 +55,12 @@ jest.mock('fs', () => {
     ...actual,
     existsSync: jest.fn().mockReturnValue(true),
     readFileSync: jest.fn().mockReturnValue('// mock file content'),
+    writeFileSync: jest.fn(),
+    mkdirSync: jest.fn(),
   };
 });
 
+import * as fs from 'fs';
 import { readJsonFile } from '../../../src/utils/file';
 
 // ============================================================
@@ -511,6 +514,86 @@ describe('AnnotationsCommand', () => {
         expect(allOutput).toContain('무료 배송 정책');
         expect(allOutput).toContain('배송');
         expect(allOutput).toContain('프로모션');
+      });
+    });
+
+    // --output option tests
+    describe('--output', () => {
+      beforeEach(() => {
+        (fs.writeFileSync as jest.Mock).mockClear();
+        (fs.mkdirSync as jest.Mock).mockClear();
+      });
+
+      it('should parse --output option correctly', async () => {
+        mockAnnotationLoad.mockResolvedValue(createTestAnnotationFile());
+
+        const cmd = new AnnotationsCommand(['view', 'src/services/shipping.ts', '--output', '/tmp/out']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+        expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp/out', { recursive: true });
+      });
+
+      it('should save single file annotation as md when --output is specified', async () => {
+        const annotationFile = createTestAnnotationFile();
+        mockAnnotationLoad.mockResolvedValue(annotationFile);
+
+        const cmd = new AnnotationsCommand(['view', 'src/services/shipping.ts', '--output', '/tmp/out']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('shipping.ts.annotation.md'),
+          expect.stringContaining('# shipping.ts 어노테이션'),
+          'utf-8',
+        );
+      });
+
+      it('should save stats and individual files when --output is specified without path', async () => {
+        mockAnnotationGetMeta.mockResolvedValue(createTestMeta());
+        const annotationFile = createTestAnnotationFile();
+        mockAnnotationLoadAll.mockResolvedValue(new Map([
+          ['src/services/shipping.ts', annotationFile],
+        ]));
+
+        const cmd = new AnnotationsCommand(['view', '--output', '/tmp/out']);
+        const result = await cmd.execute();
+
+        expect(result.code).toBe(ResultCode.SUCCESS);
+
+        // stats.annotation.md 저장 확인
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('stats.annotation.md'),
+          expect.stringContaining('# 어노테이션 통계'),
+          'utf-8',
+        );
+
+        // 개별 파일 저장 확인
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('shipping.ts.annotation.md'),
+          expect.stringContaining('# shipping.ts 어노테이션'),
+          'utf-8',
+        );
+      });
+
+      it('should create output directory with recursive option', async () => {
+        mockAnnotationLoad.mockResolvedValue(createTestAnnotationFile());
+
+        const cmd = new AnnotationsCommand(['view', 'src/services/shipping.ts', '--output', '/tmp/deep/nested/dir']);
+        await cmd.execute();
+
+        expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp/deep/nested/dir', { recursive: true });
+      });
+
+      it('should log saved file paths', async () => {
+        mockAnnotationLoad.mockResolvedValue(createTestAnnotationFile());
+
+        const cmd = new AnnotationsCommand(['view', 'src/services/shipping.ts', '--output', '/tmp/out']);
+        await cmd.execute();
+
+        const allOutput = consoleSpy.mock.calls.map((call: unknown[]) => call.map(String).join(' ')).join('\n');
+        expect(allOutput).toContain('저장 완료:');
+        expect(allOutput).toContain('shipping.ts.annotation.md');
       });
     });
   });
