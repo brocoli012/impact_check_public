@@ -193,8 +193,13 @@ export class DependencyGraphBuilder {
    * import 경로를 실제 파일 경로로 해석
    */
   private resolveImportPath(sourceFile: string, importSource: string): string | null {
-    // node_modules 패키지는 건너뛰기
+    // node_modules 패키지는 건너뛰기 (단, Java 패키지 import는 예외)
     if (!importSource.startsWith('.') && !importSource.startsWith('/')) {
+      // Java/Kotlin 패키지 경로 해석 시도 (예: com.example.order → com/example/order)
+      if (importSource.match(/^[a-z]+\.[a-z]/)) {
+        const javaPath = importSource.replace(/\./g, '/');
+        return this.normalizeFilePath(javaPath);
+      }
       return null;
     }
 
@@ -202,7 +207,7 @@ export class DependencyGraphBuilder {
     let resolvedPath = path.join(sourceDir, importSource);
 
     // 확장자 자동 추가 시도
-    const extensions = ['.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+    const extensions = ['.ts', '.tsx', '.js', '.jsx', '.java', '.kt', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
     for (const ext of extensions) {
       const candidate = resolvedPath + ext;
       // 실제 파일 시스템을 확인하지 않고 경로만 정규화
@@ -234,16 +239,30 @@ export class DependencyGraphBuilder {
       filePath.includes('/api/') ||
       filePath.includes('/routes/') ||
       filePath.includes('/controllers/') ||
-      filePath.includes('/handlers/')
+      filePath.includes('/handlers/') ||
+      filePath.includes('/controller/')
     ) {
       return 'api';
+    }
+
+    // Spring 서비스/리포지토리 패턴
+    if (
+      filePath.includes('/service/') ||
+      filePath.includes('/services/') ||
+      filePath.includes('/repository/') ||
+      filePath.includes('/repositories/')
+    ) {
+      return 'module';
     }
 
     // model 패턴
     if (
       filePath.includes('/models/') ||
       filePath.includes('/entities/') ||
-      filePath.includes('/schemas/')
+      filePath.includes('/entity/') ||
+      filePath.includes('/schemas/') ||
+      filePath.includes('/domain/') ||
+      filePath.includes('/dto/')
     ) {
       return 'model';
     }

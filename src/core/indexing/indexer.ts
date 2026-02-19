@@ -9,6 +9,11 @@ import { CodeIndex, IndexMeta, FileInfo, ChangedFileSet } from '../../types/inde
 import { ParsedFile } from './types';
 import { FileScanner } from './scanner';
 import { TypeScriptParser } from './parsers/typescript-parser';
+import { JavaParser } from './parsers/java-parser';
+import { KotlinParser } from './parsers/kotlin-parser';
+import { JavaAstParser } from './parsers/java-ast-parser';
+import { KotlinAstParser } from './parsers/kotlin-ast-parser';
+import { isTreeSitterAvailable } from './parsers/tree-sitter-loader';
 import { BaseParser } from './parsers/base-parser';
 import { DependencyGraphBuilder } from './graph-builder';
 import { PolicyExtractor } from './policy-extractor';
@@ -32,16 +37,66 @@ import { logger } from '../../utils/logger';
 export class Indexer {
   private readonly scanner: FileScanner;
   private readonly parsers: BaseParser[];
+  private readonly regexFallbackParsers: BaseParser[];
   private readonly graphBuilder: DependencyGraphBuilder;
   private readonly policyExtractor: PolicyExtractor;
   private readonly annotationsEnabled: boolean;
 
-  constructor(options?: { annotationsEnabled?: boolean }) {
+  constructor(options?: { annotationsEnabled?: boolean; parserMode?: 'ast' | 'regex' | 'auto' }) {
     this.scanner = new FileScanner();
-    this.parsers = [new TypeScriptParser()];
+    const { primary, regexFallback } = this.initParsers(options?.parserMode ?? 'auto');
+    this.parsers = primary;
+    this.regexFallbackParsers = regexFallback;
     this.graphBuilder = new DependencyGraphBuilder();
     this.policyExtractor = new PolicyExtractor();
     this.annotationsEnabled = options?.annotationsEnabled ?? false;
+  }
+
+  /**
+   * JVM 파서 초기화 전략
+   *
+   * - 'ast': tree-sitter AST 파서 강제 (실패 시 에러)
+   * - 'regex': Phase 1 Regex 파서 강제
+   * - 'auto' (기본): tree-sitter 가용 시 AST 파서, 불가 시 Regex 폴백
+   *
+   * 환경 변수 PARSER_MODE 로도 설정 가능 (코드 파라미터 우선)
+   */
+  private initParsers(mode: 'ast' | 'regex' | 'auto'): { primary: BaseParser[]; regexFallback: BaseParser[] } {
+    const effectiveMode = mode !== 'auto' ? mode : (process.env.PARSER_MODE as 'ast' | 'regex' | 'auto') || 'auto';
+
+    const regexParsers = [new JavaParser(), new KotlinParser()];
+
+    if (effectiveMode === 'regex') {
+      logger.info('Parser mode: regex (Phase 1)');
+      return {
+        primary: [new TypeScriptParser(), new JavaParser(), new KotlinParser()],
+        regexFallback: [],
+      };
+    }
+
+    if (effectiveMode === 'ast') {
+      logger.info('Parser mode: ast (Phase 2 - tree-sitter)');
+      return {
+        primary: [new TypeScriptParser(), new JavaAstParser(), new KotlinAstParser()],
+        regexFallback: regexParsers,
+      };
+    }
+
+    // auto 모드: tree-sitter 가용 여부에 따라 자동 선택
+    const treeSitterOk = isTreeSitterAvailable();
+    if (treeSitterOk) {
+      logger.info('Parser mode: auto → AST parsers selected (tree-sitter available)');
+      return {
+        primary: [new TypeScriptParser(), new JavaAstParser(), new KotlinAstParser()],
+        regexFallback: regexParsers,
+      };
+    }
+
+    logger.info('Parser mode: auto → Regex parsers selected (tree-sitter unavailable, fallback)');
+    return {
+      primary: [new TypeScriptParser(), new JavaParser(), new KotlinParser()],
+      regexFallback: [],
+    };
   }
 
   /**
@@ -414,6 +469,9 @@ export class Indexer {
 
   /**
    * 파일 목록을 파싱
+   *
+   * AST 파서가 빈 결과(imports=0, exports=0, functions=0)를 반환하면,
+   * regexFallbackParsers로 해당 파일을 재시도한다 (per-file fallback).
    */
   private async parseFiles(
     projectPath: string,
@@ -428,7 +486,17 @@ export class Indexer {
       try {
         const absolutePath = path.join(projectPath, file.path);
         const content = fs.readFileSync(absolutePath, 'utf-8');
-        const parsed = await parser.parse(file.path, content);
+        let parsed = await parser.parse(file.path, content);
+
+        // per-file fallback: AST 파서가 빈 결과를 반환한 경우 Regex 파서로 재시도
+        if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
+          const fallbackParser = this.findFallbackParser(file.path);
+          if (fallbackParser) {
+            logger.debug(`Per-file fallback: ${file.path} (AST empty → Regex retry)`);
+            parsed = await fallbackParser.parse(file.path, content);
+          }
+        }
+
         parsedFiles.push(parsed);
       } catch (err) {
         logger.debug(`Failed to parse ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
@@ -436,6 +504,25 @@ export class Indexer {
     }
 
     return parsedFiles;
+  }
+
+  /**
+   * ParsedFile이 빈 결과인지 확인 (imports=0, exports=0, functions=0)
+   */
+  private isEmptyParseResult(parsed: ParsedFile): boolean {
+    return parsed.imports.length === 0 && parsed.exports.length === 0 && parsed.functions.length === 0;
+  }
+
+  /**
+   * regexFallbackParsers에서 해당 파일에 적합한 파서 찾기
+   */
+  private findFallbackParser(filePath: string): BaseParser | null {
+    for (const parser of this.regexFallbackParsers) {
+      if (parser.canParse(filePath)) {
+        return parser;
+      }
+    }
+    return null;
   }
 
   /**
