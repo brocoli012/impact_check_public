@@ -138,6 +138,235 @@ describe('DependencyGraphBuilder', () => {
     });
   });
 
+  // ============================================================
+  // TASK-061: Java/Kotlin 패키지 import → 파일 경로 매칭
+  // ============================================================
+  describe('Java/Kotlin package import resolution (TASK-061)', () => {
+    it('should resolve Java package import to full file path in nodeMap', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/main/java/com/example/order/OrderController.java',
+          imports: [
+            { source: 'com.example.order.OrderService', specifiers: ['OrderService'], isDefault: false, line: 3 },
+          ],
+        }),
+        createParsedFile({
+          filePath: 'src/main/java/com/example/order/OrderService.java',
+        }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].from).toBe('src/main/java/com/example/order/OrderController.java');
+      expect(importEdges[0].to).toBe('src/main/java/com/example/order/OrderService.java');
+    });
+
+    it('should resolve Kotlin package import to full file path in nodeMap', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/main/kotlin/com/example/user/UserController.kt',
+          imports: [
+            { source: 'com.example.user.UserService', specifiers: ['UserService'], isDefault: false, line: 3 },
+          ],
+        }),
+        createParsedFile({
+          filePath: 'src/main/kotlin/com/example/user/UserService.kt',
+        }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].from).toBe('src/main/kotlin/com/example/user/UserController.kt');
+      expect(importEdges[0].to).toBe('src/main/kotlin/com/example/user/UserService.kt');
+    });
+
+    it('should resolve Java import across different source roots', () => {
+      // import가 다른 모듈 경로에 있을 수 있음
+      const files = [
+        createParsedFile({
+          filePath: 'module-a/src/main/java/com/example/FeatureA.java',
+          imports: [
+            { source: 'com.example.common.SharedUtil', specifiers: ['SharedUtil'], isDefault: false, line: 5 },
+          ],
+        }),
+        createParsedFile({
+          filePath: 'module-common/src/main/java/com/example/common/SharedUtil.java',
+        }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].to).toBe('module-common/src/main/java/com/example/common/SharedUtil.java');
+    });
+
+    it('should not create edge when Java package import has no matching node', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/main/java/com/example/order/OrderController.java',
+          imports: [
+            { source: 'com.example.order.NonExistentService', specifiers: ['NonExistentService'], isDefault: false, line: 3 },
+          ],
+        }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(0);
+    });
+
+    it('should work with incremental build (addNode/addEdges) for Java imports', () => {
+      const file1 = createParsedFile({
+        filePath: 'src/main/java/com/example/order/OrderController.java',
+        imports: [
+          { source: 'com.example.order.OrderService', specifiers: ['OrderService'], isDefault: false, line: 3 },
+        ],
+      });
+      const file2 = createParsedFile({
+        filePath: 'src/main/java/com/example/order/OrderService.java',
+      });
+
+      builder.beginIncremental();
+      builder.addNode(file1);
+      builder.addNode(file2);
+      builder.addEdges(file1);
+      builder.addEdges(file2);
+      const graph = builder.finishIncremental();
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].to).toBe('src/main/java/com/example/order/OrderService.java');
+    });
+  });
+
+  // ============================================================
+  // TASK-062: 확장자 폴백 (모든 후보 시도)
+  // ============================================================
+  describe('Extension fallback resolution (TASK-062)', () => {
+    it('should resolve import to .java file when .ts does not exist', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/main/java/com/example/App.java',
+          imports: [
+            { source: './Helper', specifiers: ['Helper'], isDefault: false, line: 1 },
+          ],
+        }),
+        createParsedFile({
+          filePath: 'src/main/java/com/example/Helper.java',
+        }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].to).toBe('src/main/java/com/example/Helper.java');
+    });
+
+    it('should resolve import to .kt file when earlier extensions do not match', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/main/kotlin/com/example/App.kt',
+          imports: [
+            { source: './Repository', specifiers: ['Repository'], isDefault: false, line: 1 },
+          ],
+        }),
+        createParsedFile({
+          filePath: 'src/main/kotlin/com/example/Repository.kt',
+        }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].to).toBe('src/main/kotlin/com/example/Repository.kt');
+    });
+
+    it('should prefer .ts when both .ts and .java exist in nodeMap', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/App.ts',
+          imports: [
+            { source: './Service', specifiers: ['Service'], isDefault: false, line: 1 },
+          ],
+        }),
+        createParsedFile({ filePath: 'src/Service.ts' }),
+        createParsedFile({ filePath: 'src/Service.java' }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      // .ts comes first in the extensions list, so it should be preferred
+      expect(importEdges[0].to).toBe('src/Service.ts');
+    });
+
+    it('should still resolve existing .ts imports correctly (regression test)', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/App.tsx',
+          imports: [
+            { source: './utils/helpers', specifiers: ['formatPrice'], isDefault: false, line: 1 },
+          ],
+        }),
+        createParsedFile({ filePath: 'src/utils/helpers.ts' }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].from).toBe('src/App.tsx');
+      expect(importEdges[0].to).toBe('src/utils/helpers.ts');
+    });
+
+    it('should resolve index file imports correctly (regression test)', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/App.tsx',
+          imports: [
+            { source: './components', specifiers: ['Button'], isDefault: false, line: 1 },
+          ],
+        }),
+        createParsedFile({ filePath: 'src/components/index.ts' }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].to).toBe('src/components/index.ts');
+    });
+
+    it('should handle import with explicit extension without modification', () => {
+      const files = [
+        createParsedFile({
+          filePath: 'src/main/java/com/example/App.java',
+          imports: [
+            { source: './Helper.java', specifiers: ['Helper'], isDefault: false, line: 1 },
+          ],
+        }),
+        createParsedFile({
+          filePath: 'src/main/java/com/example/Helper.java',
+        }),
+      ];
+
+      const graph = builder.build(files);
+
+      const importEdges = graph.graph.edges.filter(e => e.type === 'import');
+      expect(importEdges.length).toBe(1);
+      expect(importEdges[0].to).toBe('src/main/java/com/example/Helper.java');
+    });
+  });
+
   describe('getAffectedNodes()', () => {
     it('should find nodes that import the given node', () => {
       const files = [

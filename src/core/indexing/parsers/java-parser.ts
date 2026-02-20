@@ -72,8 +72,12 @@ export class JavaParser extends BaseParser {
       // 메서드 파싱
       this.parseMethods(processed, content, lineTable, filePath, classAnnotations, result);
 
+      // 클래스 이름 추출 (생성자 주입 판별용)
+      const classNameMatch = processed.match(/(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum|record)\s+(\w+)/);
+      const className = classNameMatch ? classNameMatch[1] : '';
+
       // DI 패턴 파싱
-      this.parseDIPatterns(processed, content, lineTable, result);
+      this.parseDIPatterns(processed, content, lineTable, className, result);
 
     } catch (err) {
       logger.debug(`JavaParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -388,7 +392,7 @@ export class JavaParser extends BaseParser {
   // DI 패턴 파싱
   // ============================================================
 
-  private parseDIPatterns(processed: string, _content: string, lineTable: number[], result: ParsedFile): void {
+  private parseDIPatterns(processed: string, _content: string, lineTable: number[], className: string, result: ParsedFile): void {
     // @Autowired 필드 주입
     const fieldDIRegex = /@(?:Autowired|Inject|Resource)\s+(?:private\s+|protected\s+)?(\w+)\s+(\w+)\s*;/g;
     let match: RegExpExecArray | null;
@@ -434,10 +438,15 @@ export class JavaParser extends BaseParser {
     }
 
     // 생성자 주입 패턴 (Spring 권장 방식)
+    // 클래스 이름과 동일한 메서드만 생성자로 인식하여 일반 메서드 오탐 방지
     const constructorRegex = /(?:public\s+)?(\w+)\s*\(([^)]*)\)\s*\{/g;
     while ((match = constructorRegex.exec(processed)) !== null) {
+      const matchedName = match[1];
       const paramsStr = match[2];
       const line = getLineFromTable(lineTable, match.index);
+
+      // 클래스 이름과 동일한 경우에만 생성자로 처리
+      if (!className || matchedName !== className) continue;
 
       // 각 파라미터에서 타입 추출
       const paramRegex = /(?:final\s+)?([\w<>\[\]]+)\s+(\w+)/g;

@@ -3,10 +3,11 @@
  * @description AST vs Regex 파서 결과를 정규화하여 일관된 형태로 변환
  *
  * 정규화 항목:
- *   1. className 정규화 (AST: "OuterClass.InnerClass" → "InnerClass")
+ *   1. className 정규화 (AST: "OuterClass.InnerClass" → "OuterClass$InnerClass")
  *   2. line 번호 검증 (음수/0 방지, endLine >= startLine 보장)
  *   3. signature 공백 정규화
  *   4. TASK-043: import 문자열 인터닝 (동일 import source 공유)
+ *   5. TASK-067: wildcard import source 통일 ("pkg.*" → "pkg")
  */
 
 import { ParsedFile } from '../types';
@@ -61,22 +62,24 @@ export class ParsedFileNormalizer {
 
     try {
       // 1. exports: className 정규화 (중첩 클래스 처리)
+      // TASK-065: Outer.Inner → Outer$Inner (Java 관행, 계층 정보 보존)
       if (normalized.exports) {
         normalized.exports = normalized.exports.map(exp => ({
           ...exp,
           name: parserType === 'ast' && exp.name.includes('.')
-            ? exp.name.split('.').pop()!
+            ? exp.name.replace(/\./g, '$')
             : exp.name,
           line: Math.max(1, exp.line),
         }));
       }
 
-      // 2. imports: line 번호 검증 + TASK-043: 문자열 인터닝
+      // 2. imports: line 번호 검증 + TASK-043: 문자열 인터닝 + TASK-067: wildcard 통일
       if (normalized.imports) {
         normalized.imports = normalized.imports.map(imp => ({
           ...imp,
+          // TASK-067: wildcard import source 통일 (AST: "pkg.*" → "pkg", Regex는 이미 "pkg")
           // TASK-043: import source 문자열 인터닝
-          source: this.stringInterner.intern(imp.source),
+          source: this.stringInterner.intern(this.normalizeImportSource(imp.source)),
           specifiers: imp.specifiers.map(s => this.stringInterner.intern(s)),
           line: Math.max(1, imp.line),
         }));
@@ -93,11 +96,12 @@ export class ParsedFileNormalizer {
       }
 
       // 4. components: className 정규화
+      // TASK-065: Outer.Inner → Outer$Inner (Java 관행, 계층 정보 보존)
       if (normalized.components) {
         normalized.components = normalized.components.map(comp => ({
           ...comp,
           name: parserType === 'ast' && comp.name.includes('.')
-            ? comp.name.split('.').pop()!
+            ? comp.name.replace(/\./g, '$')
             : comp.name,
           line: Math.max(1, comp.line),
         }));
@@ -131,6 +135,17 @@ export class ParsedFileNormalizer {
    */
   get internPoolSize(): number {
     return this.stringInterner.size;
+  }
+
+  /**
+   * TASK-067: import source 정규화
+   * AST 파서는 wildcard import를 "pkg.*"로, Regex 파서는 "pkg"로 기록하므로
+   * 후행 ".*"를 제거하여 통일된 형태로 변환한다.
+   * @param source - 원본 import source
+   * @returns 정규화된 import source
+   */
+  private normalizeImportSource(source: string): string {
+    return source.endsWith('.*') ? source.slice(0, -2) : source;
   }
 
   /**

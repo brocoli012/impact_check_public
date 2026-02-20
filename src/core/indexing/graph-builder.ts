@@ -52,7 +52,7 @@ export class DependencyGraphBuilder {
       const sourceId = this.normalizeFilePath(file.filePath);
 
       for (const imp of file.imports) {
-        const resolvedTarget = this.resolveImportPath(file.filePath, imp.source);
+        const resolvedTarget = this.resolveImportPath(file.filePath, imp.source, nodeMap);
         if (resolvedTarget && nodeMap.has(resolvedTarget)) {
           edges.push({
             from: sourceId,
@@ -150,7 +150,7 @@ export class DependencyGraphBuilder {
     const sourceId = this.normalizeFilePath(file.filePath);
 
     for (const imp of file.imports) {
-      const resolvedTarget = this.resolveImportPath(file.filePath, imp.source);
+      const resolvedTarget = this.resolveImportPath(file.filePath, imp.source, this._nodeMap);
       if (resolvedTarget && this._nodeMap.has(resolvedTarget)) {
         this._edges.push({
           from: sourceId,
@@ -304,14 +304,34 @@ export class DependencyGraphBuilder {
 
   /**
    * import 경로를 실제 파일 경로로 해석
+   * @param sourceFile - 소스 파일 경로
+   * @param importSource - import 문의 소스 경로
+   * @param nodeMap - 노드맵 (경로 → 노드) - 확장자/패키지 해석 시 매칭에 사용
    */
-  private resolveImportPath(sourceFile: string, importSource: string): string | null {
+  private resolveImportPath(
+    sourceFile: string,
+    importSource: string,
+    nodeMap?: Map<string, DependencyNode>,
+  ): string | null {
     // node_modules 패키지는 건너뛰기 (단, Java 패키지 import는 예외)
     if (!importSource.startsWith('.') && !importSource.startsWith('/')) {
       // Java/Kotlin 패키지 경로 해석 시도 (예: com.example.order → com/example/order)
       if (importSource.match(/^[a-z]+\.[a-z]/)) {
         const javaPath = importSource.replace(/\./g, '/');
-        return this.normalizeFilePath(javaPath);
+        const normalizedJavaPath = this.normalizeFilePath(javaPath);
+
+        // TASK-061: nodeMap에서 suffix 매칭으로 실제 파일 경로 탐색
+        if (nodeMap) {
+          for (const key of nodeMap.keys()) {
+            // 확장자 제거한 키와 비교 (예: src/main/java/com/example/OrderService.java → src/main/java/com/example/OrderService)
+            const keyWithoutExt = key.replace(/\.\w+$/, '');
+            if (keyWithoutExt.endsWith(normalizedJavaPath)) {
+              return key;
+            }
+          }
+        }
+
+        return normalizedJavaPath;
       }
       return null;
     }
@@ -319,14 +339,22 @@ export class DependencyGraphBuilder {
     const sourceDir = path.dirname(sourceFile);
     let resolvedPath = path.join(sourceDir, importSource);
 
-    // 확장자 자동 추가 시도
-    const extensions = ['.ts', '.tsx', '.js', '.jsx', '.java', '.kt', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
-    for (const ext of extensions) {
-      const candidate = resolvedPath + ext;
-      // 실제 파일 시스템을 확인하지 않고 경로만 정규화
-      if (!resolvedPath.match(/\.\w+$/)) {
-        return this.normalizeFilePath(candidate);
+    // TASK-062: 확장자 자동 추가 시도 - nodeMap이 있으면 매칭되는 후보 반환
+    if (!resolvedPath.match(/\.\w+$/)) {
+      const extensions = ['.ts', '.tsx', '.js', '.jsx', '.java', '.kt', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+
+      if (nodeMap) {
+        // nodeMap에 존재하는 첫 번째 후보를 반환
+        for (const ext of extensions) {
+          const candidate = this.normalizeFilePath(resolvedPath + ext);
+          if (nodeMap.has(candidate)) {
+            return candidate;
+          }
+        }
       }
+
+      // nodeMap이 없거나 매칭 실패 시 첫 번째 확장자로 폴백
+      return this.normalizeFilePath(resolvedPath + extensions[0]);
     }
 
     return this.normalizeFilePath(resolvedPath);

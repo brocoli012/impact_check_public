@@ -98,6 +98,14 @@ describe('jvm-parser-utils', () => {
       expect(isSpringComponent(['Repository'])).toBe(true);
     });
 
+    it('should detect FeignClient', () => {
+      expect(isSpringComponent(['FeignClient'])).toBe(true);
+    });
+
+    it('should detect Mapper (MyBatis)', () => {
+      expect(isSpringComponent(['Mapper'])).toBe(true);
+    });
+
     it('should return false for non-component annotations', () => {
       expect(isSpringComponent(['Entity', 'Table'])).toBe(false);
     });
@@ -118,6 +126,22 @@ describe('jvm-parser-utils', () => {
 
     it('should prioritize RestController over Component', () => {
       expect(mapSpringComponentType(['Component', 'RestController'])).toBe('rest-controller');
+    });
+
+    it('should map FeignClient to api-client', () => {
+      expect(mapSpringComponentType(['FeignClient'])).toBe('api-client');
+    });
+
+    it('should map Mapper to mapper', () => {
+      expect(mapSpringComponentType(['Mapper'])).toBe('mapper');
+    });
+
+    it('should prioritize FeignClient over Component', () => {
+      expect(mapSpringComponentType(['Component', 'FeignClient'])).toBe('api-client');
+    });
+
+    it('should prioritize Service over Mapper', () => {
+      expect(mapSpringComponentType(['Mapper', 'Service'])).toBe('service');
     });
 
     it('should default to component', () => {

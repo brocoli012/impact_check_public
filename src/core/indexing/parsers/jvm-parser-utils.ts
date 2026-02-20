@@ -27,6 +27,8 @@ export const SPRING_COMPONENT_ANNOTATIONS = [
   'Repository',
   'Component',
   'Configuration',
+  'FeignClient',
+  'Mapper',
 ];
 
 /** 의존성 주입(DI) 어노테이션 */
@@ -205,10 +207,12 @@ export function mapSpringComponentType(annotations: string[]): string {
     'Service': 'service',
     'Repository': 'repository',
     'Configuration': 'configuration',
+    'FeignClient': 'api-client',
+    'Mapper': 'mapper',
     'Component': 'component',
   };
 
-  const priority = ['RestController', 'Controller', 'Service', 'Repository', 'Configuration', 'Component'];
+  const priority = ['RestController', 'Controller', 'Service', 'Repository', 'Configuration', 'FeignClient', 'Mapper', 'Component'];
   for (const key of priority) {
     if (annotations.includes(key)) {
       return typeMap[key];
