@@ -197,6 +197,13 @@ class KotlinParser extends base_parser_1.BaseParser {
             // 메서드 종료 라인 추정
             const endLine = this.estimateMethodEndLine(processed, lineTable, funStartOffset);
             const displayName = receiverType ? `${receiverType}.${funcName}` : funcName;
+            // 어노테이션을 @접두사 포함 형태로 수집 (FunctionInfo.annotations용)
+            const fullAnnotations = [];
+            const fullAnnoRegex = /@(\w+(?:\([^)]*\))?)/g;
+            let fullAnnoMatch;
+            while ((fullAnnoMatch = fullAnnoRegex.exec(annotationBlock)) !== null) {
+                fullAnnotations.push(`@${fullAnnoMatch[1]}`);
+            }
             const funcInfo = {
                 name: displayName,
                 signature: `fun ${displayName}(${paramsStr.trim()})${returnType ? `: ${returnType}` : ''}`,
@@ -206,6 +213,7 @@ class KotlinParser extends base_parser_1.BaseParser {
                 returnType: returnType || undefined,
                 isAsync: isSuspend || isReactive,
                 isExported: !processed.substring(Math.max(0, funStartOffset - 30), funStartOffset).includes('private'),
+                ...(fullAnnotations.length > 0 ? { annotations: fullAnnotations } : {}),
             };
             result.functions.push(funcInfo);
             // Spring 라우트 어노테이션 확인

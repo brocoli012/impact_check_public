@@ -560,6 +560,89 @@ node {skill_dir}/dist/index.js policies
 
 ---
 
+## AI 어노테이션 보강 프로토콜
+
+사용자가 "어노테이션 보강", "정책 딥스캔", "AI 주석 생성", "심층 분석", "annotation enhance" 등을 요청하면 아래 프로토콜을 따른다.
+이 프로토콜은 규칙 기반 1차 생성과 AI 보강 2차 분석의 하이브리드 접근법이다.
+
+### Step 1: 규칙 기반 1차 생성
+```bash
+node {skill_dir}/dist/index.js annotations generate [path]
+```
+- 기존 규칙 기반 분석기가 함수명 패턴, 메서드 어노테이션, 파일 유형을 기반으로 정책 추론
+- 결과 확인:
+```bash
+node {skill_dir}/dist/index.js annotations view --format md
+```
+
+### Step 2: 미탐지/저신뢰 파일 식별
+생성된 어노테이션에서 다음 파일들을 AI 보강 대상으로 식별한다:
+1. **정책 0건인 비즈니스 파일**: service, handler, validator, scheduler 등 비즈니스 로직이 있을 것으로 예상되지만 정책이 추론되지 않은 파일
+2. **신뢰도 0.5 미만인 파일**: 규칙 기반 분석의 정보가 부족한 파일
+3. **사용자가 지정한 경로**: 특정 디렉토리나 파일을 명시한 경우
+
+식별 기준:
+```bash
+node {skill_dir}/dist/index.js annotations view --format md
+```
+출력에서 정책 수가 0인 service/handler/validator 파일, 또는 평균 신뢰도가 낮은 시스템을 목록화한다.
+
+### Step 3: AI 보강 분석
+미탐지/저신뢰 파일에 대해 Claude Code가 직접 코드를 읽고 분석한다:
+
+1. **Read 도구로 대상 파일 읽기** (최대 20개 파일, 파일당 500줄 이내)
+2. **분석 항목**:
+   - Spring 어노테이션 패턴에서 정책 추출 (`@Transactional`, `@Cacheable`, `@Scheduled`, `@PreAuthorize` 등)
+   - 비즈니스 로직의 조건분기(`if/else`, `switch`)에서 비즈니스 규칙 추출
+   - 상수값/매직넘버에서 정책 상수 추출
+   - 의존성 주입 패턴에서 시스템 간 연결 관계 추출
+   - 예외 처리 패턴에서 에러 정책 추출
+
+3. **출력 형식**: 각 파일별로 발견한 정책을 다음 형식으로 정리
+```
+파일: src/main/java/com/example/order/OrderService.java
+발견된 정책:
+  1. [트랜잭션] createOrder - @Transactional(rollbackFor=Exception.class) 기반
+  2. [비즈니스] calculateDiscount - 등급별 할인율 조건분기 (GOLD: 10%, SILVER: 5%)
+  3. [제한] validateOrderQuantity - 최대 주문 수량 99개 제한
+```
+
+### Step 4: 결과 병합
+AI가 발견한 정책을 기존 어노테이션 YAML에 병합한다.
+
+1. 기존 어노테이션 로드:
+```bash
+node {skill_dir}/dist/index.js annotations view [파일경로]
+```
+
+2. AI 분석 결과를 반영하여 어노테이션 YAML 업데이트:
+   - `userModified: true`로 마킹하여 다음 규칙 기반 갱신 시 보존
+   - 기존 규칙 기반 결과와 중복되지 않도록 체크
+   - 새 정책의 `inferred_from` 필드에 "AI 보강 분석" 명시
+
+3. 업데이트된 어노테이션 저장:
+   - Write 도구로 `~/.impact/annotations/{projectId}/` 하위 YAML 파일 직접 수정
+   - 또는 `annotations generate`로 규칙 기반 재생성 후 수동 보강
+
+### Step 5: 결과 보고
+```
+AI 어노테이션 보강 완료:
+  분석 파일: {N}개
+  신규 정책: {M}개
+  보강된 시스템: {시스템1}, {시스템2}
+
+보강 결과 확인:
+  node {skill_dir}/dist/index.js annotations view --format md
+```
+
+### 주의사항
+- AI 보강은 규칙 기반 1차 생성 이후에만 실행 (1차 없이 AI만 단독 실행 불가)
+- 대규모 프로젝트에서는 시스템/디렉토리 단위로 분할 분석
+- AI가 생성한 정책은 반드시 `userModified: true`로 마킹
+- 파일당 최대 500줄까지만 읽기 (대형 파일은 핵심 메서드만 선별)
+
+---
+
 ## 대화형 모드 (Conversational Mode)
 
 ### 활성화 트리거
@@ -656,6 +739,7 @@ node {skill_dir}/dist/index.js policies
 | 주석 생성 | `node {skill_dir}/dist/index.js annotations generate` | "주석 생성", "코드 분석 메모" |
 | 프로젝트 전환 | `node {skill_dir}/dist/index.js projects --switch <name>` | "다른 프로젝트" |
 | 정책 문서화 | 정책 문서화 프로토콜 | "정책 정리", "로직 문서화", "정책 md 생성" |
+| 어노테이션 보강 | AI 어노테이션 보강 프로토콜 | "어노테이션 보강", "정책 딥스캔", "AI 주석 생성", "심층 분석" |
 | 도움말 | `node {skill_dir}/dist/index.js help` | "도움말", "뭘 할 수 있어?" |
 
 ### 분석 결과 응답 형식

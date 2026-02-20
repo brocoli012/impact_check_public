@@ -113,6 +113,165 @@ const POLICY_PATTERNS: Array<{
     namePrefix: '데이터 삭제 정책',
     descriptionTemplate: (fn) => `${fn} 함수의 데이터 삭제 정책`,
   },
+  {
+    patterns: [/apply/i, /execute/i, /process/i, /run/i, /perform/i],
+    category: '실행',
+    namePrefix: '비즈니스 실행 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 비즈니스 실행 로직 정책`,
+  },
+  {
+    patterns: [/schedule/i, /cron/i, /batch/i, /job/i, /task/i],
+    category: '스케줄링',
+    namePrefix: '스케줄링 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 스케줄링/배치 관련 정책`,
+  },
+  {
+    patterns: [/notify/i, /alert/i, /publish/i, /emit/i, /broadcast/i],
+    category: '알림',
+    namePrefix: '알림 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 알림/이벤트 발행 정책`,
+  },
+  {
+    patterns: [/expire/i, /timeout/i, /ttl/i, /deadline/i],
+    category: '만료',
+    namePrefix: '만료 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 만료/타임아웃 관련 정책`,
+  },
+  {
+    patterns: [/limit/i, /throttle/i, /quota/i, /restrict/i, /cap/i],
+    category: '제한',
+    namePrefix: '제한 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 제한/쿼터 관련 정책`,
+  },
+  {
+    patterns: [/retry/i, /fallback/i, /recover/i, /circuit/i, /resilience/i],
+    category: '복원',
+    namePrefix: '복원 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 복원/재시도 관련 정책`,
+  },
+  {
+    patterns: [/aggregate/i, /reconcile/i, /settle/i, /summarize/i, /total/i],
+    category: '정산',
+    namePrefix: '정산 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 정산/집계 관련 정책`,
+  },
+  {
+    patterns: [/reserve/i, /allocate/i, /lock/i, /stock/i, /inventory/i],
+    category: '재고',
+    namePrefix: '재고 정책',
+    descriptionTemplate: (fn) => `${fn} 함수의 재고/자원 관리 정책`,
+  },
+];
+
+/** Spring/Java 메서드 어노테이션 → 정책 매핑 */
+const ANNOTATION_POLICY_PATTERNS: Array<{
+  annotation: RegExp;
+  category: string;
+  namePrefix: string;
+  descriptionTemplate: (annotationStr: string, funcName: string) => string;
+}> = [
+  {
+    annotation: /^@Transactional/i,
+    category: '트랜잭션',
+    namePrefix: '트랜잭션 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 트랜잭션 관리 정책`,
+  },
+  {
+    annotation: /^@Cacheable/i,
+    category: '캐싱',
+    namePrefix: '캐싱 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 캐시 정책`,
+  },
+  {
+    annotation: /^@CacheEvict/i,
+    category: '캐싱',
+    namePrefix: '캐시 무효화 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 캐시 무효화 정책`,
+  },
+  {
+    annotation: /^@CachePut/i,
+    category: '캐싱',
+    namePrefix: '캐시 갱신 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 캐시 갱신 정책`,
+  },
+  {
+    annotation: /^@Scheduled/i,
+    category: '스케줄링',
+    namePrefix: '스케줄링 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 스케줄링 정책`,
+  },
+  {
+    annotation: /^@Async/i,
+    category: '비동기',
+    namePrefix: '비동기 실행 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 비동기 처리 정책`,
+  },
+  {
+    annotation: /^@PreAuthorize/i,
+    category: '보안',
+    namePrefix: '접근 권한 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 사전 인가 정책`,
+  },
+  {
+    annotation: /^@Secured/i,
+    category: '보안',
+    namePrefix: '보안 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 보안 정책`,
+  },
+  {
+    annotation: /^@RolesAllowed/i,
+    category: '보안',
+    namePrefix: '역할 기반 접근 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 역할 접근 정책`,
+  },
+  {
+    annotation: /^@Retryable/i,
+    category: '복원',
+    namePrefix: '재시도 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 재시도 정책`,
+  },
+  {
+    annotation: /^@Recover/i,
+    category: '복원',
+    namePrefix: '복구 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 복구 정책`,
+  },
+  {
+    annotation: /^@CircuitBreaker/i,
+    category: '복원',
+    namePrefix: '서킷브레이커 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 서킷브레이커 정책`,
+  },
+  {
+    annotation: /^@EventListener/i,
+    category: '이벤트',
+    namePrefix: '이벤트 리스너 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 이벤트 처리 정책`,
+  },
+  {
+    annotation: /^@TransactionalEventListener/i,
+    category: '이벤트',
+    namePrefix: '트랜잭션 이벤트 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 트랜잭션 이벤트 정책`,
+  },
+  {
+    annotation: /^@RabbitListener/i,
+    category: '메시징',
+    namePrefix: '메시지 수신 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 RabbitMQ 메시지 수신 정책`,
+  },
+  {
+    annotation: /^@KafkaListener/i,
+    category: '메시징',
+    namePrefix: '메시지 수신 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 Kafka 메시지 수신 정책`,
+  },
+  {
+    annotation: /^@RateLimiter/i,
+    category: '제한',
+    namePrefix: '요청 제한 정책',
+    descriptionTemplate: (ann, fn) => `${fn}: ${ann} 기반 요청 제한 정책`,
+  },
 ];
 
 /** 파일 경로 패턴 → 파일 유형 매핑 */
@@ -133,6 +292,26 @@ const FILE_TYPE_PATTERNS: Array<{ pattern: RegExp; type: string }> = [
   { pattern: /route/i, type: 'route' },
   { pattern: /test/i, type: 'test' },
   { pattern: /spec/i, type: 'spec' },
+  { pattern: /mapper/i, type: 'mapper' },
+  { pattern: /entity/i, type: 'entity' },
+  { pattern: /dto/i, type: 'dto' },
+  { pattern: /vo/i, type: 'vo' },
+  { pattern: /enum/i, type: 'enum' },
+  { pattern: /aspect/i, type: 'aspect' },
+  { pattern: /listener/i, type: 'listener' },
+  { pattern: /interceptor/i, type: 'interceptor' },
+  { pattern: /filter(?!\.)/i, type: 'filter' },
+  { pattern: /converter/i, type: 'converter' },
+  { pattern: /adapter/i, type: 'adapter' },
+  { pattern: /facade/i, type: 'facade' },
+  { pattern: /gateway/i, type: 'gateway' },
+  { pattern: /client/i, type: 'client' },
+  { pattern: /producer/i, type: 'producer' },
+  { pattern: /consumer/i, type: 'consumer' },
+  { pattern: /scheduler/i, type: 'scheduler' },
+  { pattern: /batch/i, type: 'batch' },
+  { pattern: /impl/i, type: 'implementation' },
+  { pattern: /validator/i, type: 'validator' },
 ];
 
 // ============================================================
@@ -348,6 +527,36 @@ export class AnnotationGenerator {
       policies.push(policy);
     }
 
+    // 2. 메서드 어노테이션 기반 정책 추론
+    if (func.annotations && func.annotations.length > 0) {
+      for (const ann of func.annotations) {
+        for (const annPattern of ANNOTATION_POLICY_PATTERNS) {
+          if (annPattern.annotation.test(ann)) {
+            const annPolicy: InferredPolicy = {
+              name: `${annPattern.namePrefix}: ${funcName}`,
+              description: annPattern.descriptionTemplate(ann, funcName),
+              confidence: this.calculateAnnotationPolicyConfidence(ann),
+              category: annPattern.category,
+              inferred_from: `메서드 어노테이션: ${ann}`,
+              conditions: [],
+              inputVariables: func.params.map((p) => ({
+                name: p.name,
+                type: p.type ?? 'unknown',
+                description: `${p.name} 파라미터`,
+              })),
+              outputVariables: func.returnType
+                ? [{ name: 'result', type: func.returnType, description: `${funcName} 반환값` }]
+                : [],
+              constants: [],
+              constraints: [],
+            };
+            policies.push(annPolicy);
+            break; // 하나의 어노테이션당 하나의 패턴만 매칭
+          }
+        }
+      }
+    }
+
     return policies;
   }
 
@@ -397,6 +606,33 @@ export class AnnotationGenerator {
     }
     if (fileType === 'middleware') {
       return 'integration';
+    }
+    if (fileType === 'mapper' || fileType === 'entity' || fileType === 'dto' || fileType === 'vo') {
+      return 'data_access';
+    }
+    if (fileType === 'aspect' || fileType === 'interceptor' || fileType === 'filter') {
+      return 'integration';
+    }
+    if (fileType === 'listener' || fileType === 'consumer' || fileType === 'producer') {
+      return 'integration';
+    }
+    if (fileType === 'validator') {
+      return 'business_logic';
+    }
+    if (fileType === 'converter' || fileType === 'adapter') {
+      return 'utility';
+    }
+    if (fileType === 'facade' || fileType === 'gateway' || fileType === 'client') {
+      return 'integration';
+    }
+    if (fileType === 'scheduler' || fileType === 'batch') {
+      return 'business_logic';
+    }
+    if (fileType === 'implementation') {
+      return 'business_logic';
+    }
+    if (fileType === 'enum') {
+      return 'config';
     }
 
     // 함수명 패턴 기반 분류
@@ -515,6 +751,11 @@ export class AnnotationGenerator {
     const bodyLines = func.endLine - func.startLine + 1;
     if (bodyLines >= 10) {
       confidence += 0.1;
+    }
+
+    // FunctionInfo에 어노테이션이 있으면 +0.05 (정보가 더 풍부하므로)
+    if (func.annotations && func.annotations.length > 0) {
+      confidence += 0.05;
     }
 
     return Math.min(confidence, 1.0);
@@ -721,6 +962,21 @@ export class AnnotationGenerator {
     const bodyLines = func.endLine - func.startLine + 1;
     if (bodyLines >= 5) conf += 0.1;
     if (bodyLines >= 10) conf += 0.1;
+    return Math.min(conf, 1.0);
+  }
+
+  /**
+   * 어노테이션 기반 정책 신뢰도 계산
+   *
+   * 어노테이션은 명시적 선언이므로 함수명 기반(0.4)보다 높은 기본값(0.7)을 사용한다.
+   * 파라미터가 있거나 상세 설정이 있으면 추가 가점.
+   */
+  private calculateAnnotationPolicyConfidence(annotation: string): number {
+    let conf = 0.7;
+    // 어노테이션에 파라미터가 있으면 더 구체적이므로 +0.1
+    if (annotation.includes('(')) conf += 0.1;
+    // 어노테이션에 value나 key 같은 상세 설정이 있으면 +0.1
+    if (/value\s*=|key\s*=|cron\s*=|maxAttempts/i.test(annotation)) conf += 0.1;
     return Math.min(conf, 1.0);
   }
 

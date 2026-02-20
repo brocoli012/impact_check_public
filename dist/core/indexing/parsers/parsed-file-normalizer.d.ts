@@ -3,10 +3,11 @@
  * @description AST vs Regex 파서 결과를 정규화하여 일관된 형태로 변환
  *
  * 정규화 항목:
- *   1. className 정규화 (AST: "OuterClass.InnerClass" → "InnerClass")
+ *   1. className 정규화 (AST: "OuterClass.InnerClass" → "OuterClass$InnerClass")
  *   2. line 번호 검증 (음수/0 방지, endLine >= startLine 보장)
  *   3. signature 공백 정규화
  *   4. TASK-043: import 문자열 인터닝 (동일 import source 공유)
+ *   5. TASK-067: wildcard import source 통일 ("pkg.*" → "pkg")
  */
 import { ParsedFile } from '../types';
 /**
@@ -41,6 +42,14 @@ export declare class ParsedFileNormalizer {
      * TASK-043: 인터닝 풀 통계 반환 (디버그용)
      */
     get internPoolSize(): number;
+    /**
+     * TASK-067: import source 정규화
+     * AST 파서는 wildcard import를 "pkg.*"로, Regex 파서는 "pkg"로 기록하므로
+     * 후행 ".*"를 제거하여 통일된 형태로 변환한다.
+     * @param source - 원본 import source
+     * @returns 정규화된 import source
+     */
+    private normalizeImportSource;
     /**
      * Signature 문자열 정규화 (연속 공백 → 단일 공백)
      * @param signature - 원본 signature

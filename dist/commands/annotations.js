@@ -128,9 +128,18 @@ class AnnotationsCommand {
             // 4. 파일별 sourceHash로 변경 여부 확인 & 파싱 대상 수집
             const filesToGenerate = [];
             // 파일 파싱을 위해 인덱서의 내부 파싱 기능은 직접 사용 불가
-            // 대신 TypeScriptParser를 직접 사용
+            // 확장자별 멀티 파서 팩토리
             const { TypeScriptParser } = await Promise.resolve().then(() => __importStar(require('../core/indexing/parsers/typescript-parser')));
-            const parser = new TypeScriptParser();
+            const { JavaParser } = await Promise.resolve().then(() => __importStar(require('../core/indexing/parsers/java-parser')));
+            const { KotlinParser } = await Promise.resolve().then(() => __importStar(require('../core/indexing/parsers/kotlin-parser')));
+            const parsers = [
+                new TypeScriptParser(),
+                new JavaParser(),
+                new KotlinParser(),
+            ];
+            function getParserForFile(filePath) {
+                return parsers.find(p => p.canParse(filePath)) || null;
+            }
             for (let i = 0; i < targetFiles.length; i++) {
                 const file = targetFiles[i];
                 const absolutePath = path.join(projectPath, file.path);
@@ -144,12 +153,13 @@ class AnnotationsCommand {
                     continue;
                 }
                 // 파서가 지원하는 파일인지 확인
-                if (!parser.canParse(file.path)) {
+                const fileParser = getParserForFile(file.path);
+                if (!fileParser) {
                     continue;
                 }
                 try {
                     const content = fs.readFileSync(absolutePath, 'utf-8');
-                    const parsedFile = await parser.parse(file.path, content);
+                    const parsedFile = await fileParser.parse(file.path, content);
                     if (parsedFile.functions.length > 0) {
                         filesToGenerate.push({ filePath: file.path, parsedFile });
                     }

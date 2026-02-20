@@ -142,6 +142,15 @@ class MemoryGuard {
         return ratio < 0.95; // 95% 초과 시에만 강제 중단
     }
 }
+// ============================================================
+// Parse guard constants (ISSUE-011: single source of truth)
+// ============================================================
+/** 파일 크기 상한 (500KB). 이보다 큰 파일은 파싱 스킵 */
+const MAX_FILE_SIZE = 512 * 1024;
+/** 라인 수 상한. 초과 시 regex 파서로 폴백 */
+const MAX_LINE_COUNT = 10000;
+/** 단일 파일 파싱 타임아웃 (ms) */
+const PARSE_TIMEOUT_MS = 30000;
 class Indexer {
     constructor(options) {
         this.scanner = new scanner_1.FileScanner();
@@ -618,100 +627,18 @@ class Indexer {
     // Private Methods
     // ============================================================
     /**
-     * 파일 목록을 파싱
+     * 파일 목록을 파싱 (TASK-063: parseFilesStreaming 래퍼)
      *
-     * AST 파서가 빈 결과(imports=0, exports=0, functions=0)를 반환하면,
-     * regexFallbackParsers로 해당 파일을 재시도한다 (per-file fallback).
+     * 내부적으로 parseFilesStreaming()에 위임하여 결과를 배열로 수집한다.
+     * CircuitBreaker, MemoryGuard, AST→Regex 폴백 등 모든 파싱 로직은
+     * parseFilesStreaming() 단일 지점에서 관리된다.
      */
     async parseFiles(projectPath, files, contentCache) {
-        const parsedFiles = [];
-        const normalizer = new parsed_file_normalizer_1.ParsedFileNormalizer();
-        const MAX_FILE_SIZE = 512 * 1024; // 500KB (TASK-037: 강화)
-        const MAX_LINE_COUNT = 10000; // TASK-037: 라인 수 가드
-        const PARSE_TIMEOUT_MS = 30000; // 30초
-        // TASK-042: Circuit Breaker + MemoryGuard
-        const circuitBreaker = new CircuitBreaker(10);
-        const memoryGuard = new MemoryGuard(0.85);
-        // TASK-034: CPU-bound 작업이므로 순차 처리로 전환 (메모리 안정화)
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            // TASK-042: CircuitBreaker 체크
-            if (circuitBreaker.tripped) {
-                logger_1.logger.warn(`CircuitBreaker: skipping remaining ${files.length - i} files (${circuitBreaker.failures} consecutive failures)`);
-                break;
-            }
-            // TASK-042: MemoryGuard 체크 (50개마다)
-            if (i % 50 === 0 && i > 0) {
-                if (!memoryGuard.check()) {
-                    logger_1.logger.warn(`MemoryGuard: aborting parse at file ${i}/${files.length}. Returning partial results.`);
-                    break;
-                }
-            }
-            // TASK-036: 진행률 로그 (100개마다)
-            if (i % 100 === 0 && i > 0) {
-                logger_1.logger.info(`  Parse progress: ${i}/${files.length} files`);
-            }
-            try {
-                const parser = this.findParser(file.path);
-                if (!parser)
-                    continue;
-                // 파일 크기 가드 (TASK-037: 500KB) - FileInfo.size 활용
-                if (file.size > MAX_FILE_SIZE) {
-                    logger_1.logger.warn(`Skipping large file (${(file.size / 1024).toFixed(0)}KB): ${file.path}`);
-                    continue;
-                }
-                // TASK-038: contentCache에서 먼저 조회, 없으면 파일 읽기
-                let content;
-                if (contentCache && contentCache.has(file.path)) {
-                    content = contentCache.get(file.path);
-                    // 사용 후 캐시에서 제거하여 메모리 해제
-                    contentCache.delete(file.path);
-                }
-                else {
-                    // TASK-041: 비동기 파일 읽기
-                    const absolutePath = path.join(projectPath, file.path);
-                    content = await fsp.readFile(absolutePath, 'utf-8');
-                }
-                // TASK-037: 라인 수 가드 - 10,000줄 초과 시 regex 모드로 폴백
-                const lineCount = this.countLines(content);
-                let effectiveParser = parser;
-                if (lineCount > MAX_LINE_COUNT) {
-                    logger_1.logger.warn(`File exceeds ${MAX_LINE_COUNT} lines (${lineCount}): ${file.path} → regex fallback`);
-                    const fallback = this.findFallbackParser(file.path);
-                    if (fallback) {
-                        effectiveParser = fallback;
-                    }
-                    else {
-                        // fallback 파서가 없으면 원래 파서 사용
-                        logger_1.logger.debug(`No regex fallback available for ${file.path}, using original parser`);
-                    }
-                }
-                // Timeout 기반 파싱
-                let parsed = await this.parseWithTimeout(effectiveParser, file.path, content, PARSE_TIMEOUT_MS);
-                // per-file fallback
-                let usedParser = effectiveParser;
-                if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
-                    const fallbackParser = this.findFallbackParser(file.path);
-                    if (fallbackParser) {
-                        logger_1.logger.debug(`Per-file fallback: ${file.path} (AST empty → Regex retry)`);
-                        parsed = await this.parseWithTimeout(fallbackParser, file.path, content, PARSE_TIMEOUT_MS);
-                        usedParser = fallbackParser;
-                    }
-                }
-                // 결과 정규화 (AST vs Regex 차이 제거)
-                const parserType = usedParser.name.includes('ast') ? 'ast' : 'regex';
-                const normalized = normalizer.normalize(parsed, parserType);
-                parsedFiles.push(normalized);
-                // TASK-042: 성공 시 CircuitBreaker 리셋
-                circuitBreaker.recordSuccess();
-            }
-            catch (err) {
-                logger_1.logger.debug(`Parse failed for ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
-                // TASK-042: 실패 기록
-                circuitBreaker.recordFailure();
-            }
-        }
-        return parsedFiles;
+        const results = [];
+        await this.parseFilesStreaming(projectPath, files, contentCache, (parsed) => {
+            results.push(parsed);
+        });
+        return results;
     }
     /**
      * TASK-039: 스트리밍 파싱 - 각 파일 파싱 직후 visitor 콜백 호출
@@ -725,9 +652,6 @@ class Indexer {
      */
     async parseFilesStreaming(projectPath, files, contentCache, visitor) {
         const normalizer = new parsed_file_normalizer_1.ParsedFileNormalizer();
-        const MAX_FILE_SIZE = 512 * 1024;
-        const MAX_LINE_COUNT = 10000;
-        const PARSE_TIMEOUT_MS = 30000;
         let parsedCount = 0;
         // TASK-042: Circuit Breaker + MemoryGuard
         const circuitBreaker = new CircuitBreaker(10);

@@ -289,4 +289,173 @@ public class EventHandler {
       expect(constructorDI).toHaveLength(0);
     });
   });
+
+  // ================================================================
+  // REQ-012 TASK-078: Java 메서드 어노테이션 수집 테스트
+  // ================================================================
+
+  describe('TASK-078: Java method annotation collection', () => {
+
+    it('should collect @Transactional annotation on method', async () => {
+      const content = `
+package com.example;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+
+    public OrderService(OrderRepository orderRepository) {
+        this.orderRepository = orderRepository;
+    }
+
+    @Transactional
+    public Order createOrder(OrderRequest request) {
+        Order order = new Order();
+        return orderRepository.save(order);
+    }
+
+    public Order getOrder(Long id) {
+        return orderRepository.findById(id);
+    }
+}
+`;
+      const result = await parser.parse('OrderService.java', content);
+
+      const createOrderFunc = result.functions.find(f => f.name === 'createOrder');
+      expect(createOrderFunc).toBeDefined();
+      expect(createOrderFunc!.annotations).toBeDefined();
+      expect(createOrderFunc!.annotations!.some(a => a.includes('@Transactional'))).toBe(true);
+
+      const getOrderFunc = result.functions.find(f => f.name === 'getOrder');
+      expect(getOrderFunc).toBeDefined();
+      // No annotations expected on getOrder
+      expect(getOrderFunc!.annotations === undefined || getOrderFunc!.annotations!.length === 0).toBe(true);
+    });
+
+    it('should collect @Cacheable with parameters', async () => {
+      const content = `
+package com.example;
+
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ProductService {
+
+    @Cacheable(value = "products")
+    public Product getProduct(Long id) {
+        return productRepository.findById(id);
+    }
+}
+`;
+      const result = await parser.parse('ProductService.java', content);
+
+      const getProductFunc = result.functions.find(f => f.name === 'getProduct');
+      expect(getProductFunc).toBeDefined();
+      expect(getProductFunc!.annotations).toBeDefined();
+      expect(getProductFunc!.annotations!.length).toBeGreaterThanOrEqual(1);
+      // Should contain @Cacheable with parameter
+      const cacheAnno = getProductFunc!.annotations!.find(a => a.includes('@Cacheable'));
+      expect(cacheAnno).toBeDefined();
+    });
+
+    it('should collect multiple annotations on a single method', async () => {
+      const content = `
+package com.example;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
+
+@Service
+public class CartService {
+
+    @Transactional
+    @CacheEvict(value = "carts")
+    public void clearCart(Long userId) {
+        cartRepository.deleteByUserId(userId);
+    }
+}
+`;
+      const result = await parser.parse('CartService.java', content);
+
+      const clearCartFunc = result.functions.find(f => f.name === 'clearCart');
+      expect(clearCartFunc).toBeDefined();
+      expect(clearCartFunc!.annotations).toBeDefined();
+      expect(clearCartFunc!.annotations!.length).toBeGreaterThanOrEqual(2);
+      expect(clearCartFunc!.annotations!.some(a => a.includes('@Transactional'))).toBe(true);
+      expect(clearCartFunc!.annotations!.some(a => a.includes('@CacheEvict'))).toBe(true);
+    });
+
+    it('should not produce annotations for method without any annotations', async () => {
+      const content = `
+package com.example;
+
+public class UtilClass {
+
+    public static String formatDate(String date) {
+        return date.trim();
+    }
+}
+`;
+      const result = await parser.parse('UtilClass.java', content);
+
+      const formatDateFunc = result.functions.find(f => f.name === 'formatDate');
+      expect(formatDateFunc).toBeDefined();
+      // annotations should be undefined or empty
+      expect(
+        formatDateFunc!.annotations === undefined || formatDateFunc!.annotations!.length === 0
+      ).toBe(true);
+    });
+
+    it('should collect @Scheduled, @Retryable, @PreAuthorize annotations', async () => {
+      const content = `
+package com.example;
+
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Service;
+
+@Service
+public class TaskService {
+
+    @Scheduled(cron = "0 0 * * * *")
+    public void cleanupExpired() {
+        // cleanup logic
+    }
+
+    @Retryable(maxAttempts = 3)
+    public void callExternalApi() {
+        // external call
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    public void adminAction() {
+        // admin only
+    }
+}
+`;
+      const result = await parser.parse('TaskService.java', content);
+
+      const cleanupFunc = result.functions.find(f => f.name === 'cleanupExpired');
+      expect(cleanupFunc).toBeDefined();
+      expect(cleanupFunc!.annotations).toBeDefined();
+      expect(cleanupFunc!.annotations!.some(a => a.includes('@Scheduled'))).toBe(true);
+
+      const retryFunc = result.functions.find(f => f.name === 'callExternalApi');
+      expect(retryFunc).toBeDefined();
+      expect(retryFunc!.annotations).toBeDefined();
+      expect(retryFunc!.annotations!.some(a => a.includes('@Retryable'))).toBe(true);
+
+      const adminFunc = result.functions.find(f => f.name === 'adminAction');
+      expect(adminFunc).toBeDefined();
+      expect(adminFunc!.annotations).toBeDefined();
+      expect(adminFunc!.annotations!.some(a => a.includes('@PreAuthorize'))).toBe(true);
+    });
+  });
 });

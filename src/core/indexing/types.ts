@@ -113,6 +113,8 @@ export interface FunctionInfo {
   isAsync: boolean;
   /** export 여부 */
   isExported: boolean;
+  /** Java/Kotlin 메서드 어노테이션 목록 (예: @Transactional, @Cacheable) */
+  annotations?: string[];
 }
 
 /** 파싱된 컴포넌트 정보 (내부 타입) */

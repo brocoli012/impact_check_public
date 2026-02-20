@@ -108,9 +108,20 @@ export class AnnotationsCommand implements Command {
       const filesToGenerate: Array<{ filePath: string; parsedFile: import('../core/indexing/types').ParsedFile }> = [];
 
       // 파일 파싱을 위해 인덱서의 내부 파싱 기능은 직접 사용 불가
-      // 대신 TypeScriptParser를 직접 사용
+      // 확장자별 멀티 파서 팩토리
       const { TypeScriptParser } = await import('../core/indexing/parsers/typescript-parser');
-      const parser = new TypeScriptParser();
+      const { JavaParser } = await import('../core/indexing/parsers/java-parser');
+      const { KotlinParser } = await import('../core/indexing/parsers/kotlin-parser');
+
+      const parsers = [
+        new TypeScriptParser(),
+        new JavaParser(),
+        new KotlinParser(),
+      ];
+
+      function getParserForFile(filePath: string) {
+        return parsers.find(p => p.canParse(filePath)) || null;
+      }
 
       for (let i = 0; i < targetFiles.length; i++) {
         const file = targetFiles[i];
@@ -128,13 +139,14 @@ export class AnnotationsCommand implements Command {
         }
 
         // 파서가 지원하는 파일인지 확인
-        if (!parser.canParse(file.path)) {
+        const fileParser = getParserForFile(file.path);
+        if (!fileParser) {
           continue;
         }
 
         try {
           const content = fs.readFileSync(absolutePath, 'utf-8');
-          const parsedFile = await parser.parse(file.path, content);
+          const parsedFile = await fileParser.parse(file.path, content);
           if (parsedFile.functions.length > 0) {
             filesToGenerate.push({ filePath: file.path, parsedFile });
           }

@@ -260,6 +260,14 @@ export class KotlinParser extends BaseParser {
 
       const displayName = receiverType ? `${receiverType}.${funcName}` : funcName;
 
+      // 어노테이션을 @접두사 포함 형태로 수집 (FunctionInfo.annotations용)
+      const fullAnnotations: string[] = [];
+      const fullAnnoRegex = /@(\w+(?:\([^)]*\))?)/g;
+      let fullAnnoMatch: RegExpExecArray | null;
+      while ((fullAnnoMatch = fullAnnoRegex.exec(annotationBlock)) !== null) {
+        fullAnnotations.push(`@${fullAnnoMatch[1]}`);
+      }
+
       const funcInfo: FunctionInfo = {
         name: displayName,
         signature: `fun ${displayName}(${paramsStr.trim()})${returnType ? `: ${returnType}` : ''}`,
@@ -269,6 +277,7 @@ export class KotlinParser extends BaseParser {
         returnType: returnType || undefined,
         isAsync: isSuspend || isReactive,
         isExported: !processed.substring(Math.max(0, funStartOffset - 30), funStartOffset).includes('private'),
+        ...(fullAnnotations.length > 0 ? { annotations: fullAnnotations } : {}),
       };
 
       result.functions.push(funcInfo);

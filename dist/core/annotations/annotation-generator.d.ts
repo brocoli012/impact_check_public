@@ -125,6 +125,13 @@ export declare class AnnotationGenerator {
      */
     private calculatePolicyConfidence;
     /**
+     * 어노테이션 기반 정책 신뢰도 계산
+     *
+     * 어노테이션은 명시적 선언이므로 함수명 기반(0.4)보다 높은 기본값(0.7)을 사용한다.
+     * 파라미터가 있거나 상세 설정이 있으면 추가 가점.
+     */
+    private calculateAnnotationPolicyConfidence;
+    /**
      * 파일 요약 생성
      */
     private generateFileSummary;

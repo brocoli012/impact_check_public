@@ -62,6 +62,9 @@ export declare class DependencyGraphBuilder {
     private normalizeFilePath;
     /**
      * import 경로를 실제 파일 경로로 해석
+     * @param sourceFile - 소스 파일 경로
+     * @param importSource - import 문의 소스 경로
+     * @param nodeMap - 노드맵 (경로 → 노드) - 확장자/패키지 해석 시 매칭에 사용
      */
     private resolveImportPath;
     /**

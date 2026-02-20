@@ -52,8 +52,11 @@ class JavaParser extends base_parser_1.BaseParser {
             this.parseClassDeclaration(processed, content, lineTable, filePath, classAnnotations, packageName, result);
             // 메서드 파싱
             this.parseMethods(processed, content, lineTable, filePath, classAnnotations, result);
+            // 클래스 이름 추출 (생성자 주입 판별용)
+            const classNameMatch = processed.match(/(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum|record)\s+(\w+)/);
+            const className = classNameMatch ? classNameMatch[1] : '';
             // DI 패턴 파싱
-            this.parseDIPatterns(processed, content, lineTable, result);
+            this.parseDIPatterns(processed, content, lineTable, className, result);
         }
         catch (err) {
             logger_1.logger.debug(`JavaParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -211,6 +214,13 @@ class JavaParser extends base_parser_1.BaseParser {
             const isAsync = returnType.includes('CompletableFuture') ||
                 returnType.includes('Mono') ||
                 returnType.includes('Flux');
+            // 어노테이션을 @접두사 포함 형태로 수집 (FunctionInfo.annotations용)
+            const fullAnnotations = [];
+            const fullAnnoRegex = /@(\w+(?:\([^)]*\))?)/g;
+            let fullAnnoMatch;
+            while ((fullAnnoMatch = fullAnnoRegex.exec(annotationBlock)) !== null) {
+                fullAnnotations.push(`@${fullAnnoMatch[1]}`);
+            }
             const funcInfo = {
                 name: methodName,
                 signature: `${returnType} ${methodName}(${paramsStr.trim()})`,
@@ -220,6 +230,7 @@ class JavaParser extends base_parser_1.BaseParser {
                 returnType,
                 isAsync,
                 isExported: processed.substring(Math.max(0, methodStartOffset - 10), methodStartOffset + 10).includes('public'),
+                ...(fullAnnotations.length > 0 ? { annotations: fullAnnotations } : {}),
             };
             result.functions.push(funcInfo);
             // Spring 라우트 어노테이션 확인
@@ -310,7 +321,7 @@ class JavaParser extends base_parser_1.BaseParser {
     // ============================================================
     // DI 패턴 파싱
     // ============================================================
-    parseDIPatterns(processed, _content, lineTable, result) {
+    parseDIPatterns(processed, _content, lineTable, className, result) {
         // @Autowired 필드 주입
         const fieldDIRegex = /@(?:Autowired|Inject|Resource)\s+(?:private\s+|protected\s+)?(\w+)\s+(\w+)\s*;/g;
         let match;
@@ -350,10 +361,15 @@ class JavaParser extends base_parser_1.BaseParser {
             }
         }
         // 생성자 주입 패턴 (Spring 권장 방식)
+        // 클래스 이름과 동일한 메서드만 생성자로 인식하여 일반 메서드 오탐 방지
         const constructorRegex = /(?:public\s+)?(\w+)\s*\(([^)]*)\)\s*\{/g;
         while ((match = constructorRegex.exec(processed)) !== null) {
+            const matchedName = match[1];
             const paramsStr = match[2];
             const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);
+            // 클래스 이름과 동일한 경우에만 생성자로 처리
+            if (!className || matchedName !== className)
+                continue;
             // 각 파라미터에서 타입 추출
             const paramRegex = /(?:final\s+)?([\w<>\[\]]+)\s+(\w+)/g;
             let paramMatch;

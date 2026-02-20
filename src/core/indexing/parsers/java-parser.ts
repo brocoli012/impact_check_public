@@ -281,6 +281,14 @@ export class JavaParser extends BaseParser {
         returnType.includes('Mono') ||
         returnType.includes('Flux');
 
+      // 어노테이션을 @접두사 포함 형태로 수집 (FunctionInfo.annotations용)
+      const fullAnnotations: string[] = [];
+      const fullAnnoRegex = /@(\w+(?:\([^)]*\))?)/g;
+      let fullAnnoMatch: RegExpExecArray | null;
+      while ((fullAnnoMatch = fullAnnoRegex.exec(annotationBlock)) !== null) {
+        fullAnnotations.push(`@${fullAnnoMatch[1]}`);
+      }
+
       const funcInfo: FunctionInfo = {
         name: methodName,
         signature: `${returnType} ${methodName}(${paramsStr.trim()})`,
@@ -290,6 +298,7 @@ export class JavaParser extends BaseParser {
         returnType,
         isAsync,
         isExported: processed.substring(Math.max(0, methodStartOffset - 10), methodStartOffset + 10).includes('public'),
+        ...(fullAnnotations.length > 0 ? { annotations: fullAnnotations } : {}),
       };
 
       result.functions.push(funcInfo);

@@ -61,10 +61,11 @@ export declare class Indexer {
      */
     loadIndex(projectId: string, basePath?: string): Promise<CodeIndex | null>;
     /**
-     * 파일 목록을 파싱
+     * 파일 목록을 파싱 (TASK-063: parseFilesStreaming 래퍼)
      *
-     * AST 파서가 빈 결과(imports=0, exports=0, functions=0)를 반환하면,
-     * regexFallbackParsers로 해당 파일을 재시도한다 (per-file fallback).
+     * 내부적으로 parseFilesStreaming()에 위임하여 결과를 배열로 수집한다.
+     * CircuitBreaker, MemoryGuard, AST→Regex 폴백 등 모든 파싱 로직은
+     * parseFilesStreaming() 단일 지점에서 관리된다.
      */
     private parseFiles;
     /**

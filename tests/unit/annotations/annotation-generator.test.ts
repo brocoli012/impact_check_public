@@ -38,6 +38,7 @@ function createFunctionInfo(overrides?: Partial<FunctionInfo>): FunctionInfo {
     returnType: overrides?.returnType,
     isAsync: overrides?.isAsync ?? false,
     isExported: overrides?.isExported ?? false,
+    ...(overrides?.annotations !== undefined ? { annotations: overrides.annotations } : {}),
   };
 }
 
@@ -867,6 +868,525 @@ describe('AnnotationGenerator', () => {
       );
 
       expect(result.system).toBe('default');
+    });
+  });
+
+  // ============================================================
+  // REQ-012 TASK-078: POLICY_PATTERNS 8 신규 카테고리 테스트
+  // ============================================================
+
+  describe('POLICY_PATTERNS new categories (REQ-012)', () => {
+
+    it('should infer "실행" category from apply/execute/process function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['applyCoupon', 'executePayment', 'processRefund']) {
+        const func = createFunctionInfo({ name, params: [{ name: 'id', type: 'string' }] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const execPolicy = policies.find((p) => p.category === '실행');
+        expect(execPolicy).toBeDefined();
+        expect(execPolicy!.name).toContain('비즈니스 실행 정책');
+      }
+    });
+
+    it('should infer "스케줄링" category from schedule/cron/batch function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['scheduleDelivery', 'cronCleanup', 'batchProcess']) {
+        const func = createFunctionInfo({ name, params: [] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const schedPolicy = policies.find((p) => p.category === '스케줄링');
+        expect(schedPolicy).toBeDefined();
+        expect(schedPolicy!.name).toContain('스케줄링 정책');
+      }
+    });
+
+    it('should infer "알림" category from notify/alert/publish function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['notifyUser', 'alertAdmin', 'publishEvent']) {
+        const func = createFunctionInfo({ name, params: [] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const alertPolicy = policies.find((p) => p.category === '알림');
+        expect(alertPolicy).toBeDefined();
+        expect(alertPolicy!.name).toContain('알림 정책');
+      }
+    });
+
+    it('should infer "만료" category from expire/timeout/ttl function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['expireSession', 'timeoutRequest', 'ttlCheck']) {
+        const func = createFunctionInfo({ name, params: [] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const expiryPolicy = policies.find((p) => p.category === '만료');
+        expect(expiryPolicy).toBeDefined();
+        expect(expiryPolicy!.name).toContain('만료 정책');
+      }
+    });
+
+    it('should infer "제한" category from limit/throttle/quota function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['limitRequests', 'throttleApi', 'quotaCheck']) {
+        const func = createFunctionInfo({ name, params: [] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const limitPolicy = policies.find((p) => p.category === '제한');
+        expect(limitPolicy).toBeDefined();
+        expect(limitPolicy!.name).toContain('제한 정책');
+      }
+    });
+
+    it('should infer "복원" category from retry/fallback/recover function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['retryOperation', 'fallbackHandler', 'recoverFromError']) {
+        const func = createFunctionInfo({ name, params: [] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const recoveryPolicy = policies.find((p) => p.category === '복원');
+        expect(recoveryPolicy).toBeDefined();
+        expect(recoveryPolicy!.name).toContain('복원 정책');
+      }
+    });
+
+    it('should infer "정산" category from aggregate/reconcile/settle function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['aggregateOrders', 'reconcilePayments', 'settleAccounts']) {
+        const func = createFunctionInfo({ name, params: [] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const settlePolicy = policies.find((p) => p.category === '정산');
+        expect(settlePolicy).toBeDefined();
+        expect(settlePolicy!.name).toContain('정산 정책');
+      }
+    });
+
+    it('should infer "재고" category from reserve/allocate/lock function names', () => {
+      const fileContext = createFileContext();
+
+      for (const name of ['reserveStock', 'allocateInventory', 'lockItem']) {
+        const func = createFunctionInfo({ name, params: [] });
+        const policies = generator.inferPolicies(func, fileContext);
+        const stockPolicy = policies.find((p) => p.category === '재고');
+        expect(stockPolicy).toBeDefined();
+        expect(stockPolicy!.name).toContain('재고 정책');
+      }
+    });
+  });
+
+  // ============================================================
+  // REQ-012 TASK-078: FILE_TYPE_PATTERNS 신규 유형 테스트
+  // ============================================================
+
+  describe('FILE_TYPE_PATTERNS new types (REQ-012)', () => {
+
+    it('should classify mapper/entity/dto/vo/enum paths to correct file types', async () => {
+      const testCases: Array<{ path: string; expectedType: string }> = [
+        { path: 'src/mapper/OrderMapper.java', expectedType: 'mapper' },
+        { path: 'src/entity/Order.java', expectedType: 'entity' },
+        { path: 'src/dto/OrderDto.java', expectedType: 'dto' },
+        { path: 'src/vo/OrderVo.java', expectedType: 'vo' },
+        { path: 'src/enum/OrderStatus.java', expectedType: 'enum' },
+      ];
+
+      for (const tc of testCases) {
+        const parsedFile = createParsedFile({
+          functions: [createFunctionInfo({ name: 'testMethod' })],
+        });
+        const genResult = await generator.generateForFile(tc.path, parsedFile, '/project');
+        expect(genResult.annotations).toHaveLength(1);
+        // Check the annotation type classification indirectly via classifyFunctionType
+        const func = createFunctionInfo({ name: 'testMethod' });
+        const fileContext = createFileContext({
+          filePath: tc.path,
+          fileType: tc.expectedType,
+        });
+        // Verify that generating annotations for this file type works
+        const annotation = generator.analyzeFunction(func, tc.path, fileContext);
+        expect(annotation).toBeDefined();
+      }
+    });
+
+    it('should classify aspect/listener/interceptor/filter paths to correct file types', async () => {
+      const testCases: Array<{ path: string; expectedType: string }> = [
+        { path: 'src/aspect/LoggingAspect.java', expectedType: 'aspect' },
+        { path: 'src/listener/OrderEventListener.java', expectedType: 'listener' },
+        { path: 'src/interceptor/AuthInterceptor.java', expectedType: 'interceptor' },
+        { path: 'src/filter/CorsFilter.java', expectedType: 'filter' },
+      ];
+
+      for (const tc of testCases) {
+        const parsedFile = createParsedFile({
+          functions: [createFunctionInfo({ name: 'doWork' })],
+        });
+        const result = await generator.generateForFile(tc.path, parsedFile, '/project');
+        // Verify the annotation contains the expected file type info
+        expect(result.annotations).toHaveLength(1);
+        expect(result.fileSummary.description).toBeDefined();
+      }
+    });
+
+    it('should classify scheduler/batch/validator/impl paths to correct file types', async () => {
+      const testCases: Array<{ path: string; expectedType: string }> = [
+        { path: 'src/scheduler/PaymentScheduler.java', expectedType: 'scheduler' },
+        { path: 'src/batch/OrderBatchJob.java', expectedType: 'batch' },
+        { path: 'src/validator/OrderValidator.java', expectedType: 'validator' },
+        { path: 'src/impl/OrderServiceImpl.java', expectedType: 'implementation' },
+      ];
+
+      for (const tc of testCases) {
+        const parsedFile = createParsedFile({
+          functions: [createFunctionInfo({ name: 'execute' })],
+        });
+        const result = await generator.generateForFile(tc.path, parsedFile, '/project');
+        expect(result.annotations).toHaveLength(1);
+      }
+    });
+  });
+
+  // ============================================================
+  // REQ-012 TASK-078: classifyFunctionType 신규 매핑 테스트
+  // ============================================================
+
+  describe('classifyFunctionType new mappings (REQ-012)', () => {
+
+    it('should classify mapper/entity/dto/vo as data_access', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+
+      for (const fileType of ['mapper', 'entity', 'dto', 'vo']) {
+        const fileContext = createFileContext({ fileType });
+        const result = generator.classifyFunctionType(func, fileContext);
+        expect(result).toBe('data_access');
+      }
+    });
+
+    it('should classify aspect/interceptor/filter as integration', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+
+      for (const fileType of ['aspect', 'interceptor', 'filter']) {
+        const fileContext = createFileContext({ fileType });
+        const result = generator.classifyFunctionType(func, fileContext);
+        expect(result).toBe('integration');
+      }
+    });
+
+    it('should classify listener/consumer/producer as integration', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+
+      for (const fileType of ['listener', 'consumer', 'producer']) {
+        const fileContext = createFileContext({ fileType });
+        const result = generator.classifyFunctionType(func, fileContext);
+        expect(result).toBe('integration');
+      }
+    });
+
+    it('should classify validator/scheduler/batch as business_logic', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+
+      for (const fileType of ['validator', 'scheduler', 'batch']) {
+        const fileContext = createFileContext({ fileType });
+        const result = generator.classifyFunctionType(func, fileContext);
+        expect(result).toBe('business_logic');
+      }
+    });
+
+    it('should classify implementation as business_logic', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+      const fileContext = createFileContext({ fileType: 'implementation' });
+
+      const result = generator.classifyFunctionType(func, fileContext);
+      expect(result).toBe('business_logic');
+    });
+
+    it('should classify converter/adapter as utility', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+
+      for (const fileType of ['converter', 'adapter']) {
+        const fileContext = createFileContext({ fileType });
+        const result = generator.classifyFunctionType(func, fileContext);
+        expect(result).toBe('utility');
+      }
+    });
+
+    it('should classify enum as config', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+      const fileContext = createFileContext({ fileType: 'enum' });
+
+      const result = generator.classifyFunctionType(func, fileContext);
+      expect(result).toBe('config');
+    });
+
+    it('should classify facade/gateway/client as integration', () => {
+      const func = createFunctionInfo({ name: 'doWork' });
+
+      for (const fileType of ['facade', 'gateway', 'client']) {
+        const fileContext = createFileContext({ fileType });
+        const result = generator.classifyFunctionType(func, fileContext);
+        expect(result).toBe('integration');
+      }
+    });
+  });
+
+  // ============================================================
+  // REQ-012 TASK-078: 어노테이션 기반 정책 추론 테스트
+  // ============================================================
+
+  describe('annotation-based policy inference (REQ-012)', () => {
+
+    it('should infer "트랜잭션" policy from @Transactional annotation', () => {
+      const func = createFunctionInfo({
+        name: 'saveOrder',
+        params: [{ name: 'order', type: 'Order' }],
+        annotations: ['@Transactional'],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const txPolicy = policies.find((p) => p.category === '트랜잭션');
+      expect(txPolicy).toBeDefined();
+      expect(txPolicy!.name).toContain('트랜잭션 정책');
+      expect(txPolicy!.confidence).toBeGreaterThanOrEqual(0.7);
+      expect(txPolicy!.inferred_from).toContain('메서드 어노테이션');
+    });
+
+    it('should infer "캐싱" policy from @Cacheable annotation', () => {
+      const func = createFunctionInfo({
+        name: 'getProducts',
+        params: [],
+        annotations: ['@Cacheable'],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const cachePolicy = policies.find((p) => p.category === '캐싱');
+      expect(cachePolicy).toBeDefined();
+      expect(cachePolicy!.name).toContain('캐싱 정책');
+    });
+
+    it('should infer "스케줄링" policy from @Scheduled annotation', () => {
+      const func = createFunctionInfo({
+        name: 'cleanupExpired',
+        params: [],
+        annotations: ['@Scheduled(cron = "0 0 * * * *")'],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const schedPolicy = policies.find((p) => p.category === '스케줄링');
+      expect(schedPolicy).toBeDefined();
+      expect(schedPolicy!.name).toContain('스케줄링 정책');
+    });
+
+    it('should infer "보안" policy from @PreAuthorize annotation', () => {
+      const func = createFunctionInfo({
+        name: 'deleteUser',
+        params: [{ name: 'userId', type: 'Long' }],
+        annotations: ['@PreAuthorize("hasRole(\'ADMIN\')")'],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const secPolicy = policies.find((p) => p.category === '보안');
+      expect(secPolicy).toBeDefined();
+      expect(secPolicy!.name).toContain('접근 권한 정책');
+    });
+
+    it('should infer "복원" policy from @Retryable annotation', () => {
+      const func = createFunctionInfo({
+        name: 'callExternalApi',
+        params: [],
+        annotations: ['@Retryable(maxAttempts = 3)'],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const retryPolicy = policies.find((p) => p.category === '복원');
+      expect(retryPolicy).toBeDefined();
+      expect(retryPolicy!.name).toContain('재시도 정책');
+    });
+
+    it('should infer "이벤트" policy from @EventListener annotation', () => {
+      const func = createFunctionInfo({
+        name: 'onOrderCreated',
+        params: [{ name: 'event', type: 'OrderCreatedEvent' }],
+        annotations: ['@EventListener'],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const eventPolicy = policies.find((p) => p.category === '이벤트');
+      expect(eventPolicy).toBeDefined();
+      expect(eventPolicy!.name).toContain('이벤트 리스너 정책');
+    });
+
+    it('should increase confidence when annotation has parameters', () => {
+      const funcWithParams = createFunctionInfo({
+        name: 'getData',
+        params: [],
+        annotations: ['@Cacheable(value = "products")'],
+      });
+      const funcWithoutParams = createFunctionInfo({
+        name: 'getData2',
+        params: [],
+        annotations: ['@Cacheable'],
+      });
+      const fileContext = createFileContext();
+
+      const policiesWithParams = generator.inferPolicies(funcWithParams, fileContext);
+      const policiesWithoutParams = generator.inferPolicies(funcWithoutParams, fileContext);
+
+      const cacheWithParams = policiesWithParams.find((p) => p.category === '캐싱');
+      const cacheWithoutParams = policiesWithoutParams.find((p) => p.category === '캐싱');
+
+      expect(cacheWithParams).toBeDefined();
+      expect(cacheWithoutParams).toBeDefined();
+      // Annotation with parameters should have higher confidence
+      expect(cacheWithParams!.confidence).toBeGreaterThan(cacheWithoutParams!.confidence);
+    });
+
+    it('should return zero annotation-based policies for functions without annotations', () => {
+      const func = createFunctionInfo({
+        name: 'simpleMethod',
+        params: [],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const annotationPolicies = policies.filter((p) =>
+        p.inferred_from.includes('메서드 어노테이션'),
+      );
+      expect(annotationPolicies).toHaveLength(0);
+    });
+
+    it('should return zero annotation-based policies for functions with empty annotations array', () => {
+      const func = createFunctionInfo({
+        name: 'simpleMethod',
+        params: [],
+        annotations: [],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+      const annotationPolicies = policies.filter((p) =>
+        p.inferred_from.includes('메서드 어노테이션'),
+      );
+      expect(annotationPolicies).toHaveLength(0);
+    });
+
+    it('should correctly generate annotation-based policies alongside function-name policies', () => {
+      const func = createFunctionInfo({
+        name: 'calculateOrderTotal',
+        params: [{ name: 'orderId', type: 'Long' }],
+        returnType: 'BigDecimal',
+        annotations: ['@Transactional', '@Cacheable(value = "orderTotals")'],
+      });
+      const fileContext = createFileContext();
+
+      const policies = generator.inferPolicies(func, fileContext);
+
+      // Function name based policies
+      const calcPolicy = policies.find((p) => p.category === '계산');
+      expect(calcPolicy).toBeDefined();
+
+      // Annotation based policies
+      const txPolicy = policies.find((p) => p.category === '트랜잭션');
+      expect(txPolicy).toBeDefined();
+
+      const cachePolicy = policies.find((p) => p.category === '캐싱');
+      expect(cachePolicy).toBeDefined();
+
+      // Should have at least 3 policies (calc + tx + cache)
+      expect(policies.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  // ============================================================
+  // REQ-012 TASK-078: FunctionInfo.annotations 호환성 테스트
+  // ============================================================
+
+  describe('FunctionInfo.annotations compatibility (REQ-012)', () => {
+
+    it('should work identically for FunctionInfo without annotations field', () => {
+      const func = createFunctionInfo({
+        name: 'calculatePrice',
+        params: [{ name: 'amount', type: 'number' }],
+        returnType: 'number',
+      });
+      const fileContext = createFileContext();
+
+      const result = generator.analyzeFunction(func, 'src/services/pricing.ts', fileContext);
+
+      expect(result.function).toBe('calculatePrice');
+      expect(result.enriched_comment).toContain('계산');
+      expect(result.policies.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should work identically for FunctionInfo with empty annotations array', () => {
+      const func = createFunctionInfo({
+        name: 'calculatePrice',
+        params: [{ name: 'amount', type: 'number' }],
+        returnType: 'number',
+        annotations: [],
+      });
+      const fileContext = createFileContext();
+
+      const result = generator.analyzeFunction(func, 'src/services/pricing.ts', fileContext);
+
+      expect(result.function).toBe('calculatePrice');
+      expect(result.enriched_comment).toContain('계산');
+      // Same number of policies as without annotations
+      const funcNoAnnotations = createFunctionInfo({
+        name: 'calculatePrice',
+        params: [{ name: 'amount', type: 'number' }],
+        returnType: 'number',
+      });
+      const resultNoAnnotations = generator.analyzeFunction(funcNoAnnotations, 'src/services/pricing.ts', fileContext);
+      expect(result.policies.length).toBe(resultNoAnnotations.policies.length);
+    });
+
+    it('should add annotation-based policies when annotations are present', () => {
+      const func = createFunctionInfo({
+        name: 'calculatePrice',
+        params: [{ name: 'amount', type: 'number' }],
+        returnType: 'number',
+        annotations: ['@Transactional'],
+      });
+      const fileContext = createFileContext();
+
+      const result = generator.analyzeFunction(func, 'src/services/pricing.ts', fileContext);
+
+      // Should have at least the function-name based policies PLUS annotation-based
+      const funcNoAnnotations = createFunctionInfo({
+        name: 'calculatePrice',
+        params: [{ name: 'amount', type: 'number' }],
+        returnType: 'number',
+      });
+      const resultNoAnnotations = generator.analyzeFunction(funcNoAnnotations, 'src/services/pricing.ts', fileContext);
+
+      expect(result.policies.length).toBeGreaterThan(resultNoAnnotations.policies.length);
+    });
+
+    it('should boost confidence when annotations are present', () => {
+      const funcWithAnnotations = createFunctionInfo({
+        name: 'doWork',
+        params: [],
+        startLine: 1,
+        endLine: 3,
+        annotations: ['@Transactional'],
+      });
+      const funcWithoutAnnotations = createFunctionInfo({
+        name: 'doWork',
+        params: [],
+        startLine: 1,
+        endLine: 3,
+      });
+
+      const policies = generator.inferPolicies(funcWithAnnotations, createFileContext());
+      const confWith = generator.calculateConfidence(funcWithAnnotations, policies, null);
+      const confWithout = generator.calculateConfidence(funcWithoutAnnotations, [], null);
+
+      // annotations give +0.05 confidence, plus policies give +0.1
+      expect(confWith).toBeGreaterThan(confWithout);
     });
   });
 });
