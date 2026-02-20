@@ -314,39 +314,43 @@ function getLineNumber(content, charIndex) {
 // ============================================================
 /**
  * 소스 코드에서 문자열 리터럴과 주석을 제거하여 구조 파싱을 안전하게 수행할 수 있도록 전처리
+ *
+ * TASK-035: char array 방식으로 최적화
+ * - 원본과 동일 길이의 char array를 생성하여 직접 인덱스 접근으로 마스킹
+ * - segments 배열/문자열 연결 대신 단일 배열 사용으로 메모리 절감
+ *
  * @param content - 원본 소스 코드
  * @returns 전처리된 문자열과 수집된 주석 목록
  */
 function stripStringsAndComments(content) {
     const comments = [];
-    const segments = [];
-    let segmentStart = 0;
+    const len = content.length;
+    // TASK-035: 원본과 동일 길이의 char array 생성 (원본 복사)
+    const chars = new Array(len);
+    for (let k = 0; k < len; k++) {
+        chars[k] = content[k];
+    }
     let i = 0;
     let currentLine = 1;
     /**
-     * Helper: replace a range [start, end) with spaces, preserving newlines.
-     * Flushes the preceding segment, then pushes the whitespace replacement.
+     * Helper: 범위 [start, end)의 chars를 공백으로 마스킹 (개행 보존)
      */
-    function replaceRangeWithSpaces(start, end) {
-        if (start > segmentStart) {
-            segments.push(content.substring(segmentStart, start));
+    function maskRange(start, end) {
+        for (let j = start; j < end && j < len; j++) {
+            if (chars[j] !== '\n') {
+                chars[j] = ' ';
+            }
         }
-        let replacement = '';
-        for (let j = start; j < end && j < content.length; j++) {
-            replacement += content[j] === '\n' ? '\n' : ' ';
-        }
-        segments.push(replacement);
-        segmentStart = end;
     }
     try {
-        while (i < content.length) {
+        while (i < len) {
             // 블록 주석: /* ... */
-            if (content[i] === '/' && i + 1 < content.length && content[i + 1] === '*') {
+            if (content[i] === '/' && i + 1 < len && content[i + 1] === '*') {
                 const commentStartLine = currentLine;
                 const commentStart = i;
                 i += 2;
-                while (i < content.length) {
-                    if (content[i] === '*' && i + 1 < content.length && content[i + 1] === '/') {
+                while (i < len) {
+                    if (content[i] === '*' && i + 1 < len && content[i + 1] === '/') {
                         i += 2;
                         break;
                     }
@@ -357,31 +361,30 @@ function stripStringsAndComments(content) {
                 }
                 const commentText = content.substring(commentStart, i);
                 comments.push({ text: commentText, line: commentStartLine, type: 'block' });
-                replaceRangeWithSpaces(commentStart, i);
+                maskRange(commentStart, i);
                 continue;
             }
             // 라인 주석: // ...
-            if (content[i] === '/' && i + 1 < content.length && content[i + 1] === '/') {
+            if (content[i] === '/' && i + 1 < len && content[i + 1] === '/') {
                 const commentStartLine = currentLine;
                 const commentStart = i;
                 i += 2;
-                while (i < content.length && content[i] !== '\n') {
+                while (i < len && content[i] !== '\n') {
                     i++;
                 }
                 const commentText = content.substring(commentStart, i);
                 comments.push({ text: commentText, line: commentStartLine, type: 'line' });
-                replaceRangeWithSpaces(commentStart, i);
+                maskRange(commentStart, i);
                 continue;
             }
-            // Text Block 처리: \"\"\"...\"\"\" (Java 15+, Kotlin raw string)
-            if (content[i] === '"' && i + 2 < content.length &&
+            // Text Block 처리: """...""" (Java 15+, Kotlin raw string)
+            if (content[i] === '"' && i + 2 < len &&
                 content[i + 1] === '"' && content[i + 2] === '"') {
                 const textBlockStart = i;
-                i += 3; // 시작 \"\"\" 건너뛰기
-                // 종료 \"\"\" 찾기
-                while (i + 2 < content.length) {
+                i += 3;
+                while (i + 2 < len) {
                     if (content[i] === '"' && content[i + 1] === '"' && content[i + 2] === '"') {
-                        i += 3; // 종료 \"\"\" 건너뛰기
+                        i += 3;
                         break;
                     }
                     if (content[i] === '\n') {
@@ -389,17 +392,16 @@ function stripStringsAndComments(content) {
                     }
                     i++;
                 }
-                // 파일 끝까지 \"\"\" 없으면 끝까지 처리
-                if (i + 2 >= content.length && !(i >= 3 && content[i - 3] === '"' && content[i - 2] === '"' && content[i - 1] === '"')) {
-                    while (i < content.length) {
+                // 파일 끝까지 """ 없으면 끝까지 처리
+                if (i + 2 >= len && !(i >= 3 && content[i - 3] === '"' && content[i - 2] === '"' && content[i - 1] === '"')) {
+                    while (i < len) {
                         if (content[i] === '\n') {
                             currentLine++;
                         }
                         i++;
                     }
                 }
-                // 공백으로 치환 (라인 번호 보존)
-                replaceRangeWithSpaces(textBlockStart, i);
+                maskRange(textBlockStart, i);
                 continue;
             }
             // 문자열 리터럴: "..." 또는 '...'
@@ -407,8 +409,8 @@ function stripStringsAndComments(content) {
                 const stringStart = i;
                 const quote = content[i];
                 i++;
-                while (i < content.length && content[i] !== quote) {
-                    if (content[i] === '\\' && i + 1 < content.length) {
+                while (i < len && content[i] !== quote) {
+                    if (content[i] === '\\' && i + 1 < len) {
                         i += 2;
                         continue;
                     }
@@ -417,23 +419,11 @@ function stripStringsAndComments(content) {
                     }
                     i++;
                 }
-                if (i < content.length) {
+                if (i < len) {
                     i++; // skip closing quote
                 }
-                // Flush preceding segment, then push quote + whitespace + quote
-                if (stringStart > segmentStart) {
-                    segments.push(content.substring(segmentStart, stringStart));
-                }
-                let replacement = quote;
-                const innerEnd = (i > stringStart + 1) ? i - 1 : stringStart + 1;
-                for (let j = stringStart + 1; j < innerEnd; j++) {
-                    replacement += content[j] === '\n' ? '\n' : ' ';
-                }
-                if (i > stringStart + 1) {
-                    replacement += quote;
-                }
-                segments.push(replacement);
-                segmentStart = i;
+                // 문자열 내부만 마스킹 (따옴표는 보존)
+                maskRange(stringStart + 1, i > stringStart + 1 ? i - 1 : stringStart + 1);
                 continue;
             }
             // Track line numbers for regular characters
@@ -442,11 +432,7 @@ function stripStringsAndComments(content) {
             }
             i++;
         }
-        // Flush remaining segment
-        if (segmentStart < content.length) {
-            segments.push(content.substring(segmentStart));
-        }
-        return { processed: segments.join(''), comments };
+        return { processed: chars.join(''), comments };
     }
     catch (err) {
         logger_1.logger.debug(`Failed to strip strings and comments: ${err instanceof Error ? err.message : String(err)}`);

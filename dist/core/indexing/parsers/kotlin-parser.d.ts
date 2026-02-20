@@ -37,6 +37,11 @@ export declare class KotlinParser extends BaseParser {
     private parseClassAnnotations;
     private parseClassDeclaration;
     private parseFunctions;
+    /**
+     * TASK-040: fun 시그니처 이전의 어노테이션 블록을 역추적하여 추출
+     * lazy quantifier 대신 char-by-char 역방향 탐색으로 안전하게 추출
+     */
+    private extractAnnotationBlockBefore;
     private parsePrimaryConstructorDI;
     private parsePropertyInjection;
     private parseDataClassFields;

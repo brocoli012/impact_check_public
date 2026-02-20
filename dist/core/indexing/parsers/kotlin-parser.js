@@ -159,9 +159,6 @@ class KotlinParser extends base_parser_1.BaseParser {
     // 함수 파싱
     // ============================================================
     parseFunctions(processed, _content, lineTable, filePath, _classAnnotations, result) {
-        // 함수 앞의 어노테이션 + fun 시그니처
-        const funRegex = /((?:\s*@\w+(?:\([^)]*\))?)*?)\s*(?:(?:override|open|internal|private|protected|public|suspend|inline|infix|operator|tailrec)\s+)*fun\s+(?:<[^>]*>\s*)?(?:([\w<>?,.\s]+?)\.)?(\w+)\s*\(([^)]*)\)(?:\s*:\s*([\w<>?,.\s*]+?))?\s*(?:\{|=)/g;
-        let match;
         // 클래스 레벨 @RequestMapping 경로 추출
         let classBasePath = '';
         const classAnnoBlock = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*?)\s*(?:open\s+|abstract\s+)?class/);
@@ -171,13 +168,20 @@ class KotlinParser extends base_parser_1.BaseParser {
                 classBasePath = (0, jvm_parser_utils_1.parseAnnotationValue)(`@RequestMapping${rmMatch[1] || '("/")'}`);
             }
         }
-        while ((match = funRegex.exec(processed)) !== null) {
-            const annotationBlock = match[1] || '';
-            const receiverType = match[2]; // 확장 함수의 receiver
-            const funcName = match[3];
-            const paramsStr = match[4];
-            const returnType = match[5]?.trim();
-            const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);
+        // TASK-040: 2-pass 방식으로 분리하여 Regex 안전성 강화
+        // Pass 1: fun 시그니처 매칭 (단순화된 정규식, lazy quantifier 제거)
+        // 어노테이션 블록은 별도 역추적으로 추출
+        const funSigRegex = /(?:(?:override|open|internal|private|protected|public|suspend|inline|infix|operator|tailrec)\s+)*fun\s+(?:<[^>]*>\s*)?(?:([\w<>?,.]+)\.)?([\w]+)\s*\(([^)]*)\)(?:\s*:\s*([\w<>?,.* ]+))?\s*(?:\{|=)/g;
+        let match;
+        while ((match = funSigRegex.exec(processed)) !== null) {
+            const funStartOffset = match.index;
+            const receiverType = match[1]; // 확장 함수의 receiver
+            const funcName = match[2];
+            const paramsStr = match[3];
+            const returnType = match[4]?.trim();
+            const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, funStartOffset);
+            // Pass 2: 어노테이션 블록 역추적 추출 (char-by-char)
+            const annotationBlock = this.extractAnnotationBlockBefore(processed, funStartOffset);
             // 어노테이션 추출
             const methodAnnotations = [];
             const annoRegex = /@(\w+)/g;
@@ -186,12 +190,12 @@ class KotlinParser extends base_parser_1.BaseParser {
                 methodAnnotations.push(annoMatch[1]);
             }
             // suspend 판별
-            const isSuspend = processed.substring(Math.max(0, match.index - 100), match.index + match[0].length).includes('suspend');
+            const isSuspend = processed.substring(Math.max(0, funStartOffset - 100), funStartOffset + match[0].length).includes('suspend');
             const isReactive = returnType ? (returnType.includes('Mono') || returnType.includes('Flux') || returnType.includes('Flow') || returnType.includes('Deferred')) : false;
             // 파라미터 파싱
             const params = this.parseKotlinParams(paramsStr);
             // 메서드 종료 라인 추정
-            const endLine = this.estimateMethodEndLine(processed, lineTable, match.index);
+            const endLine = this.estimateMethodEndLine(processed, lineTable, funStartOffset);
             const displayName = receiverType ? `${receiverType}.${funcName}` : funcName;
             const funcInfo = {
                 name: displayName,
@@ -201,7 +205,7 @@ class KotlinParser extends base_parser_1.BaseParser {
                 params,
                 returnType: returnType || undefined,
                 isAsync: isSuspend || isReactive,
-                isExported: !processed.substring(Math.max(0, match.index - 30), match.index).includes('private'),
+                isExported: !processed.substring(Math.max(0, funStartOffset - 30), funStartOffset).includes('private'),
             };
             result.functions.push(funcInfo);
             // Spring 라우트 어노테이션 확인
@@ -220,6 +224,51 @@ class KotlinParser extends base_parser_1.BaseParser {
                 }
             }
         }
+    }
+    /**
+     * TASK-040: fun 시그니처 이전의 어노테이션 블록을 역추적하여 추출
+     * lazy quantifier 대신 char-by-char 역방향 탐색으로 안전하게 추출
+     */
+    extractAnnotationBlockBefore(processed, funStartOffset) {
+        let pos = funStartOffset - 1;
+        // fun 시그니처 앞의 공백 건너뛰기
+        while (pos >= 0 && (processed[pos] === ' ' || processed[pos] === '\t' || processed[pos] === '\n' || processed[pos] === '\r')) {
+            pos--;
+        }
+        const blockEnd = pos + 1;
+        // 어노테이션 블록 역추적
+        while (pos >= 0) {
+            if (processed[pos] === ')') {
+                let parenCount = 1;
+                pos--;
+                while (pos >= 0 && parenCount > 0) {
+                    if (processed[pos] === ')')
+                        parenCount++;
+                    else if (processed[pos] === '(')
+                        parenCount--;
+                    pos--;
+                }
+                continue;
+            }
+            if (/\w/.test(processed[pos])) {
+                while (pos >= 0 && /\w/.test(processed[pos])) {
+                    pos--;
+                }
+                if (pos >= 0 && processed[pos] === '@') {
+                    pos--;
+                    while (pos >= 0 && (processed[pos] === ' ' || processed[pos] === '\t' || processed[pos] === '\n' || processed[pos] === '\r')) {
+                        pos--;
+                    }
+                    continue;
+                }
+                break;
+            }
+            break;
+        }
+        const blockStart = pos + 1;
+        if (blockStart >= blockEnd)
+            return '';
+        return processed.substring(blockStart, blockEnd);
     }
     // ============================================================
     // Primary Constructor DI

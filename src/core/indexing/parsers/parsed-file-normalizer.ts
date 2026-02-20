@@ -6,12 +6,50 @@
  *   1. className 정규화 (AST: "OuterClass.InnerClass" → "InnerClass")
  *   2. line 번호 검증 (음수/0 방지, endLine >= startLine 보장)
  *   3. signature 공백 정규화
+ *   4. TASK-043: import 문자열 인터닝 (동일 import source 공유)
  */
 
 import { ParsedFile } from '../types';
 import { logger } from '../../../utils/logger';
 
+/**
+ * TASK-043: StringInterner - 동일 문자열을 단일 참조로 공유
+ *
+ * Java/Kotlin 프로젝트에서 동일한 import 문자열 (예: "org.springframework.stereotype.Service")이
+ * 수백 파일에서 반복되는 경우, 각 문자열을 Map에 캐싱하여 메모리 중복을 제거한다.
+ */
+export class StringInterner {
+  private readonly pool: Map<string, string> = new Map();
+
+  /**
+   * 문자열을 인터닝하여 동일 참조 반환
+   * @param str - 인터닝할 문자열
+   * @returns 풀에 저장된 동일 문자열 참조
+   */
+  intern(str: string): string {
+    const existing = this.pool.get(str);
+    if (existing !== undefined) {
+      return existing;
+    }
+    this.pool.set(str, str);
+    return str;
+  }
+
+  /** 풀 크기 (디버그용) */
+  get size(): number {
+    return this.pool.size;
+  }
+
+  /** 풀 해제 */
+  clear(): void {
+    this.pool.clear();
+  }
+}
+
 export class ParsedFileNormalizer {
+  // TASK-043: 인스턴스 간 공유되는 문자열 인터닝 풀
+  private readonly stringInterner = new StringInterner();
+
   /**
    * ParsedFile 정규화 (AST vs Regex 차이 제거)
    * @param parsed - 파싱된 파일 정보
@@ -33,10 +71,13 @@ export class ParsedFileNormalizer {
         }));
       }
 
-      // 2. imports: line 번호 검증
+      // 2. imports: line 번호 검증 + TASK-043: 문자열 인터닝
       if (normalized.imports) {
         normalized.imports = normalized.imports.map(imp => ({
           ...imp,
+          // TASK-043: import source 문자열 인터닝
+          source: this.stringInterner.intern(imp.source),
+          specifiers: imp.specifiers.map(s => this.stringInterner.intern(s)),
           line: Math.max(1, imp.line),
         }));
       }
@@ -83,6 +124,13 @@ export class ParsedFileNormalizer {
     }
 
     return normalized;
+  }
+
+  /**
+   * TASK-043: 인터닝 풀 통계 반환 (디버그용)
+   */
+  get internPoolSize(): number {
+    return this.stringInterner.size;
   }
 
   /**

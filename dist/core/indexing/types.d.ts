@@ -23,6 +23,11 @@ export interface ScanResult {
         /** 언어별 파일 수 */
         languages: Record<string, number>;
     };
+    /**
+     * TASK-038: 파일 콘텐츠 캐시 (상대경로 → 콘텐츠)
+     * Scanner에서 이미 읽은 파일 콘텐츠를 Indexer가 재사용하여 이중 파일 읽기 제거
+     */
+    contentCache?: Map<string, string>;
 }
 /**
  * 파싱된 파일 정보

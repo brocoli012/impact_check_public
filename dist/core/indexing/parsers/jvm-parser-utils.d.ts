@@ -93,6 +93,11 @@ export declare function getLineFromTable(offsets: number[], charIndex: number): 
 export declare function getLineNumber(content: string, charIndex: number): number;
 /**
  * 소스 코드에서 문자열 리터럴과 주석을 제거하여 구조 파싱을 안전하게 수행할 수 있도록 전처리
+ *
+ * TASK-035: char array 방식으로 최적화
+ * - 원본과 동일 길이의 char array를 생성하여 직접 인덱스 접근으로 마스킹
+ * - segments 배열/문자열 연결 대신 단일 배열 사용으로 메모리 절감
+ *
  * @param content - 원본 소스 코드
  * @returns 전처리된 문자열과 수집된 주석 목록
  */

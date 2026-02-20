@@ -3,18 +3,6 @@
  * @description 인덱서 메인 - 전체 인덱싱 파이프라인 실행 및 인덱스 관리
  */
 import { CodeIndex, ChangedFileSet } from '../../types/index';
-/**
- * Indexer - 전체 인덱싱 파이프라인 실행 및 관리
- *
- * 파이프라인:
- *   1. FileScanner.scan() -> 파일 목록
- *   2. 각 파일에 대해 Parser.parse() -> ParsedFile[]
- *   3. PolicyExtractor -> 정책 추출
- *   4. DependencyGraphBuilder.build() -> 의존성 그래프
- *   5. 결과 조합 -> CodeIndex
- *   6. (optional) 보강 주석 생성 (annotationsEnabled일 때만)
- *   7. JSON 직렬화 -> .impact/projects/{id}/index/ 저장
- */
 export declare class Indexer {
     private readonly scanner;
     private readonly parsers;
@@ -80,13 +68,24 @@ export declare class Indexer {
      */
     private parseFiles;
     /**
+     * TASK-039: 스트리밍 파싱 - 각 파일 파싱 직후 visitor 콜백 호출
+     * ParsedFile 참조를 caller가 필요한 만큼만 유지할 수 있도록 함
+     *
+     * @param projectPath - 프로젝트 루트 경로
+     * @param files - 파일 목록
+     * @param contentCache - TASK-038 콘텐츠 캐시
+     * @param visitor - 각 파싱된 파일에 대해 호출되는 콜백
+     * @returns 파싱된 파일 수
+     */
+    private parseFilesStreaming;
+    /**
+     * 메모리 할당 없이 라인 수를 카운트
+     */
+    private countLines;
+    /**
      * Parser.parse() 호출을 timeout으로 래핑
      */
     private parseWithTimeout;
-    /**
-     * 배열을 청크 단위로 분할
-     */
-    private chunkArray;
     /**
      * ParsedFile이 빈 결과인지 확인 (imports=0, exports=0, functions=0)
      */

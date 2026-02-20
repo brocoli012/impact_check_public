@@ -13,12 +13,36 @@ import { ParsedFile, ApiCallGraph } from './types';
  *   - API 호출 관계 매핑 (FE -> BE)
  */
 export declare class DependencyGraphBuilder {
+    private _nodes;
+    private _edges;
+    private _nodeMap;
     /**
      * 파싱된 파일들로부터 의존성 그래프 구축
      * @param parsedFiles - 파싱된 파일 목록
      * @returns 의존성 그래프
      */
     build(parsedFiles: ParsedFile[]): DependencyGraph;
+    /**
+     * 점진적 빌드 초기화 - 내부 상태 리셋
+     */
+    beginIncremental(): void;
+    /**
+     * 단일 ParsedFile을 점진적으로 그래프에 추가 (노드 생성만, 엣지는 나중에)
+     * import 엣지 해석에는 전체 노드맵이 필요하므로 노드만 먼저 등록
+     * @param file - 파싱된 파일
+     */
+    addNode(file: ParsedFile): void;
+    /**
+     * 단일 ParsedFile의 엣지를 점진적으로 추가
+     * beginIncremental() → addNode() (모든 파일) → addEdges() (모든 파일) → finishIncremental()
+     * @param file - 파싱된 파일
+     */
+    addEdges(file: ParsedFile): void;
+    /**
+     * 점진적 빌드 완료 - 결과 반환 및 내부 상태 해제
+     * @returns 의존성 그래프
+     */
+    finishIncremental(): DependencyGraph;
     /**
      * 특정 노드의 영향 받는 노드 탐색 (1-hop)
      * @param nodeId - 대상 노드 ID

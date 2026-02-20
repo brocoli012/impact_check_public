@@ -95,9 +95,9 @@ class JavaParser extends base_parser_1.BaseParser {
     parseClassAnnotations(processed) {
         const annotations = [];
         // 클래스 선언 이전의 어노테이션들 수집
-        const classMatch = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*?)\s*(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum)\s+\w+/);
-        if (classMatch && classMatch[1]) {
-            const annoBlock = classMatch[1];
+        const classMatch = processed.match(/(?:@\w+(?:\([^)]*\))?\s*)*\s*(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum|record)\s+\w+/);
+        if (classMatch) {
+            const annoBlock = classMatch[0].split(/(?:public|abstract|class|interface|enum|record)/)[0];
             const annoRegex = /@(\w+)/g;
             let m;
             while ((m = annoRegex.exec(annoBlock)) !== null) {
@@ -158,27 +158,31 @@ class JavaParser extends base_parser_1.BaseParser {
         // @Configuration 클래스 여부 확인 (@Bean DI 감지용)
         const isConfigurationClass = classAnnotations.includes('Configuration');
         const isAspectClass = classAnnotations.includes('Aspect');
-        // 메서드 앞의 어노테이션 + 메서드 시그니처 매칭
-        const methodRegex = /((?:\s*@\w+(?:\([^)]*\))?)*?)\s*(?:public|protected|private)?\s*(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?(?:<[\w<>,?\s]+?>\s+)?([\w<>\[\],?\s]+?)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+?)?\s*\{/g;
-        let match;
-        // 클래스 레벨 @RequestMapping 경로 추출
         let classBasePath = '';
-        const classAnnoBlock = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*?)\s*(?:public\s+)?(?:abstract\s+)?class/);
-        if (classAnnoBlock && classAnnoBlock[1]) {
-            const rmMatch = classAnnoBlock[1].match(/@RequestMapping\s*(\([^)]*\))?/);
+        const classAnnoBlock = processed.match(/(?:@\w+(?:\([^)]*\))?\s*)*\s*(?:public\s+)?(?:abstract\s+)?class/);
+        if (classAnnoBlock) {
+            const annoBlock = classAnnoBlock[0].split(/(?:public|abstract|class)/)[0];
+            const rmMatch = annoBlock.match(/@RequestMapping\s*(\([^)]*\))?/);
             if (rmMatch) {
                 classBasePath = (0, jvm_parser_utils_1.parseAnnotationValue)(`@RequestMapping${rmMatch[1] || '("/")'}`);
             }
         }
-        while ((match = methodRegex.exec(processed)) !== null) {
-            const annotationBlock = match[1] || '';
-            const returnType = match[2].trim();
-            const methodName = match[3];
-            const paramsStr = match[4];
-            const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);
+        // TASK-040: 2-pass 방식으로 분리하여 Regex 안전성 강화
+        // Pass 1: 메서드 시그니처 매칭 (단순화된 정규식, lazy quantifier 제거)
+        // 어노테이션 블록은 별도로 역추적하여 추출
+        const methodSigRegex = /(?:public|protected|private)\s+(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?(?:<[^>]+>\s+)?([\w<>\[\],?\s]+)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+)?\s*\{/g;
+        let match;
+        while ((match = methodSigRegex.exec(processed)) !== null) {
+            const returnType = match[1].trim();
+            const methodName = match[2];
+            const paramsStr = match[3];
+            const methodStartOffset = match.index;
+            const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, methodStartOffset);
             // 생성자는 건너뛰기 (반환 타입이 클래스 이름과 동일)
             if (returnType === methodName)
                 continue;
+            // Pass 2: 어노테이션 블록 역추적 추출 (char-by-char)
+            const annotationBlock = this.extractAnnotationBlockBefore(processed, methodStartOffset);
             // 메서드 어노테이션 추출
             const methodAnnotations = [];
             const annoRegex = /@(\w+)/g;
@@ -203,7 +207,7 @@ class JavaParser extends base_parser_1.BaseParser {
             // 파라미터 파싱
             const params = this.parseMethodParams(paramsStr);
             // 메서드 종료 라인 추정 (간이: 다음 메서드 시작 또는 클래스 종료)
-            const endLine = this.estimateMethodEndLine(processed, lineTable, match.index);
+            const endLine = this.estimateMethodEndLine(processed, lineTable, methodStartOffset);
             const isAsync = returnType.includes('CompletableFuture') ||
                 returnType.includes('Mono') ||
                 returnType.includes('Flux');
@@ -215,7 +219,7 @@ class JavaParser extends base_parser_1.BaseParser {
                 params,
                 returnType,
                 isAsync,
-                isExported: processed.substring(Math.max(0, match.index - 30), match.index + match[0].length).includes('public'),
+                isExported: processed.substring(Math.max(0, methodStartOffset - 10), methodStartOffset + 10).includes('public'),
             };
             result.functions.push(funcInfo);
             // Spring 라우트 어노테이션 확인
@@ -244,12 +248,64 @@ class JavaParser extends base_parser_1.BaseParser {
                                 method: aopAnno,
                                 url: pointcut,
                                 line,
+                                callerFunction: methodName,
                             });
                         }
                     }
                 }
             }
         }
+    }
+    /**
+     * TASK-040: 메서드 시그니처 이전의 어노테이션 블록을 역추적하여 추출
+     * lazy quantifier 대신 char-by-char 역방향 탐색으로 안전하게 추출
+     */
+    extractAnnotationBlockBefore(processed, methodStartOffset) {
+        // 역방향으로 탐색: 공백, @어노테이션, (괄호내용) 블록을 찾음
+        let pos = methodStartOffset - 1;
+        // 메서드 시그니처 앞의 공백 건너뛰기
+        while (pos >= 0 && (processed[pos] === ' ' || processed[pos] === '\t' || processed[pos] === '\n' || processed[pos] === '\r')) {
+            pos--;
+        }
+        const blockEnd = pos + 1;
+        // 어노테이션 블록 역추적: @로 시작하는 패턴이 연속되는 범위를 찾음
+        while (pos >= 0) {
+            // 닫는 괄호를 만나면 매칭되는 여는 괄호까지 건너뛰기
+            if (processed[pos] === ')') {
+                let parenCount = 1;
+                pos--;
+                while (pos >= 0 && parenCount > 0) {
+                    if (processed[pos] === ')')
+                        parenCount++;
+                    else if (processed[pos] === '(')
+                        parenCount--;
+                    pos--;
+                }
+                continue;
+            }
+            // 어노테이션 이름의 일부 (알파벳)
+            if (/\w/.test(processed[pos])) {
+                // 단어 시작까지 역추적
+                while (pos >= 0 && /\w/.test(processed[pos])) {
+                    pos--;
+                }
+                // @ 기호 확인
+                if (pos >= 0 && processed[pos] === '@') {
+                    pos--;
+                    // 다음 어노테이션을 위해 공백 건너뛰기
+                    while (pos >= 0 && (processed[pos] === ' ' || processed[pos] === '\t' || processed[pos] === '\n' || processed[pos] === '\r')) {
+                        pos--;
+                    }
+                    continue;
+                }
+                break;
+            }
+            break;
+        }
+        const blockStart = pos + 1;
+        if (blockStart >= blockEnd)
+            return '';
+        return processed.substring(blockStart, blockEnd);
     }
     // ============================================================
     // DI 패턴 파싱
@@ -270,7 +326,7 @@ class JavaParser extends base_parser_1.BaseParser {
             });
         }
         // @RequiredArgsConstructor: Lombok이 final 필드로 생성자를 자동 생성하는 패턴
-        const requiredArgsMatch = processed.match(/@RequiredArgsConstructor(?:\s*\([^)]*\))?\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:public\s+)?class\s+\w+/);
+        const requiredArgsMatch = processed.match(/@RequiredArgsConstructor(?:\s*\([^)]*\))?\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:public\s+)?(?:class|interface|enum|record)\s+\w+/);
         if (requiredArgsMatch) {
             const classBodyStart = processed.indexOf('{', requiredArgsMatch.index);
             if (classBodyStart !== -1) {
@@ -294,7 +350,7 @@ class JavaParser extends base_parser_1.BaseParser {
             }
         }
         // 생성자 주입 패턴 (Spring 권장 방식)
-        const constructorRegex = /(?:public\s+)?(\w+)\s*\(((?:\s*(?:@\w+(?:\([^)]*\))?\s+)*?(?:final\s+)?[\w<>\[\],?\s]+?\s+\w+\s*,?\s*)+?)\)\s*\{/g;
+        const constructorRegex = /(?:public\s+)?(\w+)\s*\(([^)]*)\)\s*\{/g;
         while ((match = constructorRegex.exec(processed)) !== null) {
             const paramsStr = match[2];
             const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);

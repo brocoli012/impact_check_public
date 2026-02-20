@@ -41,8 +41,9 @@ export class KotlinAstParser extends BaseParser {
       return result;
     }
 
+    let tree: any = null;
     try {
-      const tree = await parseKotlin(content);
+      tree = await parseKotlin(content);
       if (!tree) {
         logger.debug(`KotlinAstParser: tree-sitter parse returned null for ${filePath}`);
         return result;
@@ -61,6 +62,11 @@ export class KotlinAstParser extends BaseParser {
 
     } catch (err) {
       logger.debug(`KotlinAstParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      // tree-sitter 네이티브 메모리 해제
+      if (tree && typeof tree.delete === 'function') {
+        tree.delete();
+      }
     }
 
     return result;

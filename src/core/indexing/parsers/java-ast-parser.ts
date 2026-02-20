@@ -40,8 +40,9 @@ export class JavaAstParser extends BaseParser {
       return result;
     }
 
+    let tree: any = null;
     try {
-      const tree = await parseJava(content);
+      tree = await parseJava(content);
       if (!tree) {
         logger.debug(`JavaAstParser: tree-sitter parse returned null for ${filePath}`);
         return result;
@@ -63,6 +64,11 @@ export class JavaAstParser extends BaseParser {
 
     } catch (err) {
       logger.debug(`JavaAstParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      // tree-sitter 네이티브 메모리 해제
+      if (tree && typeof tree.delete === 'function') {
+        tree.delete();
+      }
     }
 
     return result;

@@ -4,6 +4,7 @@
  */
 
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { CodeIndex, IndexMeta, FileInfo, ChangedFileSet } from '../../types/index';
 import { ParsedFile } from './types';
@@ -35,6 +36,96 @@ import { ParsedFileNormalizer } from './parsers/parsed-file-normalizer';
  *   6. (optional) 보강 주석 생성 (annotationsEnabled일 때만)
  *   7. JSON 직렬화 -> .impact/projects/{id}/index/ 저장
  */
+// ============================================================
+// TASK-042: Circuit Breaker + MemoryGuard
+// ============================================================
+
+/**
+ * CircuitBreaker - 연속 파싱 실패 감지 및 자동 중단
+ *
+ * 연속 N개 파일 파싱 실패 시 나머지 파일 파싱을 스킵하여
+ * 무의미한 CPU 소비를 방지한다.
+ */
+class CircuitBreaker {
+  private consecutiveFailures = 0;
+  private isOpen = false;
+
+  constructor(private readonly maxConsecutiveFailures: number = 10) {}
+
+  /** 성공 시 카운터 리셋 */
+  recordSuccess(): void {
+    this.consecutiveFailures = 0;
+    this.isOpen = false;
+  }
+
+  /** 실패 기록. 임계치 초과 시 서킷 오픈 */
+  recordFailure(): void {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+      this.isOpen = true;
+      logger.warn(`CircuitBreaker OPEN: ${this.consecutiveFailures} consecutive parse failures`);
+    }
+  }
+
+  /** 서킷이 열렸는지 (파싱 중단 필요 여부) */
+  get tripped(): boolean {
+    return this.isOpen;
+  }
+
+  get failures(): number {
+    return this.consecutiveFailures;
+  }
+}
+
+/**
+ * MemoryGuard - 힙 메모리 사용량 감시 및 GC 강제 시도
+ *
+ * heapUsed가 전체 힙의 85% 초과 시:
+ *   1. global.gc() 강제 시도 (--expose-gc 필요)
+ *   2. GC 후에도 85% 초과면 파싱 중단 신호 반환
+ */
+class MemoryGuard {
+  private readonly threshold: number;
+
+  constructor(threshold: number = 0.85) {
+    this.threshold = threshold;
+  }
+
+  /**
+   * 메모리 체크. 파싱 계속 가능하면 true, 중단 필요하면 false
+   */
+  check(): boolean {
+    const mem = process.memoryUsage();
+    const ratio = mem.heapUsed / mem.heapTotal;
+
+    if (ratio <= this.threshold) {
+      return true;
+    }
+
+    // GC 강제 시도
+    logger.warn(`MemoryGuard: heap at ${(ratio * 100).toFixed(1)}% (${(mem.heapUsed / 1024 / 1024).toFixed(0)}MB / ${(mem.heapTotal / 1024 / 1024).toFixed(0)}MB). Attempting GC...`);
+
+    if (typeof (global as any).gc === 'function') {
+      (global as any).gc();
+
+      // GC 후 재확인
+      const memAfter = process.memoryUsage();
+      const ratioAfter = memAfter.heapUsed / memAfter.heapTotal;
+      logger.info(`MemoryGuard: after GC heap at ${(ratioAfter * 100).toFixed(1)}% (${(memAfter.heapUsed / 1024 / 1024).toFixed(0)}MB)`);
+
+      if (ratioAfter > this.threshold) {
+        logger.warn(`MemoryGuard: still above ${(this.threshold * 100).toFixed(0)}% after GC. Aborting parse.`);
+        return false;
+      }
+      return true;
+    }
+
+    // global.gc 없으면 (--expose-gc 미설정) 경고만
+    logger.warn('MemoryGuard: global.gc() not available (run with --expose-gc). Continuing cautiously.');
+    return ratio < 0.95; // 95% 초과 시에만 강제 중단
+  }
+}
+
 export class Indexer {
   private readonly scanner: FileScanner;
   private readonly parsers: BaseParser[];
@@ -114,14 +205,139 @@ export class Indexer {
     const scanResult = await this.scanner.scan(resolvedPath);
     logger.info(`  Found ${scanResult.files.length} files`);
 
-    // Step 2: AST 파싱
-    logger.info('Step 2/5: Parsing files...');
-    const parsedFiles = await this.parseFiles(resolvedPath, scanResult.files);
-    logger.info(`  Parsed ${parsedFiles.length} files`);
+    // TASK-039: parse→extract→release 스트리밍 패턴
+    // Step 2+3+4: 파싱 + 즉시 추출 + 그래프 노드 등록을 한 패스로 처리
+    logger.info('Step 2/5: Parsing and extracting (streaming)...');
+
+    // 스트리밍 accumulator
+    const components: CodeIndex['components'] = [];
+    const apiEndpoints: CodeIndex['apis'] = [];
+    const screens: CodeIndex['screens'] = [];
+    let compCounter = 0;
+    let apiCounter = 0;
+    let screenCounter = 0;
+    const apiSeen = new Set<string>();
+
+    // 정책 추출을 위한 경량 참조 (comments만 보존)
+    const parsedFilesForPolicy: ParsedFile[] = [];
+    // 보강 주석 생성용 (annotationsEnabled일 때만 유지)
+    const parsedFilesForAnnotation: ParsedFile[] = [];
+
+    // 그래프 빌더 점진적 빌드 시작
+    this.graphBuilder.beginIncremental();
+
+    // Phase 1: 파싱 + 즉시 추출 + 노드 등록
+    const parsedFileRefs: ParsedFile[] = []; // 엣지 빌드용 임시 참조
+    const parseResult = await this.parseFilesStreaming(
+      resolvedPath,
+      scanResult.files,
+      scanResult.contentCache,
+      (parsed: ParsedFile) => {
+        // 즉시 컴포넌트 추출
+        for (const comp of parsed.components) {
+          compCounter++;
+          components.push({
+            id: `comp-${compCounter}`,
+            name: comp.name,
+            filePath: parsed.filePath,
+            type: comp.type,
+            imports: [],
+            importedBy: [],
+            props: comp.props,
+            emits: [],
+            apiCalls: parsed.apiCalls.map((_, i) => `api-call-${i}`),
+            linesOfCode: 0,
+          });
+        }
+
+        // 즉시 API 엔드포인트 추출
+        for (const route of parsed.routeDefinitions) {
+          const key = `${route.path}`;
+          if (!apiSeen.has(key)) {
+            apiSeen.add(key);
+            apiCounter++;
+            const method = route.component.split('.').pop()?.toUpperCase() || 'GET';
+            apiEndpoints.push({
+              id: `api-${apiCounter}`,
+              method: method as CodeIndex['apis'][0]['method'],
+              path: route.path,
+              filePath: parsed.filePath,
+              handler: route.component,
+              calledBy: [],
+              requestParams: [],
+              responseType: 'unknown',
+              relatedModels: [],
+            });
+          }
+        }
+
+        // 즉시 화면 추출
+        const filePath = parsed.filePath.replace(/\\/g, '/');
+        if (filePath.includes('/pages/') || filePath.includes('/screens/') || filePath.includes('/views/')) {
+          screenCounter++;
+          const name = path.basename(parsed.filePath, path.extname(parsed.filePath));
+          const route = parsed.routeDefinitions.length > 0
+            ? parsed.routeDefinitions[0].path
+            : `/${name.toLowerCase()}`;
+          screens.push({
+            id: `screen-${screenCounter}`,
+            name,
+            route,
+            filePath: parsed.filePath,
+            components: parsed.components.map((_, i) => `comp-${i}`),
+            apiCalls: parsed.apiCalls.map((_, i) => `api-call-${i}`),
+            childScreens: [],
+            metadata: {
+              linesOfCode: 0,
+              complexity: parsed.functions.length > 5 ? 'high' : parsed.functions.length > 2 ? 'medium' : 'low',
+            },
+          });
+        }
+
+        // 그래프 노드 등록
+        this.graphBuilder.addNode(parsed);
+
+        // 정책 추출용 경량 참조 보존 (filePath + comments만)
+        parsedFilesForPolicy.push({
+          filePath: parsed.filePath,
+          imports: [],
+          exports: [],
+          functions: [],
+          components: [],
+          apiCalls: [],
+          routeDefinitions: [],
+          comments: parsed.comments,
+        });
+
+        // 보강 주석용 전체 참조 (enabled일 때만)
+        if (this.annotationsEnabled) {
+          parsedFilesForAnnotation.push(parsed);
+        }
+
+        // 엣지 빌드를 위해 임시 참조 유지 (imports, apiCalls, routeDefinitions 필요)
+        parsedFileRefs.push(parsed);
+      },
+    );
+    logger.info(`  Parsed ${parseResult} files (streaming)`);
+
+    // TASK-038: 파싱 완료 후 contentCache 해제
+    if (scanResult.contentCache) {
+      scanResult.contentCache.clear();
+    }
+
+    // Phase 2: 전체 노드 맵 완성 후 엣지 빌드
+    for (const pf of parsedFileRefs) {
+      this.graphBuilder.addEdges(pf);
+    }
+    // 임시 참조 해제
+    parsedFileRefs.length = 0;
+
+    const dependencyGraph = this.graphBuilder.finishIncremental();
+    logger.info(`  Graph: ${dependencyGraph.graph.nodes.length} nodes, ${dependencyGraph.graph.edges.length} edges`);
 
     // Step 3: 정책 추출
     logger.info('Step 3/5: Extracting policies...');
-    const commentPolicies = this.policyExtractor.extractFromComments(parsedFiles);
+    const commentPolicies = this.policyExtractor.extractFromComments(parsedFilesForPolicy);
     const docPolicies = await this.policyExtractor.extractFromDocs(resolvedPath);
     const manualPolicies = await this.policyExtractor.loadManualPolicies(resolvedPath);
     const allPolicies = this.policyExtractor.mergeAllPolicies(
@@ -131,16 +347,11 @@ export class Indexer {
     );
     logger.info(`  Extracted ${allPolicies.length} policies`);
 
-    // Step 4: 의존성 그래프 구축
-    logger.info('Step 4/5: Building dependency graph...');
-    const dependencyGraph = this.graphBuilder.build(parsedFiles);
-    logger.info(`  Graph: ${dependencyGraph.graph.nodes.length} nodes, ${dependencyGraph.graph.edges.length} edges`);
+    // 정책 추출 후 경량 참조 해제
+    parsedFilesForPolicy.length = 0;
 
     // Step 5: 코드 인덱스 조합
     logger.info('Step 5/5: Composing code index...');
-    const components = this.extractComponents(parsedFiles);
-    const apiEndpoints = this.extractApiEndpoints(parsedFiles);
-    const screens = this.extractScreens(parsedFiles);
 
     const now = new Date().toISOString();
     const gitInfo = await this.getGitInfo(resolvedPath);
@@ -180,8 +391,9 @@ export class Indexer {
     };
 
     // Step 6 (optional): 보강 주석 생성
-    if (this.annotationsEnabled) {
-      await this.generateAnnotations(resolvedPath, parsedFiles, path.basename(resolvedPath));
+    if (this.annotationsEnabled && parsedFilesForAnnotation.length > 0) {
+      await this.generateAnnotations(resolvedPath, parsedFilesForAnnotation, path.basename(resolvedPath));
+      parsedFilesForAnnotation.length = 0;
     }
 
     logger.info('Indexing complete!');
@@ -489,63 +701,225 @@ export class Indexer {
   private async parseFiles(
     projectPath: string,
     files: FileInfo[],
+    contentCache?: Map<string, string>,
   ): Promise<ParsedFile[]> {
     const parsedFiles: ParsedFile[] = [];
     const normalizer = new ParsedFileNormalizer();
-    const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+    const MAX_FILE_SIZE = 512 * 1024; // 500KB (TASK-037: 강화)
+    const MAX_LINE_COUNT = 10_000; // TASK-037: 라인 수 가드
     const PARSE_TIMEOUT_MS = 30_000; // 30초
-    const CONCURRENCY_LIMIT = 10;
 
-    // 청크 단위 병렬 처리
-    const chunks = this.chunkArray(files, CONCURRENCY_LIMIT);
+    // TASK-042: Circuit Breaker + MemoryGuard
+    const circuitBreaker = new CircuitBreaker(10);
+    const memoryGuard = new MemoryGuard(0.85);
 
-    for (const chunk of chunks) {
-      const chunkResults = await Promise.allSettled(
-        chunk.map(async (file) => {
-          const parser = this.findParser(file.path);
-          if (!parser) return null;
+    // TASK-034: CPU-bound 작업이므로 순차 처리로 전환 (메모리 안정화)
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
 
-          const absolutePath = path.join(projectPath, file.path);
+      // TASK-042: CircuitBreaker 체크
+      if (circuitBreaker.tripped) {
+        logger.warn(`CircuitBreaker: skipping remaining ${files.length - i} files (${circuitBreaker.failures} consecutive failures)`);
+        break;
+      }
 
-          // 파일 크기 가드
-          const stat = fs.statSync(absolutePath);
-          if (stat.size > MAX_FILE_SIZE) {
-            logger.warn(`Skipping large file (${(stat.size / 1024 / 1024).toFixed(2)}MB): ${file.path}`);
-            return null;
-          }
-
-          const content = fs.readFileSync(absolutePath, 'utf-8');
-
-          // Timeout 기반 파싱
-          let parsed = await this.parseWithTimeout(parser, file.path, content, PARSE_TIMEOUT_MS);
-
-          // per-file fallback
-          let usedParser: BaseParser = parser;
-          if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
-            const fallbackParser = this.findFallbackParser(file.path);
-            if (fallbackParser) {
-              logger.debug(`Per-file fallback: ${file.path} (AST empty → Regex retry)`);
-              parsed = await this.parseWithTimeout(fallbackParser, file.path, content, PARSE_TIMEOUT_MS);
-              usedParser = fallbackParser;
-            }
-          }
-
-          // 결과 정규화 (AST vs Regex 차이 제거)
-          const parserType = usedParser.name.includes('ast') ? 'ast' as const : 'regex' as const;
-          return normalizer.normalize(parsed, parserType);
-        })
-      );
-
-      for (const result of chunkResults) {
-        if (result.status === 'fulfilled' && result.value) {
-          parsedFiles.push(result.value);
-        } else if (result.status === 'rejected') {
-          logger.debug(`Parse chunk failed: ${result.reason}`);
+      // TASK-042: MemoryGuard 체크 (50개마다)
+      if (i % 50 === 0 && i > 0) {
+        if (!memoryGuard.check()) {
+          logger.warn(`MemoryGuard: aborting parse at file ${i}/${files.length}. Returning partial results.`);
+          break;
         }
+      }
+
+      // TASK-036: 진행률 로그 (100개마다)
+      if (i % 100 === 0 && i > 0) {
+        logger.info(`  Parse progress: ${i}/${files.length} files`);
+      }
+
+      try {
+        const parser = this.findParser(file.path);
+        if (!parser) continue;
+
+        // 파일 크기 가드 (TASK-037: 500KB) - FileInfo.size 활용
+        if (file.size > MAX_FILE_SIZE) {
+          logger.warn(`Skipping large file (${(file.size / 1024).toFixed(0)}KB): ${file.path}`);
+          continue;
+        }
+
+        // TASK-038: contentCache에서 먼저 조회, 없으면 파일 읽기
+        let content: string;
+        if (contentCache && contentCache.has(file.path)) {
+          content = contentCache.get(file.path)!;
+          // 사용 후 캐시에서 제거하여 메모리 해제
+          contentCache.delete(file.path);
+        } else {
+          // TASK-041: 비동기 파일 읽기
+          const absolutePath = path.join(projectPath, file.path);
+          content = await fsp.readFile(absolutePath, 'utf-8');
+        }
+
+        // TASK-037: 라인 수 가드 - 10,000줄 초과 시 regex 모드로 폴백
+        const lineCount = this.countLines(content);
+        let effectiveParser = parser;
+        if (lineCount > MAX_LINE_COUNT) {
+          logger.warn(`File exceeds ${MAX_LINE_COUNT} lines (${lineCount}): ${file.path} → regex fallback`);
+          const fallback = this.findFallbackParser(file.path);
+          if (fallback) {
+            effectiveParser = fallback;
+          } else {
+            // fallback 파서가 없으면 원래 파서 사용
+            logger.debug(`No regex fallback available for ${file.path}, using original parser`);
+          }
+        }
+
+        // Timeout 기반 파싱
+        let parsed = await this.parseWithTimeout(effectiveParser, file.path, content, PARSE_TIMEOUT_MS);
+
+        // per-file fallback
+        let usedParser: BaseParser = effectiveParser;
+        if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
+          const fallbackParser = this.findFallbackParser(file.path);
+          if (fallbackParser) {
+            logger.debug(`Per-file fallback: ${file.path} (AST empty → Regex retry)`);
+            parsed = await this.parseWithTimeout(fallbackParser, file.path, content, PARSE_TIMEOUT_MS);
+            usedParser = fallbackParser;
+          }
+        }
+
+        // 결과 정규화 (AST vs Regex 차이 제거)
+        const parserType = usedParser.name.includes('ast') ? 'ast' as const : 'regex' as const;
+        const normalized = normalizer.normalize(parsed, parserType);
+        parsedFiles.push(normalized);
+
+        // TASK-042: 성공 시 CircuitBreaker 리셋
+        circuitBreaker.recordSuccess();
+
+      } catch (err) {
+        logger.debug(`Parse failed for ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
+        // TASK-042: 실패 기록
+        circuitBreaker.recordFailure();
       }
     }
 
     return parsedFiles;
+  }
+
+  /**
+   * TASK-039: 스트리밍 파싱 - 각 파일 파싱 직후 visitor 콜백 호출
+   * ParsedFile 참조를 caller가 필요한 만큼만 유지할 수 있도록 함
+   *
+   * @param projectPath - 프로젝트 루트 경로
+   * @param files - 파일 목록
+   * @param contentCache - TASK-038 콘텐츠 캐시
+   * @param visitor - 각 파싱된 파일에 대해 호출되는 콜백
+   * @returns 파싱된 파일 수
+   */
+  private async parseFilesStreaming(
+    projectPath: string,
+    files: FileInfo[],
+    contentCache: Map<string, string> | undefined,
+    visitor: (parsed: ParsedFile) => void,
+  ): Promise<number> {
+    const normalizer = new ParsedFileNormalizer();
+    const MAX_FILE_SIZE = 512 * 1024;
+    const MAX_LINE_COUNT = 10_000;
+    const PARSE_TIMEOUT_MS = 30_000;
+    let parsedCount = 0;
+
+    // TASK-042: Circuit Breaker + MemoryGuard
+    const circuitBreaker = new CircuitBreaker(10);
+    const memoryGuard = new MemoryGuard(0.85);
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      // TASK-042: CircuitBreaker 체크
+      if (circuitBreaker.tripped) {
+        logger.warn(`CircuitBreaker: skipping remaining ${files.length - i} files (${circuitBreaker.failures} consecutive failures)`);
+        break;
+      }
+
+      // TASK-042: MemoryGuard 체크 (50개마다)
+      if (i % 50 === 0 && i > 0) {
+        if (!memoryGuard.check()) {
+          logger.warn(`MemoryGuard: aborting parse at file ${i}/${files.length}. Returning partial results.`);
+          break;
+        }
+      }
+
+      if (i % 100 === 0 && i > 0) {
+        logger.info(`  Parse progress: ${i}/${files.length} files`);
+      }
+
+      try {
+        const parser = this.findParser(file.path);
+        if (!parser) continue;
+
+        if (file.size > MAX_FILE_SIZE) {
+          logger.warn(`Skipping large file (${(file.size / 1024).toFixed(0)}KB): ${file.path}`);
+          continue;
+        }
+
+        let content: string;
+        if (contentCache && contentCache.has(file.path)) {
+          content = contentCache.get(file.path)!;
+          contentCache.delete(file.path);
+        } else {
+          // TASK-041: 비동기 파일 읽기
+          const absolutePath = path.join(projectPath, file.path);
+          content = await fsp.readFile(absolutePath, 'utf-8');
+        }
+
+        const lineCount = this.countLines(content);
+        let effectiveParser = parser;
+        if (lineCount > MAX_LINE_COUNT) {
+          logger.warn(`File exceeds ${MAX_LINE_COUNT} lines (${lineCount}): ${file.path} → regex fallback`);
+          const fallback = this.findFallbackParser(file.path);
+          if (fallback) {
+            effectiveParser = fallback;
+          }
+        }
+
+        let parsed = await this.parseWithTimeout(effectiveParser, file.path, content, PARSE_TIMEOUT_MS);
+
+        let usedParser: BaseParser = effectiveParser;
+        if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
+          const fallbackParser = this.findFallbackParser(file.path);
+          if (fallbackParser) {
+            parsed = await this.parseWithTimeout(fallbackParser, file.path, content, PARSE_TIMEOUT_MS);
+            usedParser = fallbackParser;
+          }
+        }
+
+        const parserType = usedParser.name.includes('ast') ? 'ast' as const : 'regex' as const;
+        const normalized = normalizer.normalize(parsed, parserType);
+
+        // 즉시 visitor 호출
+        visitor(normalized);
+        parsedCount++;
+
+        // TASK-042: 성공 시 CircuitBreaker 리셋
+        circuitBreaker.recordSuccess();
+
+      } catch (err) {
+        logger.debug(`Parse failed for ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
+        // TASK-042: 실패 기록
+        circuitBreaker.recordFailure();
+      }
+    }
+
+    return parsedCount;
+  }
+
+  /**
+   * 메모리 할당 없이 라인 수를 카운트
+   */
+  private countLines(content: string): number {
+    let count = 1;
+    for (let i = 0; i < content.length; i++) {
+      if (content[i] === '\n') count++;
+    }
+    return count;
   }
 
   /**
@@ -592,17 +966,6 @@ export class Indexer {
           });
         });
     });
-  }
-
-  /**
-   * 배열을 청크 단위로 분할
-   */
-  private chunkArray<T>(array: T[], chunkSize: number): T[][] {
-    const chunks: T[][] = [];
-    for (let i = 0; i < array.length; i += chunkSize) {
-      chunks.push(array.slice(i, i + chunkSize));
-    }
-    return chunks;
   }
 
   /**

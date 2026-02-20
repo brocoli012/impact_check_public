@@ -17,6 +17,11 @@ import { logger } from '../../utils/logger';
  *   - API 호출 관계 매핑 (FE -> BE)
  */
 export class DependencyGraphBuilder {
+  // TASK-039: 점진적 그래프 빌드를 위한 내부 상태
+  private _nodes: DependencyNode[] = [];
+  private _edges: DependencyEdge[] = [];
+  private _nodeMap: Map<string, DependencyNode> = new Map();
+
   /**
    * 파싱된 파일들로부터 의존성 그래프 구축
    * @param parsedFiles - 파싱된 파일 목록
@@ -101,6 +106,114 @@ export class DependencyGraphBuilder {
     return {
       graph: { nodes, edges },
     };
+  }
+
+  // ============================================================
+  // TASK-039: 점진적 그래프 빌드 API
+  // ============================================================
+
+  /**
+   * 점진적 빌드 초기화 - 내부 상태 리셋
+   */
+  beginIncremental(): void {
+    this._nodes = [];
+    this._edges = [];
+    this._nodeMap = new Map();
+  }
+
+  /**
+   * 단일 ParsedFile을 점진적으로 그래프에 추가 (노드 생성만, 엣지는 나중에)
+   * import 엣지 해석에는 전체 노드맵이 필요하므로 노드만 먼저 등록
+   * @param file - 파싱된 파일
+   */
+  addNode(file: ParsedFile): void {
+    const nodeId = this.normalizeFilePath(file.filePath);
+    const nodeType = this.determineNodeType(file);
+
+    if (!this._nodeMap.has(nodeId)) {
+      const node: DependencyNode = {
+        id: nodeId,
+        type: nodeType,
+        name: path.basename(file.filePath, path.extname(file.filePath)),
+      };
+      this._nodes.push(node);
+      this._nodeMap.set(nodeId, node);
+    }
+  }
+
+  /**
+   * 단일 ParsedFile의 엣지를 점진적으로 추가
+   * beginIncremental() → addNode() (모든 파일) → addEdges() (모든 파일) → finishIncremental()
+   * @param file - 파싱된 파일
+   */
+  addEdges(file: ParsedFile): void {
+    const sourceId = this.normalizeFilePath(file.filePath);
+
+    for (const imp of file.imports) {
+      const resolvedTarget = this.resolveImportPath(file.filePath, imp.source);
+      if (resolvedTarget && this._nodeMap.has(resolvedTarget)) {
+        this._edges.push({
+          from: sourceId,
+          to: resolvedTarget,
+          type: 'import',
+        });
+      }
+    }
+
+    for (const apiCall of file.apiCalls) {
+      const apiNodeId = `api:${apiCall.method}:${apiCall.url}`;
+      if (!this._nodeMap.has(apiNodeId)) {
+        const apiNode: DependencyNode = {
+          id: apiNodeId,
+          type: 'api',
+          name: `${apiCall.method} ${apiCall.url}`,
+        };
+        this._nodes.push(apiNode);
+        this._nodeMap.set(apiNodeId, apiNode);
+      }
+      this._edges.push({
+        from: sourceId,
+        to: apiNodeId,
+        type: 'api-call',
+      });
+    }
+
+    for (const route of file.routeDefinitions) {
+      const routeNodeId = `route:${route.path}`;
+      if (!this._nodeMap.has(routeNodeId)) {
+        const routeNode: DependencyNode = {
+          id: routeNodeId,
+          type: 'screen',
+          name: route.path,
+        };
+        this._nodes.push(routeNode);
+        this._nodeMap.set(routeNodeId, routeNode);
+      }
+      this._edges.push({
+        from: sourceId,
+        to: routeNodeId,
+        type: 'route',
+      });
+    }
+  }
+
+  /**
+   * 점진적 빌드 완료 - 결과 반환 및 내부 상태 해제
+   * @returns 의존성 그래프
+   */
+  finishIncremental(): DependencyGraph {
+    const result: DependencyGraph = {
+      graph: { nodes: this._nodes, edges: this._edges },
+    };
+
+    logger.debug(`Graph built (incremental): ${this._nodes.length} nodes, ${this._edges.length} edges`);
+
+    // 내부 상태 해제
+    this._nodes = [];
+    this._edges = [];
+    this._nodeMap = new Map();
+
+    return result;
   }
 
   /**
