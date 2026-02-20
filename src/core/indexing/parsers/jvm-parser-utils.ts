@@ -50,6 +50,28 @@ export const ANNOTATION_HTTP_METHOD_MAP: Record<string, string> = {
 // ============================================================
 
 /**
+ * 매칭되는 닫는 괄호 위치 찾기 (중첩 괄호 지원)
+ * @param text - 전체 텍스트
+ * @param openIndex - 여는 괄호 위치
+ * @returns 닫는 괄호 위치 (못 찾으면 -1)
+ */
+export function findMatchingParen(text: string, openIndex: number): number {
+  let count = 1;
+  let i = openIndex + 1;
+
+  while (i < text.length && count > 0) {
+    if (text[i] === '(') {
+      count++;
+    } else if (text[i] === ')') {
+      count--;
+    }
+    i++;
+  }
+
+  return count === 0 ? i - 1 : -1;
+}
+
+/**
  * 어노테이션 텍스트에서 경로 값을 추출
  * @param annotationText - 어노테이션 전체 텍스트
  * @returns 추출된 경로 문자열, 없으면 빈 문자열
@@ -61,7 +83,7 @@ export function parseAnnotationValue(annotationText: string): string {
       return '';
     }
 
-    const parenEnd = annotationText.lastIndexOf(')');
+    const parenEnd = findMatchingParen(annotationText, parenStart);
     if (parenEnd === -1 || parenEnd <= parenStart) {
       return '';
     }
@@ -71,8 +93,14 @@ export function parseAnnotationValue(annotationText: string): string {
       return '';
     }
 
-    // value= 또는 path= 속성에서 추출
-    const valueMatch = inner.match(/(?:value|path)\s*=\s*"([^"]*)"/) ;
+    // 배열 형태: value = {"/api", "/v2"} → 첫 번째 값 추출
+    const arrayValueMatch = inner.match(/(?:value|path)\s*=\s*\{\s*"([^"]*)"/);
+    if (arrayValueMatch) {
+      return arrayValueMatch[1];
+    }
+
+    // value= 또는 path= 속성에서 추출 (단일 값)
+    const valueMatch = inner.match(/(?:value|path)\s*=\s*"([^"]*)"/);
     if (valueMatch) {
       return valueMatch[1];
     }
@@ -232,7 +260,52 @@ export function extractAnnotationName(rawAnnotation: string): string {
 }
 
 /**
+ * 소스 코드의 각 라인 시작 오프셋 테이블을 생성 (O(n) 1회)
+ * 이후 getLineFromTable()과 함께 사용하면 O(log n)으로 라인 번호 조회 가능
+ * @param content - 전체 소스 코드 문자열
+ * @returns 각 라인의 시작 오프셋 배열 (0-indexed line → offset). offsets[0] = 0 (1번째 줄), offsets[1] = 첫 번째 '\n' + 1 위치 (2번째 줄)
+ */
+export function buildLineOffsetTable(content: string): number[] {
+  const offsets = [0]; // 1번째 줄은 항상 offset 0에서 시작
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === '\n') {
+      offsets.push(i + 1);
+    }
+  }
+  return offsets;
+}
+
+/**
+ * 라인 오프셋 테이블을 사용하여 문자 인덱스의 라인 번호를 Binary Search로 조회 (O(log n))
+ * @param offsets - buildLineOffsetTable()로 생성한 오프셋 배열
+ * @param charIndex - 문자 인덱스 (0-based)
+ * @returns 라인 번호 (1-based)
+ */
+export function getLineFromTable(offsets: number[], charIndex: number): number {
+  if (charIndex < 0 || offsets.length === 0) {
+    return 1;
+  }
+
+  // Binary search: charIndex가 포함되는 라인을 찾음
+  let low = 0;
+  let high = offsets.length - 1;
+
+  while (low <= high) {
+    const mid = (low + high) >>> 1;
+    if (offsets[mid] <= charIndex) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  // high는 charIndex를 포함하는 마지막 라인의 인덱스 (0-based)
+  return high + 1; // 1-based line number
+}
+
+/**
  * 문자열에서 특정 문자 인덱스의 라인 번호를 계산 (1-based)
+ * @deprecated buildLineOffsetTable() + getLineFromTable() 사용을 권장. 이 함수는 매 호출마다 O(n) 순회하므로 대형 파일에서 성능 저하 발생.
  * @param content - 전체 문자열
  * @param charIndex - 문자 인덱스 (0-based)
  * @returns 라인 번호 (1-based)
@@ -270,19 +343,29 @@ export function stripStringsAndComments(content: string): {
   comments: Array<{ text: string; line: number; type: 'line' | 'block' }>;
 } {
   const comments: Array<{ text: string; line: number; type: 'line' | 'block' }> = [];
-  const result: string[] = [];
+  const segments: string[] = [];
+  let segmentStart = 0;
   let i = 0;
   let currentLine = 1;
 
+  /**
+   * Helper: replace a range [start, end) with spaces, preserving newlines.
+   * Flushes the preceding segment, then pushes the whitespace replacement.
+   */
+  function replaceRangeWithSpaces(start: number, end: number): void {
+    if (start > segmentStart) {
+      segments.push(content.substring(segmentStart, start));
+    }
+    let replacement = '';
+    for (let j = start; j < end && j < content.length; j++) {
+      replacement += content[j] === '\n' ? '\n' : ' ';
+    }
+    segments.push(replacement);
+    segmentStart = end;
+  }
+
   try {
     while (i < content.length) {
-      if (content[i] === '\n') {
-        result.push(content[i]);
-        currentLine++;
-        i++;
-        continue;
-      }
-
       // 블록 주석: /* ... */
       if (content[i] === '/' && i + 1 < content.length && content[i + 1] === '*') {
         const commentStartLine = currentLine;
@@ -300,14 +383,7 @@ export function stripStringsAndComments(content: string): {
         }
         const commentText = content.substring(commentStart, i);
         comments.push({ text: commentText, line: commentStartLine, type: 'block' });
-
-        for (let j = commentStart; j < i && j < content.length; j++) {
-          if (content[j] === '\n') {
-            result.push('\n');
-          } else {
-            result.push(' ');
-          }
-        }
+        replaceRangeWithSpaces(commentStart, i);
         continue;
       }
 
@@ -321,17 +397,47 @@ export function stripStringsAndComments(content: string): {
         }
         const commentText = content.substring(commentStart, i);
         comments.push({ text: commentText, line: commentStartLine, type: 'line' });
+        replaceRangeWithSpaces(commentStart, i);
+        continue;
+      }
 
-        for (let j = commentStart; j < i; j++) {
-          result.push(' ');
+      // Text Block 처리: \"\"\"...\"\"\" (Java 15+, Kotlin raw string)
+      if (content[i] === '"' && i + 2 < content.length &&
+          content[i + 1] === '"' && content[i + 2] === '"') {
+        const textBlockStart = i;
+        i += 3; // 시작 \"\"\" 건너뛰기
+
+        // 종료 \"\"\" 찾기
+        while (i + 2 < content.length) {
+          if (content[i] === '"' && content[i + 1] === '"' && content[i + 2] === '"') {
+            i += 3; // 종료 \"\"\" 건너뛰기
+            break;
+          }
+          if (content[i] === '\n') {
+            currentLine++;
+          }
+          i++;
         }
+
+        // 파일 끝까지 \"\"\" 없으면 끝까지 처리
+        if (i + 2 >= content.length && !(i >= 3 && content[i - 3] === '"' && content[i - 2] === '"' && content[i - 1] === '"')) {
+          while (i < content.length) {
+            if (content[i] === '\n') {
+              currentLine++;
+            }
+            i++;
+          }
+        }
+
+        // 공백으로 치환 (라인 번호 보존)
+        replaceRangeWithSpaces(textBlockStart, i);
         continue;
       }
 
       // 문자열 리터럴: "..." 또는 '...'
       if (content[i] === '"' || content[i] === "'") {
+        const stringStart = i;
         const quote = content[i];
-        result.push(quote);
         i++;
 
         while (i < content.length && content[i] !== quote) {
@@ -340,26 +446,45 @@ export function stripStringsAndComments(content: string): {
             continue;
           }
           if (content[i] === '\n') {
-            result.push('\n');
             currentLine++;
-            i++;
-            continue;
           }
           i++;
         }
 
         if (i < content.length) {
-          result.push(quote);
-          i++;
+          i++; // skip closing quote
         }
+
+        // Flush preceding segment, then push quote + whitespace + quote
+        if (stringStart > segmentStart) {
+          segments.push(content.substring(segmentStart, stringStart));
+        }
+        let replacement = quote;
+        const innerEnd = (i > stringStart + 1) ? i - 1 : stringStart + 1;
+        for (let j = stringStart + 1; j < innerEnd; j++) {
+          replacement += content[j] === '\n' ? '\n' : ' ';
+        }
+        if (i > stringStart + 1) {
+          replacement += quote;
+        }
+        segments.push(replacement);
+        segmentStart = i;
         continue;
       }
 
-      result.push(content[i]);
+      // Track line numbers for regular characters
+      if (content[i] === '\n') {
+        currentLine++;
+      }
       i++;
     }
 
-    return { processed: result.join(''), comments };
+    // Flush remaining segment
+    if (segmentStart < content.length) {
+      segments.push(content.substring(segmentStart));
+    }
+
+    return { processed: segments.join(''), comments };
   } catch (err) {
     logger.debug(`Failed to strip strings and comments: ${err instanceof Error ? err.message : String(err)}`);
     return { processed: content, comments: [] };

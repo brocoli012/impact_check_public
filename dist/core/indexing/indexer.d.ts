@@ -18,12 +18,24 @@ import { CodeIndex, ChangedFileSet } from '../../types/index';
 export declare class Indexer {
     private readonly scanner;
     private readonly parsers;
+    private readonly regexFallbackParsers;
     private readonly graphBuilder;
     private readonly policyExtractor;
     private readonly annotationsEnabled;
     constructor(options?: {
         annotationsEnabled?: boolean;
+        parserMode?: 'ast' | 'regex' | 'auto';
     });
+    /**
+     * JVM 파서 초기화 전략
+     *
+     * - 'ast': tree-sitter AST 파서 강제 (실패 시 에러)
+     * - 'regex': Phase 1 Regex 파서 강제
+     * - 'auto' (기본): tree-sitter 가용 시 AST 파서, 불가 시 Regex 폴백
+     *
+     * 환경 변수 PARSER_MODE 로도 설정 가능 (코드 파라미터 우선)
+     */
+    private initParsers;
     /**
      * 전체 인덱싱 파이프라인 실행
      * @param projectPath - 프로젝트 루트 경로
@@ -62,8 +74,27 @@ export declare class Indexer {
     loadIndex(projectId: string, basePath?: string): Promise<CodeIndex | null>;
     /**
      * 파일 목록을 파싱
+     *
+     * AST 파서가 빈 결과(imports=0, exports=0, functions=0)를 반환하면,
+     * regexFallbackParsers로 해당 파일을 재시도한다 (per-file fallback).
      */
     private parseFiles;
+    /**
+     * Parser.parse() 호출을 timeout으로 래핑
+     */
+    private parseWithTimeout;
+    /**
+     * 배열을 청크 단위로 분할
+     */
+    private chunkArray;
+    /**
+     * ParsedFile이 빈 결과인지 확인 (imports=0, exports=0, functions=0)
+     */
+    private isEmptyParseResult;
+    /**
+     * regexFallbackParsers에서 해당 파일에 적합한 파서 찾기
+     */
+    private findFallbackParser;
     /**
      * 파일에 적합한 파서 찾기
      */

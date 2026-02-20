@@ -129,6 +129,13 @@ class ConfigManager {
         this.config = JSON.parse(JSON.stringify(config_1.DEFAULT_CONFIG));
         logger_1.logger.info('Configuration has been reset to defaults.');
     }
+    /**
+     * 정책 문서 저장 디렉토리 경로를 반환한다.
+     * ~/.impact/docs/{projectId}
+     */
+    static getDocsDir(projectId) {
+        return path.join((0, file_1.getImpactDir)(), 'docs', projectId);
+    }
 }
 exports.ConfigManager = ConfigManager;
 //# sourceMappingURL=config-manager.js.map

@@ -27,6 +27,27 @@ export declare class AnnotationsCommand implements Command {
      */
     private handleView;
     /**
+     * 단일 파일 보강 주석의 마크다운 문자열을 생성
+     */
+    private generateSingleFileMd;
+    /**
+     * 단일 파일 보강 주석을 마크다운 형식으로 출력
+     */
+    private printSingleFileMd;
+    /**
+     * 통계 마크다운 문자열을 생성
+     */
+    private generateStatsMd;
+    /**
+     * 통계를 마크다운 형식으로 출력
+     */
+    private printStatsMd;
+    /**
+     * view 서브커맨드의 인자를 파싱한다.
+     * --format md|yaml 옵션, --output <dir> 옵션, targetPath를 추출한다.
+     */
+    private parseViewArgs;
+    /**
      * 활성 프로젝트 정보를 가져온다.
      * @throws {ProjectNotFoundError} 프로젝트가 설정되지 않았거나 찾을 수 없을 때
      */

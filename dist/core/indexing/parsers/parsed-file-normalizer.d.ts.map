@@ -1,0 +1,1 @@
+{"version":3,"file":"parsed-file-normalizer.d.ts","sourceRoot":"","sources":["../../../../src/core/indexing/parsers/parsed-file-normalizer.ts"],"names":[],"mappings":"AAAA;;;;;;;;GAQG;AAEH,OAAO,EAAE,UAAU,EAAE,MAAM,UAAU,CAAC;AAGtC,qBAAa,oBAAoB;IAC/B;;;;;OAKG;IACH,SAAS,CAAC,MAAM,EAAE,UAAU,EAAE,UAAU,EAAE,KAAK,GAAG,OAAO,GAAG,UAAU;IAmEtE;;;;OAIG;IACH,OAAO,CAAC,kBAAkB;CAG3B"}

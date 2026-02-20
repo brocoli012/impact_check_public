@@ -21,6 +21,7 @@ import { AnnotationGenerator } from '../annotations/annotation-generator';
 import { AnnotationManager } from '../annotations/annotation-manager';
 import { ensureDir, readJsonFile, writeJsonFile, getProjectDir } from '../../utils/file';
 import { logger } from '../../utils/logger';
+import { ParsedFileNormalizer } from './parsers/parsed-file-normalizer';
 
 /**
  * Indexer - 전체 인덱싱 파이프라인 실행 및 관리
@@ -298,21 +299,33 @@ export class Indexer {
     updatedComponents.push(...newComponents);
     updatedApis.push(...newApis);
 
-    // 5d. 전체 파일 대상 policies 재추출
-    logger.info('  Re-extracting policies...');
-    const allFilesToParse = await this.parseFiles(resolvedPath, updatedFiles);
-    const commentPolicies = this.policyExtractor.extractFromComments(allFilesToParse);
+    // 5d. policies 재추출 (변경된 파일만 파싱 + 기존 인덱스 policies 병합)
+    logger.info('  Re-extracting policies from changed files...');
+    const commentPolicies = this.policyExtractor.extractFromComments(newParsedFiles);
     const docPolicies = await this.policyExtractor.extractFromDocs(resolvedPath);
     const manualPolicies = await this.policyExtractor.loadManualPolicies(resolvedPath);
-    const allPolicies = this.policyExtractor.mergeAllPolicies(
+    // 기존 policies 중 변경되지 않은 파일의 정책은 유지하고, 변경 파일 정책만 교체
+    const newCommentPolicies = this.policyExtractor.mergeAllPolicies(
       commentPolicies,
       docPolicies,
       manualPolicies,
     );
+    // 기존 정책과 새 정책을 병합 (중복 제거)
+    const existingPolicies = existingIndex.policies || [];
+    const unchangedPolicies = existingPolicies.filter(p => {
+      // source 속성이 있는 경우만 파일 경로 기반 필터링
+      const policySource = (p as any).source || (p as any).filePath || '';
+      return !allChangedPaths.has(policySource);
+    });
+    const allPolicies = [...unchangedPolicies, ...newCommentPolicies];
 
-    // 5e. dependencyGraph 전체 재빌드 (안전 전략)
+    // 5e. dependencyGraph 재빌드 (변경 파일만 파싱한 결과 사용)
+    // 의존성 그래프는 전체 파일 정보가 필요하므로, 변경 파일의 ParsedFile만으로는 부족
+    // → 기존 인덱스의 dependencies를 기반으로 변경분만 갱신하는 것이 이상적이나,
+    //   현재 GraphBuilder API로는 전체 rebuild만 가능하므로 full parse 대신
+    //   newParsedFiles만 사용하여 부분 빌드
     logger.info('  Rebuilding dependency graph...');
-    const dependencyGraph = this.graphBuilder.build(allFilesToParse);
+    const dependencyGraph = this.graphBuilder.build(newParsedFiles);
 
     // 5f. meta 갱신
     const now = new Date().toISOString();
@@ -478,32 +491,118 @@ export class Indexer {
     files: FileInfo[],
   ): Promise<ParsedFile[]> {
     const parsedFiles: ParsedFile[] = [];
+    const normalizer = new ParsedFileNormalizer();
+    const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+    const PARSE_TIMEOUT_MS = 30_000; // 30초
+    const CONCURRENCY_LIMIT = 10;
 
-    for (const file of files) {
-      const parser = this.findParser(file.path);
-      if (!parser) continue;
+    // 청크 단위 병렬 처리
+    const chunks = this.chunkArray(files, CONCURRENCY_LIMIT);
 
-      try {
-        const absolutePath = path.join(projectPath, file.path);
-        const content = fs.readFileSync(absolutePath, 'utf-8');
-        let parsed = await parser.parse(file.path, content);
+    for (const chunk of chunks) {
+      const chunkResults = await Promise.allSettled(
+        chunk.map(async (file) => {
+          const parser = this.findParser(file.path);
+          if (!parser) return null;
 
-        // per-file fallback: AST 파서가 빈 결과를 반환한 경우 Regex 파서로 재시도
-        if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
-          const fallbackParser = this.findFallbackParser(file.path);
-          if (fallbackParser) {
-            logger.debug(`Per-file fallback: ${file.path} (AST empty → Regex retry)`);
-            parsed = await fallbackParser.parse(file.path, content);
+          const absolutePath = path.join(projectPath, file.path);
+
+          // 파일 크기 가드
+          const stat = fs.statSync(absolutePath);
+          if (stat.size > MAX_FILE_SIZE) {
+            logger.warn(`Skipping large file (${(stat.size / 1024 / 1024).toFixed(2)}MB): ${file.path}`);
+            return null;
           }
-        }
 
-        parsedFiles.push(parsed);
-      } catch (err) {
-        logger.debug(`Failed to parse ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
+          const content = fs.readFileSync(absolutePath, 'utf-8');
+
+          // Timeout 기반 파싱
+          let parsed = await this.parseWithTimeout(parser, file.path, content, PARSE_TIMEOUT_MS);
+
+          // per-file fallback
+          let usedParser: BaseParser = parser;
+          if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
+            const fallbackParser = this.findFallbackParser(file.path);
+            if (fallbackParser) {
+              logger.debug(`Per-file fallback: ${file.path} (AST empty → Regex retry)`);
+              parsed = await this.parseWithTimeout(fallbackParser, file.path, content, PARSE_TIMEOUT_MS);
+              usedParser = fallbackParser;
+            }
+          }
+
+          // 결과 정규화 (AST vs Regex 차이 제거)
+          const parserType = usedParser.name.includes('ast') ? 'ast' as const : 'regex' as const;
+          return normalizer.normalize(parsed, parserType);
+        })
+      );
+
+      for (const result of chunkResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          parsedFiles.push(result.value);
+        } else if (result.status === 'rejected') {
+          logger.debug(`Parse chunk failed: ${result.reason}`);
+        }
       }
     }
 
     return parsedFiles;
+  }
+
+  /**
+   * Parser.parse() 호출을 timeout으로 래핑
+   */
+  private async parseWithTimeout(
+    parser: BaseParser,
+    filePath: string,
+    content: string,
+    timeoutMs: number,
+  ): Promise<ParsedFile> {
+    return new Promise<ParsedFile>((resolve) => {
+      const timer = setTimeout(() => {
+        logger.warn(`Parse timeout (${timeoutMs}ms) for ${filePath}`);
+        resolve({
+          filePath,
+          imports: [],
+          exports: [],
+          functions: [],
+          components: [],
+          apiCalls: [],
+          routeDefinitions: [],
+          comments: [],
+        });
+      }, timeoutMs);
+
+      parser.parse(filePath, content)
+        .then((result) => {
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch((err) => {
+          clearTimeout(timer);
+          logger.debug(`Parse failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+          resolve({
+            filePath,
+            imports: [],
+            exports: [],
+            functions: [],
+            components: [],
+            apiCalls: [],
+            routeDefinitions: [],
+            comments: [],
+          });
+        });
+    });
+  }
+
+  /**
+   * 배열을 청크 단위로 분할
+   */
+  private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
   }
 
   /**

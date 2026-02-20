@@ -19,7 +19,8 @@ import {
   combineRoutePaths,
   isSpringComponent,
   isEntityClass,
-  getLineNumber,
+  buildLineOffsetTable,
+  getLineFromTable,
   stripStringsAndComments,
 } from './jvm-parser-utils';
 import { logger } from '../../../utils/logger';
@@ -50,13 +51,14 @@ export class JavaParser extends BaseParser {
 
     try {
       // 전처리: 문자열/주석 제거 → 구조 파싱 안전하게
+      const lineTable = buildLineOffsetTable(content);
       const { processed, comments } = stripStringsAndComments(content);
 
       // 주석 추출
       this.extractComments(comments, result);
 
       // import 파싱
-      this.parseImports(content, result);
+      this.parseImports(content, lineTable, result);
 
       // 패키지명 추출
       const packageName = this.parsePackage(content);
@@ -65,13 +67,13 @@ export class JavaParser extends BaseParser {
       const classAnnotations = this.parseClassAnnotations(processed);
 
       // 클래스 선언 파싱
-      this.parseClassDeclaration(processed, content, filePath, classAnnotations, packageName, result);
+      this.parseClassDeclaration(processed, content, lineTable, filePath, classAnnotations, packageName, result);
 
       // 메서드 파싱
-      this.parseMethods(processed, content, filePath, classAnnotations, result);
+      this.parseMethods(processed, content, lineTable, filePath, classAnnotations, result);
 
       // DI 패턴 파싱
-      this.parseDIPatterns(processed, content, result);
+      this.parseDIPatterns(processed, content, lineTable, result);
 
     } catch (err) {
       logger.debug(`JavaParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -84,14 +86,14 @@ export class JavaParser extends BaseParser {
   // Import 파싱
   // ============================================================
 
-  private parseImports(content: string, result: ParsedFile): void {
+  private parseImports(content: string, lineTable: number[], result: ParsedFile): void {
     const importRegex = /^import\s+(static\s+)?([a-zA-Z_][\w.]*(?:\.\*)?)\s*;/gm;
     let match: RegExpExecArray | null;
 
     while ((match = importRegex.exec(content)) !== null) {
       const fullImport = match[2];
       const isStatic = !!match[1];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       // 패키지와 클래스 분리
       const lastDot = fullImport.lastIndexOf('.');
@@ -123,7 +125,7 @@ export class JavaParser extends BaseParser {
   private parseClassAnnotations(processed: string): string[] {
     const annotations: string[] = [];
     // 클래스 선언 이전의 어노테이션들 수집
-    const classMatch = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*)\s*(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum)\s+\w+/);
+    const classMatch = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*?)\s*(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum)\s+\w+/);
     if (classMatch && classMatch[1]) {
       const annoBlock = classMatch[1];
       const annoRegex = /@(\w+)/g;
@@ -141,18 +143,19 @@ export class JavaParser extends BaseParser {
 
   private parseClassDeclaration(
     processed: string,
-    content: string,
+    _content: string,
+    lineTable: number[],
     filePath: string,
     classAnnotations: string[],
     _packageName: string,
     result: ParsedFile,
   ): void {
-    const classRegex = /(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?/g;
+    const classRegex = /(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum|record)\s+(\w+)(?:\s*<[^>]*>)?(?:\s*\([^)]*\))?(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?/g;
     let match: RegExpExecArray | null;
 
     while ((match = classRegex.exec(processed)) !== null) {
       const className = match[1];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       // public class → export
       if (processed.substring(Math.max(0, match.index - 10), match.index).includes('public')) {
@@ -175,6 +178,13 @@ export class JavaParser extends BaseParser {
         });
       }
 
+
+      // Java record 필드 파싱
+      const recordPrefix = processed.substring(Math.max(0, match.index - 20), match.index + 10);
+      if (recordPrefix.includes('record')) {
+        this.parseRecordFields(processed, lineTable, className, filePath, match.index, result);
+      }
+
       // Entity 판별 → model 힌트 (components에 추가)
       if (isEntityClass(classAnnotations)) {
         result.components.push({
@@ -194,18 +204,23 @@ export class JavaParser extends BaseParser {
 
   private parseMethods(
     processed: string,
-    content: string,
+    _content: string,
+    lineTable: number[],
     filePath: string,
-    _classAnnotations: string[],
+    classAnnotations: string[],
     result: ParsedFile,
   ): void {
+    // @Configuration 클래스 여부 확인 (@Bean DI 감지용)
+    const isConfigurationClass = classAnnotations.includes('Configuration');
+    const isAspectClass = classAnnotations.includes('Aspect');
+
     // 메서드 앞의 어노테이션 + 메서드 시그니처 매칭
-    const methodRegex = /((?:\s*@\w+(?:\([^)]*\))?)*)\s*(?:public|protected|private)?\s*(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?(?:<[\w<>,?\s]+>\s+)?([\w<>\[\],?\s]+)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+)?\s*\{/g;
+    const methodRegex = /((?:\s*@\w+(?:\([^)]*\))?)*?)\s*(?:public|protected|private)?\s*(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?(?:<[\w<>,?\s]+?>\s+)?([\w<>\[\],?\s]+?)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+?)?\s*\{/g;
     let match: RegExpExecArray | null;
 
     // 클래스 레벨 @RequestMapping 경로 추출
     let classBasePath = '';
-    const classAnnoBlock = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*)\s*(?:public\s+)?(?:abstract\s+)?class/);
+    const classAnnoBlock = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*?)\s*(?:public\s+)?(?:abstract\s+)?class/);
     if (classAnnoBlock && classAnnoBlock[1]) {
       const rmMatch = classAnnoBlock[1].match(/@RequestMapping\s*(\([^)]*\))?/);
       if (rmMatch) {
@@ -218,7 +233,7 @@ export class JavaParser extends BaseParser {
       const returnType = match[2].trim();
       const methodName = match[3];
       const paramsStr = match[4];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       // 생성자는 건너뛰기 (반환 타입이 클래스 이름과 동일)
       if (returnType === methodName) continue;
@@ -231,11 +246,27 @@ export class JavaParser extends BaseParser {
         methodAnnotations.push(annoMatch[1]);
       }
 
+
+      // @Bean 메서드 파라미터 → DI (Configuration 클래스에서만)
+      if (isConfigurationClass && methodAnnotations.includes('Bean')) {
+        const beanParams = this.parseMethodParams(paramsStr);
+        for (const param of beanParams) {
+          if (param.type && !['int', 'long', 'double', 'float', 'boolean', 'String', 'byte', 'short', 'char', 'void'].includes(param.type)) {
+            result.imports.push({
+              source: param.type,
+              specifiers: ['@Bean method DI'],
+              isDefault: false,
+              line,
+            });
+          }
+        }
+      }
+
       // 파라미터 파싱
       const params = this.parseMethodParams(paramsStr);
 
       // 메서드 종료 라인 추정 (간이: 다음 메서드 시작 또는 클래스 종료)
-      const endLine = this.estimateMethodEndLine(content, match.index);
+      const endLine = this.estimateMethodEndLine(processed, lineTable, match.index);
 
       const isAsync = returnType.includes('CompletableFuture') || 
                       returnType.includes('Mono') || 
@@ -270,6 +301,25 @@ export class JavaParser extends BaseParser {
           });
         }
       }
+
+      // @Aspect 클래스의 AOP 어노테이션 (포인트컷 추출)
+      if (isAspectClass) {
+        const aopAnnotations = ['Around', 'Before', 'After', 'AfterReturning', 'AfterThrowing'];
+        for (const aopAnno of aopAnnotations) {
+          if (methodAnnotations.includes(aopAnno)) {
+            const pointcut = this.extractPointcut(annotationBlock, aopAnno);
+            if (pointcut) {
+              result.apiCalls.push({
+                method: aopAnno,
+                url: pointcut,
+                line,
+                callerFunction: methodName,
+              });
+            }
+          }
+        }
+      }
+
     }
   }
 
@@ -277,7 +327,7 @@ export class JavaParser extends BaseParser {
   // DI 패턴 파싱
   // ============================================================
 
-  private parseDIPatterns(processed: string, content: string, result: ParsedFile): void {
+  private parseDIPatterns(processed: string, _content: string, lineTable: number[], result: ParsedFile): void {
     // @Autowired 필드 주입
     const fieldDIRegex = /@(?:Autowired|Inject|Resource)\s+(?:private\s+|protected\s+)?(\w+)\s+(\w+)\s*;/g;
     let match: RegExpExecArray | null;
@@ -285,7 +335,7 @@ export class JavaParser extends BaseParser {
     while ((match = fieldDIRegex.exec(processed)) !== null) {
       const typeName = match[1];
       const fieldName = match[2];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       result.imports.push({
         source: typeName,
@@ -295,11 +345,38 @@ export class JavaParser extends BaseParser {
       });
     }
 
+
+    // @RequiredArgsConstructor: Lombok이 final 필드로 생성자를 자동 생성하는 패턴
+    const requiredArgsMatch = processed.match(/@RequiredArgsConstructor(?:\s*\([^)]*\))?\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:public\s+)?class\s+\w+/);
+    if (requiredArgsMatch) {
+      const classBodyStart = processed.indexOf('{', requiredArgsMatch.index!);
+      if (classBodyStart !== -1) {
+        const finalFieldRegex = /private\s+final\s+([\w<>]+)\s+(\w+)\s*;/g;
+        let fieldMatch: RegExpExecArray | null;
+
+        while ((fieldMatch = finalFieldRegex.exec(processed)) !== null) {
+          if (fieldMatch.index > classBodyStart) {
+            const typeName = fieldMatch[1];
+            if (['int', 'long', 'double', 'float', 'boolean', 'String', 'byte', 'short', 'char', 'Integer', 'Long', 'Double', 'Float', 'Boolean'].includes(typeName)) {
+              continue;
+            }
+            const line = getLineFromTable(lineTable, fieldMatch.index);
+            result.imports.push({
+              source: typeName,
+              specifiers: ['@RequiredArgsConstructor'],
+              isDefault: false,
+              line,
+            });
+          }
+        }
+      }
+    }
+
     // 생성자 주입 패턴 (Spring 권장 방식)
-    const constructorRegex = /(?:public\s+)?(\w+)\s*\(((?:\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:final\s+)?[\w<>\[\],?\s]+\s+\w+\s*,?\s*)+)\)\s*\{/g;
+    const constructorRegex = /(?:public\s+)?(\w+)\s*\(((?:\s*(?:@\w+(?:\([^)]*\))?\s+)*?(?:final\s+)?[\w<>\[\],?\s]+?\s+\w+\s*,?\s*)+?)\)\s*\{/g;
     while ((match = constructorRegex.exec(processed)) !== null) {
       const paramsStr = match[2];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       // 각 파라미터에서 타입 추출
       const paramRegex = /(?:final\s+)?([\w<>\[\]]+)\s+(\w+)/g;
@@ -376,25 +453,95 @@ export class JavaParser extends BaseParser {
     return params;
   }
 
-  private estimateMethodEndLine(content: string, methodStartOffset: number): number {
+
+  /**
+   * Java record 필드 파싱
+   * record Foo(String name, int age) → components에 필드 정보 추가
+   */
+  private parseRecordFields(
+    processed: string,
+    lineTable: number[],
+    recordName: string,
+    filePath: string,
+    recordStart: number,
+    result: ParsedFile,
+  ): void {
+    const parenStart = processed.indexOf('(', recordStart);
+    if (parenStart === -1) return;
+
+    // 닫는 괄호 찾기 (중첩 안전)
+    let count = 1;
+    let i = parenStart + 1;
+    while (i < processed.length && count > 0) {
+      if (processed[i] === '(') count++;
+      else if (processed[i] === ')') count--;
+      i++;
+    }
+    const parenEnd = count === 0 ? i - 1 : -1;
+    if (parenEnd === -1) return;
+
+    const fieldsStr = processed.substring(parenStart + 1, parenEnd).trim();
+    if (!fieldsStr) return;
+
+    const fields: string[] = [];
+    const parts = fieldsStr.split(',');
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      // remove annotations like @NotNull
+      const cleaned = trimmed.replace(/@\w+(?:\([^)]*\))?\s*/g, '');
+      const fieldMatch = cleaned.match(/([\w<>\[\]?.]+)\s+(\w+)$/);
+      if (fieldMatch) {
+        fields.push(`${fieldMatch[2]}: ${fieldMatch[1]}`);
+      }
+    }
+
+    if (fields.length > 0) {
+      const existing = result.components.find(c => c.name === recordName);
+      if (!existing) {
+        result.components.push({
+          name: recordName,
+          type: 'class-component',
+          props: fields,
+          filePath,
+          line: getLineFromTable(lineTable, recordStart),
+        });
+      }
+    }
+  }
+
+  private estimateMethodEndLine(processed: string, lineTable: number[], methodStartOffset: number): number {
     let braceCount = 0;
     let foundFirst = false;
     let i = methodStartOffset;
 
-    while (i < content.length) {
-      if (content[i] === '{') {
+    while (i < processed.length) {
+      if (processed[i] === '{') {
         braceCount++;
         foundFirst = true;
-      } else if (content[i] === '}') {
+      } else if (processed[i] === '}') {
         braceCount--;
         if (foundFirst && braceCount === 0) {
-          return getLineNumber(content, i);
+          return getLineFromTable(lineTable, i);
         }
       }
       i++;
     }
 
-    return getLineNumber(content, content.length - 1);
+    return getLineFromTable(lineTable, processed.length - 1);
+  }
+
+
+  /**
+   * AOP 어노테이션에서 포인트컷 표현식 추출
+   * @param annotationBlock - 어노테이션 블록 텍스트
+   * @param aopAnnotation - AOP 어노테이션 이름 (Around, Before 등)
+   * @returns 포인트컷 표현식 문자열 (없으면 빈 문자열)
+   */
+  private extractPointcut(annotationBlock: string, aopAnnotation: string): string {
+    const annoRegex = new RegExp(`@${aopAnnotation}\\s*\\(\\s*"([^"]*)"\\s*\\)`);
+    const match = annotationBlock.match(annoRegex);
+    return match ? match[1] : '';
   }
 
   private extractAnnotationText(annotationBlock: string, annotationName: string): string {

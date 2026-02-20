@@ -288,6 +288,9 @@ function createApp(basePath) {
                 res.status(404).json({ error: 'No index found. Run indexing first.' });
                 return;
             }
+            // 분석 결과에서 tasks 로드하여 relatedTaskIds 역매핑에 사용
+            const latestResult = await resultManager.getLatest(projectId);
+            const tasks = latestResult?.tasks || [];
             let policies = index.policies || [];
             // 카테고리 필터
             const category = req.query.category;
@@ -304,6 +307,51 @@ function createApp(basePath) {
             // 카테고리 목록 추출 (필터 전 전체 인덱스에서)
             const allPolicies = index.policies || [];
             const categories = [...new Set(allPolicies.map(p => p.category))].sort();
+            /**
+             * 정책별 relatedTaskIds 역매핑 계산
+             * 전략: task의 affectedFiles/relatedApis와 policy의 filePath/relatedComponents/relatedApis를 매칭
+             */
+            function computeRelatedTaskIds(policy) {
+                if (tasks.length === 0)
+                    return [];
+                const taskIds = [];
+                for (const task of tasks) {
+                    let matched = false;
+                    // 1) affectedFiles와 policy.filePath 매칭
+                    if (policy.filePath && task.affectedFiles) {
+                        if (task.affectedFiles.some((f) => f === policy.filePath || policy.filePath.includes(f) || f.includes(policy.filePath))) {
+                            matched = true;
+                        }
+                    }
+                    // 2) relatedApis 매칭
+                    if (!matched && policy.relatedApis && task.relatedApis) {
+                        if (policy.relatedApis.some((api) => task.relatedApis.includes(api))) {
+                            matched = true;
+                        }
+                    }
+                    // 3) policy.relatedComponents와 task.affectedFiles 매칭
+                    if (!matched && policy.relatedComponents) {
+                        for (const comp of policy.relatedComponents) {
+                            if (task.affectedFiles?.some((f) => f.includes(comp))) {
+                                matched = true;
+                                break;
+                            }
+                        }
+                    }
+                    // 4) 정책 이름 키워드와 task 제목/description 키워드 매칭
+                    if (!matched) {
+                        const policyKeywords = policy.name.toLowerCase().split(/[\s,/]+/).filter((w) => w.length > 1);
+                        const taskText = `${task.title} ${task.description}`.toLowerCase();
+                        const matchedKeywords = policyKeywords.filter((kw) => taskText.includes(kw));
+                        if (matchedKeywords.length >= 2 || (matchedKeywords.length >= 1 && policyKeywords.length <= 2)) {
+                            matched = true;
+                        }
+                    }
+                    if (matched)
+                        taskIds.push(task.id);
+                }
+                return taskIds;
+            }
             res.json({
                 policies: policies.map((p, idx) => ({
                     id: p.id || `policy_${idx}`,
@@ -313,7 +361,9 @@ function createApp(basePath) {
                     file: p.filePath,
                     confidence: 0,
                     affectedFiles: [p.filePath, ...(p.relatedComponents || [])].filter(Boolean),
-                    relatedTaskIds: [],
+                    relatedTaskIds: p.relatedTaskIds?.length > 0
+                        ? p.relatedTaskIds
+                        : computeRelatedTaskIds(p),
                     source: p.source || 'comment',
                 })),
                 total: policies.length,
@@ -552,11 +602,13 @@ function createApp(basePath) {
         });
     }
     else {
+        console.warn('⚠️ 웹 대시보드 빌드가 필요합니다. 아래 명령어를 실행해주세요:');
+        console.warn('   cd web && npm install && npm run build');
         app.get('{*splat}', (req, res) => {
             if (!req.path.startsWith('/api')) {
                 res.status(404).json({
                     error: 'Web UI not built',
-                    message: 'Run: cd web && npm run build',
+                    message: 'Run: cd web && npm install && npm run build',
                 });
             }
         });

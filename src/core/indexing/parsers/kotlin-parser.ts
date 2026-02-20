@@ -26,7 +26,8 @@ import {
   combineRoutePaths,
   isSpringComponent,
   isEntityClass,
-  getLineNumber,
+  buildLineOffsetTable,
+  getLineFromTable,
   stripStringsAndComments,
 } from './jvm-parser-utils';
 import { logger } from '../../../utils/logger';
@@ -56,13 +57,14 @@ export class KotlinParser extends BaseParser {
     }
 
     try {
+      const lineTable = buildLineOffsetTable(content);
       const { processed, comments } = stripStringsAndComments(content);
 
       // 주석 추출
       this.extractComments(comments, result);
 
       // import 파싱
-      this.parseImports(content, result);
+      this.parseImports(content, lineTable, result);
 
       // 패키지명 추출
       this.parsePackage(content);
@@ -71,19 +73,19 @@ export class KotlinParser extends BaseParser {
       const classAnnotations = this.parseClassAnnotations(processed);
 
       // 클래스/오브젝트 선언 파싱
-      this.parseClassDeclaration(processed, content, filePath, classAnnotations, result);
+      this.parseClassDeclaration(processed, content, lineTable, filePath, classAnnotations, result);
 
       // 함수 파싱 (top-level + class methods)
-      this.parseFunctions(processed, content, filePath, classAnnotations, result);
+      this.parseFunctions(processed, content, lineTable, filePath, classAnnotations, result);
 
       // Primary constructor DI 파싱
-      this.parsePrimaryConstructorDI(processed, content, result);
+      this.parsePrimaryConstructorDI(processed, content, lineTable, result);
 
       // Property 주입 파싱
-      this.parsePropertyInjection(processed, content, result);
+      this.parsePropertyInjection(processed, content, lineTable, result);
 
       // data class 필드 파싱
-      this.parseDataClassFields(processed, content, filePath, result);
+      this.parseDataClassFields(processed, content, lineTable, filePath, result);
 
     } catch (err) {
       logger.debug(`KotlinParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -96,14 +98,14 @@ export class KotlinParser extends BaseParser {
   // Import 파싱
   // ============================================================
 
-  private parseImports(content: string, result: ParsedFile): void {
+  private parseImports(content: string, lineTable: number[], result: ParsedFile): void {
     const importRegex = /^import\s+([\w.]+(?:\.\*)?)(?:\s+as\s+(\w+))?\s*$/gm;
     let match: RegExpExecArray | null;
 
     while ((match = importRegex.exec(content)) !== null) {
       const fullImport = match[1];
       const alias = match[2];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       const lastDot = fullImport.lastIndexOf('.');
       const source = lastDot !== -1 ? fullImport.substring(0, lastDot) : fullImport;
@@ -133,7 +135,7 @@ export class KotlinParser extends BaseParser {
 
   private parseClassAnnotations(processed: string): string[] {
     const annotations: string[] = [];
-    const classMatch = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*)\s*(?:open\s+|abstract\s+|sealed\s+|data\s+|internal\s+)*class\s+\w+/);
+    const classMatch = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*?)\s*(?:open\s+|abstract\s+|sealed\s+|data\s+|internal\s+)*class\s+\w+/);
     if (classMatch && classMatch[1]) {
       const annoBlock = classMatch[1];
       const annoRegex = /@(\w+)/g;
@@ -151,7 +153,8 @@ export class KotlinParser extends BaseParser {
 
   private parseClassDeclaration(
     processed: string,
-    content: string,
+    _content: string,
+    lineTable: number[],
     filePath: string,
     classAnnotations: string[],
     result: ParsedFile,
@@ -161,7 +164,7 @@ export class KotlinParser extends BaseParser {
 
     while ((match = classRegex.exec(processed)) !== null) {
       const className = match[1];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       // Kotlin에서는 internal이 아닌 한 public (기본)
       const isInternal = processed.substring(Math.max(0, match.index - 20), match.index).includes('internal');
@@ -204,18 +207,19 @@ export class KotlinParser extends BaseParser {
 
   private parseFunctions(
     processed: string,
-    content: string,
+    _content: string,
+    lineTable: number[],
     filePath: string,
     _classAnnotations: string[],
     result: ParsedFile,
   ): void {
     // 함수 앞의 어노테이션 + fun 시그니처
-    const funRegex = /((?:\s*@\w+(?:\([^)]*\))?)*)\s*(?:(?:override|open|internal|private|protected|public|suspend|inline|infix|operator|tailrec)\s+)*fun\s+(?:<[^>]*>\s*)?(?:(\w+)\.)?(\w+)\s*\(([^)]*)\)(?:\s*:\s*([\w<>?,.\s*]+))?\s*(?:\{|=)/g;
+    const funRegex = /((?:\s*@\w+(?:\([^)]*\))?)*?)\s*(?:(?:override|open|internal|private|protected|public|suspend|inline|infix|operator|tailrec)\s+)*fun\s+(?:<[^>]*>\s*)?(?:([\w<>?,.\s]+?)\.)?(\w+)\s*\(([^)]*)\)(?:\s*:\s*([\w<>?,.\s*]+?))?\s*(?:\{|=)/g;
     let match: RegExpExecArray | null;
 
     // 클래스 레벨 @RequestMapping 경로 추출
     let classBasePath = '';
-    const classAnnoBlock = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*)\s*(?:open\s+|abstract\s+)?class/);
+    const classAnnoBlock = processed.match(/((?:\s*@\w+(?:\([^)]*\))?\s*)*?)\s*(?:open\s+|abstract\s+)?class/);
     if (classAnnoBlock && classAnnoBlock[1]) {
       const rmMatch = classAnnoBlock[1].match(/@RequestMapping\s*(\([^)]*\))?/);
       if (rmMatch) {
@@ -229,7 +233,7 @@ export class KotlinParser extends BaseParser {
       const funcName = match[3];
       const paramsStr = match[4];
       const returnType = match[5]?.trim();
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       // 어노테이션 추출
       const methodAnnotations: string[] = [];
@@ -247,7 +251,7 @@ export class KotlinParser extends BaseParser {
       const params = this.parseKotlinParams(paramsStr);
 
       // 메서드 종료 라인 추정
-      const endLine = this.estimateMethodEndLine(content, match.index);
+      const endLine = this.estimateMethodEndLine(processed, lineTable, match.index);
 
       const displayName = receiverType ? `${receiverType}.${funcName}` : funcName;
 
@@ -287,13 +291,13 @@ export class KotlinParser extends BaseParser {
   // Primary Constructor DI
   // ============================================================
 
-  private parsePrimaryConstructorDI(processed: string, content: string, result: ParsedFile): void {
+  private parsePrimaryConstructorDI(processed: string, _content: string, lineTable: number[], result: ParsedFile): void {
     // class MyService(private val repo: MyRepository, ...)
     const constructorMatch = processed.match(/class\s+\w+\s*\(([\s\S]*?)\)\s*(?::\s*[^{]+)?\s*\{/);
     if (!constructorMatch) return;
 
     const paramsStr = constructorMatch[1];
-    const line = getLineNumber(content, constructorMatch.index || 0);
+    const line = getLineFromTable(lineTable, constructorMatch.index || 0);
 
     // val/var 파라미터에서 타입 추출
     const paramRegex = /(?:(?:private|protected|internal)\s+)?(?:val|var)\s+\w+\s*:\s*([\w<>?.]+)/g;
@@ -317,13 +321,13 @@ export class KotlinParser extends BaseParser {
   // Property 주입
   // ============================================================
 
-  private parsePropertyInjection(processed: string, content: string, result: ParsedFile): void {
+  private parsePropertyInjection(processed: string, _content: string, lineTable: number[], result: ParsedFile): void {
     const propDIRegex = /@(?:Autowired|Inject|Resource|Value)\s+(?:(?:lateinit|private|protected|internal)\s+)*(?:var|val)\s+\w+\s*:\s*([\w<>?.]+)/g;
     let match: RegExpExecArray | null;
 
     while ((match = propDIRegex.exec(processed)) !== null) {
       const typeName = match[1];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       result.imports.push({
         source: typeName,
@@ -340,7 +344,8 @@ export class KotlinParser extends BaseParser {
 
   private parseDataClassFields(
     processed: string,
-    content: string,
+    _content: string,
+    lineTable: number[],
     filePath: string,
     result: ParsedFile,
   ): void {
@@ -350,7 +355,7 @@ export class KotlinParser extends BaseParser {
     while ((match = dataClassRegex.exec(processed)) !== null) {
       const className = match[1];
       const fieldsStr = match[2];
-      const line = getLineNumber(content, match.index);
+      const line = getLineFromTable(lineTable, match.index);
 
       const fields: string[] = [];
       const fieldRegex = /(?:val|var)\s+(\w+)\s*:\s*([\w<>?,.\s]+)/g;
@@ -435,36 +440,36 @@ export class KotlinParser extends BaseParser {
     return params;
   }
 
-  private estimateMethodEndLine(content: string, methodStartOffset: number): number {
+  private estimateMethodEndLine(processed: string, lineTable: number[], methodStartOffset: number): number {
     let braceCount = 0;
     let foundFirst = false;
     let i = methodStartOffset;
 
     // expression body (= ...) 처리
-    const snippet = content.substring(methodStartOffset, Math.min(methodStartOffset + 500, content.length));
+    const snippet = processed.substring(methodStartOffset, Math.min(methodStartOffset + 500, processed.length));
     const eqBodyMatch = snippet.match(/fun\s+[^{]*=\s*/);
     if (eqBodyMatch && !snippet.substring(0, eqBodyMatch.index! + eqBodyMatch[0].length + 50).includes('{')) {
       // expression body → 다음 줄까지
       const eqPos = methodStartOffset + (eqBodyMatch.index || 0) + eqBodyMatch[0].length;
-      let endPos = content.indexOf('\n', eqPos);
-      if (endPos === -1) endPos = content.length - 1;
-      return getLineNumber(content, endPos);
+      let endPos = processed.indexOf('\n', eqPos);
+      if (endPos === -1) endPos = processed.length - 1;
+      return getLineFromTable(lineTable, endPos);
     }
 
-    while (i < content.length) {
-      if (content[i] === '{') {
+    while (i < processed.length) {
+      if (processed[i] === '{') {
         braceCount++;
         foundFirst = true;
-      } else if (content[i] === '}') {
+      } else if (processed[i] === '}') {
         braceCount--;
         if (foundFirst && braceCount === 0) {
-          return getLineNumber(content, i);
+          return getLineFromTable(lineTable, i);
         }
       }
       i++;
     }
 
-    return getLineNumber(content, content.length - 1);
+    return getLineFromTable(lineTable, processed.length - 1);
   }
 
   private extractAnnotationText(annotationBlock: string, annotationName: string): string {

@@ -38,7 +38,9 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ViewCommand = void 0;
+const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
+const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const common_1 = require("../types/common");
 const web_server_1 = require("../server/web-server");
@@ -104,6 +106,13 @@ class ViewCommand {
                 code: common_1.ResultCode.SUCCESS,
                 message: 'Web server is already running.',
             };
+        }
+        // web/dist 빌드 존재 여부 확인
+        const webDistPath = path.join(__dirname, '..', '..', 'web', 'dist');
+        if (!fs.existsSync(webDistPath)) {
+            console.warn('\n⚠️ 웹 대시보드 빌드가 필요합니다. 아래 명령어를 실행해주세요:');
+            console.warn('   cd web && npm install && npm run build');
+            console.warn('');
         }
         // 분석 결과가 있는지 확인
         const configManager = new config_manager_1.ConfigManager();

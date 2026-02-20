@@ -1,0 +1,456 @@
+"use strict";
+/**
+ * @module core/indexing/parsers/jvm-parser-utils
+ * @description JVM 파서 공통 유틸리티 - JavaParser와 KotlinParser가 공유하는 Spring Boot 관련 상수 및 헬퍼 함수
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ANNOTATION_HTTP_METHOD_MAP = exports.ENTITY_ANNOTATIONS = exports.DI_ANNOTATIONS = exports.SPRING_COMPONENT_ANNOTATIONS = exports.SPRING_ROUTE_ANNOTATIONS = void 0;
+exports.findMatchingParen = findMatchingParen;
+exports.parseAnnotationValue = parseAnnotationValue;
+exports.resolveSpringHttpMethod = resolveSpringHttpMethod;
+exports.combineRoutePaths = combineRoutePaths;
+exports.isSpringComponent = isSpringComponent;
+exports.mapSpringComponentType = mapSpringComponentType;
+exports.isEntityClass = isEntityClass;
+exports.isDIAnnotation = isDIAnnotation;
+exports.extractAnnotationName = extractAnnotationName;
+exports.buildLineOffsetTable = buildLineOffsetTable;
+exports.getLineFromTable = getLineFromTable;
+exports.getLineNumber = getLineNumber;
+exports.stripStringsAndComments = stripStringsAndComments;
+const logger_1 = require("../../../utils/logger");
+// ============================================================
+// Spring Boot 어노테이션 상수
+// ============================================================
+/** Spring 라우트 관련 어노테이션 */
+exports.SPRING_ROUTE_ANNOTATIONS = [
+    'RequestMapping',
+    'GetMapping',
+    'PostMapping',
+    'PutMapping',
+    'PatchMapping',
+    'DeleteMapping',
+];
+/** Spring 컴포넌트 어노테이션 */
+exports.SPRING_COMPONENT_ANNOTATIONS = [
+    'Controller',
+    'RestController',
+    'Service',
+    'Repository',
+    'Component',
+    'Configuration',
+];
+/** 의존성 주입(DI) 어노테이션 */
+exports.DI_ANNOTATIONS = ['Autowired', 'Inject', 'Resource', 'Value'];
+/** JPA/데이터 엔티티 어노테이션 */
+exports.ENTITY_ANNOTATIONS = ['Entity', 'Table', 'Document', 'MappedSuperclass'];
+/** 어노테이션 이름 → HTTP 메서드 매핑 */
+exports.ANNOTATION_HTTP_METHOD_MAP = {
+    'GetMapping': 'GET',
+    'PostMapping': 'POST',
+    'PutMapping': 'PUT',
+    'PatchMapping': 'PATCH',
+    'DeleteMapping': 'DELETE',
+    'RequestMapping': 'GET',
+};
+// ============================================================
+// 어노테이션 파싱 함수
+// ============================================================
+/**
+ * 매칭되는 닫는 괄호 위치 찾기 (중첩 괄호 지원)
+ * @param text - 전체 텍스트
+ * @param openIndex - 여는 괄호 위치
+ * @returns 닫는 괄호 위치 (못 찾으면 -1)
+ */
+function findMatchingParen(text, openIndex) {
+    let count = 1;
+    let i = openIndex + 1;
+    while (i < text.length && count > 0) {
+        if (text[i] === '(') {
+            count++;
+        }
+        else if (text[i] === ')') {
+            count--;
+        }
+        i++;
+    }
+    return count === 0 ? i - 1 : -1;
+}
+/**
+ * 어노테이션 텍스트에서 경로 값을 추출
+ * @param annotationText - 어노테이션 전체 텍스트
+ * @returns 추출된 경로 문자열, 없으면 빈 문자열
+ */
+function parseAnnotationValue(annotationText) {
+    try {
+        const parenStart = annotationText.indexOf('(');
+        if (parenStart === -1) {
+            return '';
+        }
+        const parenEnd = findMatchingParen(annotationText, parenStart);
+        if (parenEnd === -1 || parenEnd <= parenStart) {
+            return '';
+        }
+        const inner = annotationText.substring(parenStart + 1, parenEnd).trim();
+        if (!inner) {
+            return '';
+        }
+        // 배열 형태: value = {"/api", "/v2"} → 첫 번째 값 추출
+        const arrayValueMatch = inner.match(/(?:value|path)\s*=\s*\{\s*"([^"]*)"/);
+        if (arrayValueMatch) {
+            return arrayValueMatch[1];
+        }
+        // value= 또는 path= 속성에서 추출 (단일 값)
+        const valueMatch = inner.match(/(?:value|path)\s*=\s*"([^"]*)"/);
+        if (valueMatch) {
+            return valueMatch[1];
+        }
+        // 단일 문자열 값
+        const directStringMatch = inner.match(/^"([^"]*)"$/);
+        if (directStringMatch) {
+            return directStringMatch[1];
+        }
+        // 첫 번째 인자가 문자열인 경우
+        const firstArgMatch = inner.match(/^"([^"]*)"/);
+        if (firstArgMatch) {
+            return firstArgMatch[1];
+        }
+        return '';
+    }
+    catch (err) {
+        logger_1.logger.debug(`Failed to parse annotation value: ${err instanceof Error ? err.message : String(err)}`);
+        return '';
+    }
+}
+/**
+ * 어노테이션 이름과 텍스트로부터 Spring HTTP 메서드를 결정
+ * @param annotationName - 어노테이션 이름
+ * @param annotationText - 어노테이션 전체 텍스트
+ * @returns HTTP 메서드 문자열
+ */
+function resolveSpringHttpMethod(annotationName, annotationText) {
+    try {
+        if (annotationName !== 'RequestMapping') {
+            return exports.ANNOTATION_HTTP_METHOD_MAP[annotationName] || 'GET';
+        }
+        const methodMatch = annotationText.match(/method\s*=\s*RequestMethod\.(\w+)/);
+        if (methodMatch) {
+            return methodMatch[1].toUpperCase();
+        }
+        return 'GET';
+    }
+    catch (err) {
+        logger_1.logger.debug(`Failed to resolve HTTP method: ${err instanceof Error ? err.message : String(err)}`);
+        return 'GET';
+    }
+}
+// ============================================================
+// 경로 조합 함수
+// ============================================================
+/**
+ * 클래스 레벨 경로와 메서드 레벨 경로를 결합
+ * @param basePath - 클래스 레벨 경로
+ * @param methodPath - 메서드 레벨 경로
+ * @returns 결합된 경로
+ */
+function combineRoutePaths(basePath, methodPath) {
+    try {
+        if (!basePath && !methodPath) {
+            return '';
+        }
+        if (!basePath) {
+            return methodPath;
+        }
+        if (!methodPath) {
+            return basePath;
+        }
+        const normalizedBase = basePath.replace(/\/+$/, '');
+        const normalizedMethod = methodPath.replace(/^\/+/, '');
+        return `${normalizedBase}/${normalizedMethod}`;
+    }
+    catch (err) {
+        logger_1.logger.debug(`Failed to combine route paths: ${err instanceof Error ? err.message : String(err)}`);
+        return basePath || methodPath || '';
+    }
+}
+// ============================================================
+// 컴포넌트/엔티티 판별 함수
+// ============================================================
+/**
+ * 어노테이션 목록에 Spring 컴포넌트 어노테이션이 포함되어 있는지 확인
+ * @param annotations - 어노테이션 이름 목록
+ * @returns Spring 컴포넌트이면 true
+ */
+function isSpringComponent(annotations) {
+    return annotations.some(ann => exports.SPRING_COMPONENT_ANNOTATIONS.includes(ann));
+}
+/**
+ * 어노테이션 목록으로부터 Spring 컴포넌트 타입을 결정
+ * @param annotations - 어노테이션 이름 목록
+ * @returns 컴포넌트 타입 문자열
+ */
+function mapSpringComponentType(annotations) {
+    const typeMap = {
+        'RestController': 'rest-controller',
+        'Controller': 'controller',
+        'Service': 'service',
+        'Repository': 'repository',
+        'Configuration': 'configuration',
+        'Component': 'component',
+    };
+    const priority = ['RestController', 'Controller', 'Service', 'Repository', 'Configuration', 'Component'];
+    for (const key of priority) {
+        if (annotations.includes(key)) {
+            return typeMap[key];
+        }
+    }
+    return 'component';
+}
+/**
+ * 어노테이션 목록에 엔티티 관련 어노테이션이 포함되어 있는지 확인
+ * @param annotations - 어노테이션 이름 목록
+ * @returns 엔티티 클래스이면 true
+ */
+function isEntityClass(annotations) {
+    return annotations.some(ann => exports.ENTITY_ANNOTATIONS.includes(ann));
+}
+/**
+ * 주어진 어노테이션 이름이 DI 어노테이션인지 확인
+ * @param annotationName - 어노테이션 이름
+ * @returns DI 어노테이션이면 true
+ */
+function isDIAnnotation(annotationName) {
+    return exports.DI_ANNOTATIONS.includes(annotationName);
+}
+// ============================================================
+// 텍스트 파싱 헬퍼
+// ============================================================
+/**
+ * raw 어노테이션 문자열에서 어노테이션 이름만 추출
+ * @param rawAnnotation - raw 어노테이션 문자열
+ * @returns 어노테이션 이름
+ */
+function extractAnnotationName(rawAnnotation) {
+    try {
+        const withoutAt = rawAnnotation.replace(/^@/, '');
+        const parenIndex = withoutAt.indexOf('(');
+        if (parenIndex !== -1) {
+            return withoutAt.substring(0, parenIndex).trim();
+        }
+        return withoutAt.trim();
+    }
+    catch (err) {
+        logger_1.logger.debug(`Failed to extract annotation name: ${err instanceof Error ? err.message : String(err)}`);
+        return rawAnnotation;
+    }
+}
+/**
+ * 소스 코드의 각 라인 시작 오프셋 테이블을 생성 (O(n) 1회)
+ * 이후 getLineFromTable()과 함께 사용하면 O(log n)으로 라인 번호 조회 가능
+ * @param content - 전체 소스 코드 문자열
+ * @returns 각 라인의 시작 오프셋 배열 (0-indexed line → offset). offsets[0] = 0 (1번째 줄), offsets[1] = 첫 번째 '\n' + 1 위치 (2번째 줄)
+ */
+function buildLineOffsetTable(content) {
+    const offsets = [0]; // 1번째 줄은 항상 offset 0에서 시작
+    for (let i = 0; i < content.length; i++) {
+        if (content[i] === '\n') {
+            offsets.push(i + 1);
+        }
+    }
+    return offsets;
+}
+/**
+ * 라인 오프셋 테이블을 사용하여 문자 인덱스의 라인 번호를 Binary Search로 조회 (O(log n))
+ * @param offsets - buildLineOffsetTable()로 생성한 오프셋 배열
+ * @param charIndex - 문자 인덱스 (0-based)
+ * @returns 라인 번호 (1-based)
+ */
+function getLineFromTable(offsets, charIndex) {
+    if (charIndex < 0 || offsets.length === 0) {
+        return 1;
+    }
+    // Binary search: charIndex가 포함되는 라인을 찾음
+    let low = 0;
+    let high = offsets.length - 1;
+    while (low <= high) {
+        const mid = (low + high) >>> 1;
+        if (offsets[mid] <= charIndex) {
+            low = mid + 1;
+        }
+        else {
+            high = mid - 1;
+        }
+    }
+    // high는 charIndex를 포함하는 마지막 라인의 인덱스 (0-based)
+    return high + 1; // 1-based line number
+}
+/**
+ * 문자열에서 특정 문자 인덱스의 라인 번호를 계산 (1-based)
+ * @deprecated buildLineOffsetTable() + getLineFromTable() 사용을 권장. 이 함수는 매 호출마다 O(n) 순회하므로 대형 파일에서 성능 저하 발생.
+ * @param content - 전체 문자열
+ * @param charIndex - 문자 인덱스 (0-based)
+ * @returns 라인 번호 (1-based)
+ */
+function getLineNumber(content, charIndex) {
+    try {
+        if (charIndex < 0 || charIndex > content.length) {
+            return 1;
+        }
+        let line = 1;
+        for (let i = 0; i < charIndex && i < content.length; i++) {
+            if (content[i] === '\n') {
+                line++;
+            }
+        }
+        return line;
+    }
+    catch (err) {
+        logger_1.logger.debug(`Failed to get line number: ${err instanceof Error ? err.message : String(err)}`);
+        return 1;
+    }
+}
+// ============================================================
+// 전처리 함수
+// ============================================================
+/**
+ * 소스 코드에서 문자열 리터럴과 주석을 제거하여 구조 파싱을 안전하게 수행할 수 있도록 전처리
+ * @param content - 원본 소스 코드
+ * @returns 전처리된 문자열과 수집된 주석 목록
+ */
+function stripStringsAndComments(content) {
+    const comments = [];
+    const segments = [];
+    let segmentStart = 0;
+    let i = 0;
+    let currentLine = 1;
+    /**
+     * Helper: replace a range [start, end) with spaces, preserving newlines.
+     * Flushes the preceding segment, then pushes the whitespace replacement.
+     */
+    function replaceRangeWithSpaces(start, end) {
+        if (start > segmentStart) {
+            segments.push(content.substring(segmentStart, start));
+        }
+        let replacement = '';
+        for (let j = start; j < end && j < content.length; j++) {
+            replacement += content[j] === '\n' ? '\n' : ' ';
+        }
+        segments.push(replacement);
+        segmentStart = end;
+    }
+    try {
+        while (i < content.length) {
+            // 블록 주석: /* ... */
+            if (content[i] === '/' && i + 1 < content.length && content[i + 1] === '*') {
+                const commentStartLine = currentLine;
+                const commentStart = i;
+                i += 2;
+                while (i < content.length) {
+                    if (content[i] === '*' && i + 1 < content.length && content[i + 1] === '/') {
+                        i += 2;
+                        break;
+                    }
+                    if (content[i] === '\n') {
+                        currentLine++;
+                    }
+                    i++;
+                }
+                const commentText = content.substring(commentStart, i);
+                comments.push({ text: commentText, line: commentStartLine, type: 'block' });
+                replaceRangeWithSpaces(commentStart, i);
+                continue;
+            }
+            // 라인 주석: // ...
+            if (content[i] === '/' && i + 1 < content.length && content[i + 1] === '/') {
+                const commentStartLine = currentLine;
+                const commentStart = i;
+                i += 2;
+                while (i < content.length && content[i] !== '\n') {
+                    i++;
+                }
+                const commentText = content.substring(commentStart, i);
+                comments.push({ text: commentText, line: commentStartLine, type: 'line' });
+                replaceRangeWithSpaces(commentStart, i);
+                continue;
+            }
+            // Text Block 처리: \"\"\"...\"\"\" (Java 15+, Kotlin raw string)
+            if (content[i] === '"' && i + 2 < content.length &&
+                content[i + 1] === '"' && content[i + 2] === '"') {
+                const textBlockStart = i;
+                i += 3; // 시작 \"\"\" 건너뛰기
+                // 종료 \"\"\" 찾기
+                while (i + 2 < content.length) {
+                    if (content[i] === '"' && content[i + 1] === '"' && content[i + 2] === '"') {
+                        i += 3; // 종료 \"\"\" 건너뛰기
+                        break;
+                    }
+                    if (content[i] === '\n') {
+                        currentLine++;
+                    }
+                    i++;
+                }
+                // 파일 끝까지 \"\"\" 없으면 끝까지 처리
+                if (i + 2 >= content.length && !(i >= 3 && content[i - 3] === '"' && content[i - 2] === '"' && content[i - 1] === '"')) {
+                    while (i < content.length) {
+                        if (content[i] === '\n') {
+                            currentLine++;
+                        }
+                        i++;
+                    }
+                }
+                // 공백으로 치환 (라인 번호 보존)
+                replaceRangeWithSpaces(textBlockStart, i);
+                continue;
+            }
+            // 문자열 리터럴: "..." 또는 '...'
+            if (content[i] === '"' || content[i] === "'") {
+                const stringStart = i;
+                const quote = content[i];
+                i++;
+                while (i < content.length && content[i] !== quote) {
+                    if (content[i] === '\\' && i + 1 < content.length) {
+                        i += 2;
+                        continue;
+                    }
+                    if (content[i] === '\n') {
+                        currentLine++;
+                    }
+                    i++;
+                }
+                if (i < content.length) {
+                    i++; // skip closing quote
+                }
+                // Flush preceding segment, then push quote + whitespace + quote
+                if (stringStart > segmentStart) {
+                    segments.push(content.substring(segmentStart, stringStart));
+                }
+                let replacement = quote;
+                const innerEnd = (i > stringStart + 1) ? i - 1 : stringStart + 1;
+                for (let j = stringStart + 1; j < innerEnd; j++) {
+                    replacement += content[j] === '\n' ? '\n' : ' ';
+                }
+                if (i > stringStart + 1) {
+                    replacement += quote;
+                }
+                segments.push(replacement);
+                segmentStart = i;
+                continue;
+            }
+            // Track line numbers for regular characters
+            if (content[i] === '\n') {
+                currentLine++;
+            }
+            i++;
+        }
+        // Flush remaining segment
+        if (segmentStart < content.length) {
+            segments.push(content.substring(segmentStart));
+        }
+        return { processed: segments.join(''), comments };
+    }
+    catch (err) {
+        logger_1.logger.debug(`Failed to strip strings and comments: ${err instanceof Error ? err.message : String(err)}`);
+        return { processed: content, comments: [] };
+    }
+}
+//# sourceMappingURL=jvm-parser-utils.js.map

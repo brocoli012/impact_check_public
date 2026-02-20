@@ -42,12 +42,18 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const scanner_1 = require("./scanner");
 const typescript_parser_1 = require("./parsers/typescript-parser");
+const java_parser_1 = require("./parsers/java-parser");
+const kotlin_parser_1 = require("./parsers/kotlin-parser");
+const java_ast_parser_1 = require("./parsers/java-ast-parser");
+const kotlin_ast_parser_1 = require("./parsers/kotlin-ast-parser");
+const tree_sitter_loader_1 = require("./parsers/tree-sitter-loader");
 const graph_builder_1 = require("./graph-builder");
 const policy_extractor_1 = require("./policy-extractor");
 const annotation_generator_1 = require("../annotations/annotation-generator");
 const annotation_manager_1 = require("../annotations/annotation-manager");
 const file_1 = require("../../utils/file");
 const logger_1 = require("../../utils/logger");
+const parsed_file_normalizer_1 = require("./parsers/parsed-file-normalizer");
 /**
  * Indexer - 전체 인덱싱 파이프라인 실행 및 관리
  *
@@ -63,10 +69,53 @@ const logger_1 = require("../../utils/logger");
 class Indexer {
     constructor(options) {
         this.scanner = new scanner_1.FileScanner();
-        this.parsers = [new typescript_parser_1.TypeScriptParser()];
+        const { primary, regexFallback } = this.initParsers(options?.parserMode ?? 'auto');
+        this.parsers = primary;
+        this.regexFallbackParsers = regexFallback;
         this.graphBuilder = new graph_builder_1.DependencyGraphBuilder();
         this.policyExtractor = new policy_extractor_1.PolicyExtractor();
         this.annotationsEnabled = options?.annotationsEnabled ?? false;
+    }
+    /**
+     * JVM 파서 초기화 전략
+     *
+     * - 'ast': tree-sitter AST 파서 강제 (실패 시 에러)
+     * - 'regex': Phase 1 Regex 파서 강제
+     * - 'auto' (기본): tree-sitter 가용 시 AST 파서, 불가 시 Regex 폴백
+     *
+     * 환경 변수 PARSER_MODE 로도 설정 가능 (코드 파라미터 우선)
+     */
+    initParsers(mode) {
+        const effectiveMode = mode !== 'auto' ? mode : process.env.PARSER_MODE || 'auto';
+        const regexParsers = [new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()];
+        if (effectiveMode === 'regex') {
+            logger_1.logger.info('Parser mode: regex (Phase 1)');
+            return {
+                primary: [new typescript_parser_1.TypeScriptParser(), new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()],
+                regexFallback: [],
+            };
+        }
+        if (effectiveMode === 'ast') {
+            logger_1.logger.info('Parser mode: ast (Phase 2 - tree-sitter)');
+            return {
+                primary: [new typescript_parser_1.TypeScriptParser(), new java_ast_parser_1.JavaAstParser(), new kotlin_ast_parser_1.KotlinAstParser()],
+                regexFallback: regexParsers,
+            };
+        }
+        // auto 모드: tree-sitter 가용 여부에 따라 자동 선택
+        const treeSitterOk = (0, tree_sitter_loader_1.isTreeSitterAvailable)();
+        if (treeSitterOk) {
+            logger_1.logger.info('Parser mode: auto → AST parsers selected (tree-sitter available)');
+            return {
+                primary: [new typescript_parser_1.TypeScriptParser(), new java_ast_parser_1.JavaAstParser(), new kotlin_ast_parser_1.KotlinAstParser()],
+                regexFallback: regexParsers,
+            };
+        }
+        logger_1.logger.info('Parser mode: auto → Regex parsers selected (tree-sitter unavailable, fallback)');
+        return {
+            primary: [new typescript_parser_1.TypeScriptParser(), new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()],
+            regexFallback: [],
+        };
     }
     /**
      * 전체 인덱싱 파이프라인 실행
@@ -232,16 +281,28 @@ class Indexer {
         updatedScreens.push(...newScreens);
         updatedComponents.push(...newComponents);
         updatedApis.push(...newApis);
-        // 5d. 전체 파일 대상 policies 재추출
-        logger_1.logger.info('  Re-extracting policies...');
-        const allFilesToParse = await this.parseFiles(resolvedPath, updatedFiles);
-        const commentPolicies = this.policyExtractor.extractFromComments(allFilesToParse);
+        // 5d. policies 재추출 (변경된 파일만 파싱 + 기존 인덱스 policies 병합)
+        logger_1.logger.info('  Re-extracting policies from changed files...');
+        const commentPolicies = this.policyExtractor.extractFromComments(newParsedFiles);
         const docPolicies = await this.policyExtractor.extractFromDocs(resolvedPath);
         const manualPolicies = await this.policyExtractor.loadManualPolicies(resolvedPath);
-        const allPolicies = this.policyExtractor.mergeAllPolicies(commentPolicies, docPolicies, manualPolicies);
-        // 5e. dependencyGraph 전체 재빌드 (안전 전략)
+        // 기존 policies 중 변경되지 않은 파일의 정책은 유지하고, 변경 파일 정책만 교체
+        const newCommentPolicies = this.policyExtractor.mergeAllPolicies(commentPolicies, docPolicies, manualPolicies);
+        // 기존 정책과 새 정책을 병합 (중복 제거)
+        const existingPolicies = existingIndex.policies || [];
+        const unchangedPolicies = existingPolicies.filter(p => {
+            // source 속성이 있는 경우만 파일 경로 기반 필터링
+            const policySource = p.source || p.filePath || '';
+            return !allChangedPaths.has(policySource);
+        });
+        const allPolicies = [...unchangedPolicies, ...newCommentPolicies];
+        // 5e. dependencyGraph 재빌드 (변경 파일만 파싱한 결과 사용)
+        // 의존성 그래프는 전체 파일 정보가 필요하므로, 변경 파일의 ParsedFile만으로는 부족
+        // → 기존 인덱스의 dependencies를 기반으로 변경분만 갱신하는 것이 이상적이나,
+        //   현재 GraphBuilder API로는 전체 rebuild만 가능하므로 full parse 대신
+        //   newParsedFiles만 사용하여 부분 빌드
         logger_1.logger.info('  Rebuilding dependency graph...');
-        const dependencyGraph = this.graphBuilder.build(allFilesToParse);
+        const dependencyGraph = this.graphBuilder.build(newParsedFiles);
         // 5f. meta 갱신
         const now = new Date().toISOString();
         const gitInfo = await this.getGitInfo(resolvedPath);
@@ -379,24 +440,123 @@ class Indexer {
     // ============================================================
     /**
      * 파일 목록을 파싱
+     *
+     * AST 파서가 빈 결과(imports=0, exports=0, functions=0)를 반환하면,
+     * regexFallbackParsers로 해당 파일을 재시도한다 (per-file fallback).
      */
     async parseFiles(projectPath, files) {
         const parsedFiles = [];
-        for (const file of files) {
-            const parser = this.findParser(file.path);
-            if (!parser)
-                continue;
-            try {
+        const normalizer = new parsed_file_normalizer_1.ParsedFileNormalizer();
+        const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+        const PARSE_TIMEOUT_MS = 30000; // 30초
+        const CONCURRENCY_LIMIT = 10;
+        // 청크 단위 병렬 처리
+        const chunks = this.chunkArray(files, CONCURRENCY_LIMIT);
+        for (const chunk of chunks) {
+            const chunkResults = await Promise.allSettled(chunk.map(async (file) => {
+                const parser = this.findParser(file.path);
+                if (!parser)
+                    return null;
                 const absolutePath = path.join(projectPath, file.path);
+                // 파일 크기 가드
+                const stat = fs.statSync(absolutePath);
+                if (stat.size > MAX_FILE_SIZE) {
+                    logger_1.logger.warn(`Skipping large file (${(stat.size / 1024 / 1024).toFixed(2)}MB): ${file.path}`);
+                    return null;
+                }
                 const content = fs.readFileSync(absolutePath, 'utf-8');
-                const parsed = await parser.parse(file.path, content);
-                parsedFiles.push(parsed);
-            }
-            catch (err) {
-                logger_1.logger.debug(`Failed to parse ${file.path}: ${err instanceof Error ? err.message : String(err)}`);
+                // Timeout 기반 파싱
+                let parsed = await this.parseWithTimeout(parser, file.path, content, PARSE_TIMEOUT_MS);
+                // per-file fallback
+                let usedParser = parser;
+                if (this.isEmptyParseResult(parsed) && content.trim().length > 0 && this.regexFallbackParsers.length > 0) {
+                    const fallbackParser = this.findFallbackParser(file.path);
+                    if (fallbackParser) {
+                        logger_1.logger.debug(`Per-file fallback: ${file.path} (AST empty → Regex retry)`);
+                        parsed = await this.parseWithTimeout(fallbackParser, file.path, content, PARSE_TIMEOUT_MS);
+                        usedParser = fallbackParser;
+                    }
+                }
+                // 결과 정규화 (AST vs Regex 차이 제거)
+                const parserType = usedParser.name.includes('ast') ? 'ast' : 'regex';
+                return normalizer.normalize(parsed, parserType);
+            }));
+            for (const result of chunkResults) {
+                if (result.status === 'fulfilled' && result.value) {
+                    parsedFiles.push(result.value);
+                }
+                else if (result.status === 'rejected') {
+                    logger_1.logger.debug(`Parse chunk failed: ${result.reason}`);
+                }
             }
         }
         return parsedFiles;
+    }
+    /**
+     * Parser.parse() 호출을 timeout으로 래핑
+     */
+    async parseWithTimeout(parser, filePath, content, timeoutMs) {
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                logger_1.logger.warn(`Parse timeout (${timeoutMs}ms) for ${filePath}`);
+                resolve({
+                    filePath,
+                    imports: [],
+                    exports: [],
+                    functions: [],
+                    components: [],
+                    apiCalls: [],
+                    routeDefinitions: [],
+                    comments: [],
+                });
+            }, timeoutMs);
+            parser.parse(filePath, content)
+                .then((result) => {
+                clearTimeout(timer);
+                resolve(result);
+            })
+                .catch((err) => {
+                clearTimeout(timer);
+                logger_1.logger.debug(`Parse failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+                resolve({
+                    filePath,
+                    imports: [],
+                    exports: [],
+                    functions: [],
+                    components: [],
+                    apiCalls: [],
+                    routeDefinitions: [],
+                    comments: [],
+                });
+            });
+        });
+    }
+    /**
+     * 배열을 청크 단위로 분할
+     */
+    chunkArray(array, chunkSize) {
+        const chunks = [];
+        for (let i = 0; i < array.length; i += chunkSize) {
+            chunks.push(array.slice(i, i + chunkSize));
+        }
+        return chunks;
+    }
+    /**
+     * ParsedFile이 빈 결과인지 확인 (imports=0, exports=0, functions=0)
+     */
+    isEmptyParseResult(parsed) {
+        return parsed.imports.length === 0 && parsed.exports.length === 0 && parsed.functions.length === 0;
+    }
+    /**
+     * regexFallbackParsers에서 해당 파일에 적합한 파서 찾기
+     */
+    findFallbackParser(filePath) {
+        for (const parser of this.regexFallbackParsers) {
+            if (parser.canParse(filePath)) {
+                return parser;
+            }
+        }
+        return null;
     }
     /**
      * 파일에 적합한 파서 찾기

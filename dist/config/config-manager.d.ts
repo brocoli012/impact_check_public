@@ -47,5 +47,10 @@ export declare class ConfigManager {
      * 설정을 초기화
      */
     reset(): void;
+    /**
+     * 정책 문서 저장 디렉토리 경로를 반환한다.
+     * ~/.impact/docs/{projectId}
+     */
+    static getDocsDir(projectId: string): string;
 }
 //# sourceMappingURL=config-manager.d.ts.map
