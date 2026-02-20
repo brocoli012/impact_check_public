@@ -4,7 +4,7 @@
   "projectPath": "/Users/youngilkang/AI_project/Kurly_Impact_Checker",
   "mode": "team",
   "createdAt": "2026-02-13T00:00:00Z",
-  "lastUpdatedAt": "2026-02-18T10:00:00Z",
+  "lastUpdatedAt": "2026-02-21T09:00:00Z",
   "currentAgent": {
     "role": "master",
     "allowedTools": [
@@ -29,7 +29,10 @@
         "REQ-007",
         "REQ-008",
         "REQ-009",
-        "REQ-010"
+        "REQ-010",
+        "REQ-011",
+        "REQ-012",
+        "REQ-013"
       ]
     }
   ],
@@ -113,6 +116,48 @@
       "status": "done",
       "priority": "HIGH",
       "epic": "EPIC-001"
+    },
+    {
+      "id": "REQ-011",
+      "type": "REQ",
+      "title": "대시보드 독립 조회 & 정책 어노테이션 연동",
+      "status": "ready",
+      "priority": "HIGH",
+      "epic": "EPIC-001",
+      "tasks": "TASK-060~069",
+      "points": 33,
+      "complexity": "7/10",
+      "phases": 4,
+      "estimatedDays": 5
+    },
+    {
+      "id": "REQ-012",
+      "type": "REQ",
+      "title": "멀티프로젝트 대시보드",
+      "status": "ready",
+      "priority": "HIGH",
+      "epic": "EPIC-001",
+      "tasks": "TASK-070~083",
+      "points": 42,
+      "complexity": "7/10",
+      "phases": 3,
+      "estimatedDays": 8,
+      "dependsOn": ["REQ-011"]
+    },
+    {
+      "id": "REQ-013",
+      "type": "REQ",
+      "title": "크로스 프로젝트 공유 엔티티 영향 추적 + 이벤트 발행/구독",
+      "status": "ready",
+      "priority": "HIGH",
+      "epic": "EPIC-001",
+      "tasks": "TASK-084~112",
+      "points": 123,
+      "complexity": "8/10",
+      "phases": 4,
+      "estimatedDays": 30,
+      "dependsOn": ["REQ-012"],
+      "note": "Phase A/B는 REQ-012와 독립 병렬 가능, Phase C/D는 REQ-012 P1 완료 필요"
     }
   ],
   "violations": [],
@@ -447,9 +492,9 @@
     }
   ],
   "currentPhase": {
-    "phase": "Post REQ-010: 유지보수 & UX 개선",
+    "phase": "REQ-011~013 구현 준비",
     "status": "in_progress",
-    "description": "REQ-001~010 전체 완료. 버그 수정 및 UX 개선 진행 중. 1,457 테스트 전체 통과."
+    "description": "REQ-011(33pts/10T), REQ-012(42pts/14T), REQ-013(123pts/29T) 통합 로드맵 수립 완료. 총 53 TASK, 198pts. REQ-011 Phase 1부터 순차 착수 예정."
   },
   "sessionHistory": [
     {
@@ -847,6 +892,12 @@
       "timestamp": "2026-02-18T17:30:00Z",
       "agent": "developer",
       "description": "web/dist 빌드 사전 조건 안내 - SKILL.md/CLAUDE.md/web-server.ts/view.ts 4개 파일 수정, 1462테스트, 커밋 53f19b4"
+    },
+    {
+      "action": "roadmap_req011_013",
+      "timestamp": "2026-02-21T09:00:00Z",
+      "agent": "master",
+      "description": "REQ-011~013 통합 구현 로드맵 작성 - 53 TASK(060~112), 198pts, 11개 Phase, 13 커밋 포인트, 7 마일스톤. 병렬화 시 ~22일 예상."
     }
   ],
   "documents": {
@@ -955,6 +1006,12 @@
       "status": "Confirmed",
       "files": 1,
       "path": ".dream-team/docs/03-feedback/req-010.r1-r10-decisions.md"
+    },
+    "roadmap_011_013": {
+      "id": "ROADMAP-001",
+      "status": "Ready",
+      "files": 1,
+      "path": ".dream-team/docs/roadmap/REQ-011-012-013-implementation-roadmap.md"
     }
   }
 }
