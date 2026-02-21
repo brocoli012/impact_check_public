@@ -1,6 +1,6 @@
 /**
  * @module web/components/policies/PolicyFilter
- * @description 정책 필터 바 - 검색 + 카테고리 필터 + 결과 수 표시
+ * @description 정책 필터 바 - 검색 + 소스 필터 + 카테고리 필터 + 결과 수 표시
  */
 
 import { useState, useEffect } from 'react';
@@ -15,18 +15,29 @@ interface PolicyFilterProps {
   totalCount: number;
   /** 요구사항 목록 (요구사항 필터 드롭다운용) */
   requirements?: WebRequirement[];
-  /** 작업 목록 (요구사항→작업 매핑용) */
+  /** 작업 목록 (요구사항->작업 매핑용) */
   tasks?: Task[];
 }
+
+/** 소스 필터 탭 정의 */
+const SOURCE_TABS = [
+  { value: null, label: '전체' },
+  { value: 'comment', label: '코드 주석' },
+  { value: 'readme', label: '문서' },
+  { value: 'manual', label: '수동 입력' },
+  { value: 'annotation', label: 'AI 추론' },
+] as const;
 
 function PolicyFilter({ resultCount, totalCount, requirements, tasks }: PolicyFilterProps) {
   const {
     categories,
     searchQuery,
     selectedCategory,
+    selectedSource,
     selectedRequirement,
     setSearchQuery,
     setSelectedCategory,
+    setSelectedSource,
     setSelectedRequirement,
   } = usePolicyStore();
 
@@ -44,7 +55,7 @@ function PolicyFilter({ resultCount, totalCount, requirements, tasks }: PolicyFi
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
       <div className="flex items-center gap-4 flex-wrap">
         {/* Search input */}
         <div className="flex-1 min-w-[200px]">
@@ -101,6 +112,35 @@ function PolicyFilter({ resultCount, totalCount, requirements, tasks }: PolicyFi
           </div>
         )}
 
+        {/* Result count */}
+        <div className="text-xs text-gray-500">
+          <span data-testid="result-count">
+            {resultCount} / {totalCount}건
+          </span>
+        </div>
+      </div>
+
+      {/* Source filter tabs + Category filter */}
+      <div className="flex items-center gap-4 flex-wrap">
+        {/* Source filter */}
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-gray-500 mr-1">출처:</span>
+          {SOURCE_TABS.map((tab) => (
+            <button
+              key={tab.label}
+              onClick={() => setSelectedSource(tab.value)}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                selectedSource === tab.value
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              data-testid={`source-filter-${tab.value || 'all'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Category filter */}
         <div className="flex items-center gap-1">
           <span className="text-xs text-gray-500 mr-1">카테고리:</span>
@@ -127,13 +167,6 @@ function PolicyFilter({ resultCount, totalCount, requirements, tasks }: PolicyFi
               {category}
             </button>
           ))}
-        </div>
-
-        {/* Result count */}
-        <div className="text-xs text-gray-500">
-          <span data-testid="result-count">
-            {resultCount} / {totalCount}건
-          </span>
         </div>
       </div>
     </div>

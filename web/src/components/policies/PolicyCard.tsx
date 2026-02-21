@@ -1,6 +1,6 @@
 /**
  * @module web/components/policies/PolicyCard
- * @description 정책 카드 컴포넌트 - 정책명, 카테고리, 설명, 신뢰도 표시
+ * @description 정책 카드 컴포넌트 - 정책명, 카테고리, 설명, 신뢰도, 소스 배지 표시
  */
 
 import type { Policy } from '../../types';
@@ -42,9 +42,22 @@ function getCategoryColor(category: string): string {
   return CATEGORY_COLORS[category] ?? 'bg-gray-100 text-gray-700';
 }
 
+/** 소스(source) 배지 설정 */
+const SOURCE_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+  comment: { bg: 'bg-blue-50', text: 'text-blue-600', label: '코드 주석' },
+  readme: { bg: 'bg-green-50', text: 'text-green-600', label: '문서' },
+  manual: { bg: 'bg-gray-50', text: 'text-gray-600', label: '수동 입력' },
+  annotation: { bg: 'bg-violet-50', text: 'text-violet-600', label: 'AI 추론' },
+};
+
+function getSourceBadge(source: string): { bg: string; text: string; label: string } {
+  return SOURCE_BADGE[source] ?? SOURCE_BADGE.comment;
+}
+
 function PolicyCard({ policy, isSelected, onClick }: PolicyCardProps) {
   const confidenceColor = getConfidenceColor(policy.confidence);
   const confidencePercent = Math.round(policy.confidence * 100);
+  const sourceBadge = getSourceBadge(policy.source);
 
   return (
     <div
@@ -81,23 +94,33 @@ function PolicyCard({ policy, isSelected, onClick }: PolicyCardProps) {
         {policy.description}
       </p>
 
-      {/* Footer: Confidence + File count */}
+      {/* Footer: Source badge + Confidence + File count */}
       <div className="mt-3 flex items-center justify-between">
-        {/* Confidence badge */}
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${confidenceColor.bg} ${confidenceColor.text}`}
-          data-testid="confidence-badge"
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          {confidencePercent}% ({confidenceColor.label})
-        </span>
+        <div className="flex items-center gap-2">
+          {/* Source badge */}
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${sourceBadge.bg} ${sourceBadge.text}`}
+            data-testid="source-badge"
+          >
+            {sourceBadge.label}
+          </span>
+
+          {/* Confidence badge */}
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${confidenceColor.bg} ${confidenceColor.text}`}
+            data-testid="confidence-badge"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            {confidencePercent}% ({confidenceColor.label})
+          </span>
+        </div>
 
         {/* Affected files count */}
         <span className="text-xs text-gray-500 flex items-center gap-1">

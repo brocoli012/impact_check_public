@@ -10,6 +10,7 @@ import ActionGuide from '../components/dashboard/ActionGuide';
 import CriticalAlertBanner from '../components/dashboard/CriticalAlertBanner';
 import AnalysisSummaryCard from '../components/dashboard/AnalysisSummaryCard';
 import SpecSourcePanel from '../components/dashboard/SpecSourcePanel';
+import ProjectOverview from '../components/dashboard/ProjectOverview';
 import CrossProjectDiagram from '../components/cross-project/CrossProjectDiagram';
 import CrossProjectSummary from '../components/cross-project/CrossProjectSummary';
 import type { ProjectLink } from '../components/cross-project/CrossProjectDiagram';
@@ -112,13 +113,8 @@ function Dashboard() {
 
   if (!currentResult) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-xl text-gray-400 mb-2">분석 결과가 없습니다</p>
-          <p className="text-sm text-gray-500">
-            먼저 분석을 실행해주세요: /impact analyze &lt;spec-file&gt;
-          </p>
-        </div>
+      <div className="space-y-6">
+        <ProjectOverview />
       </div>
     );
   }

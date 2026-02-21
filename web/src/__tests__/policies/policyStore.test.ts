@@ -62,9 +62,14 @@ describe('policyStore', () => {
       categories: [],
       searchQuery: '',
       selectedCategory: null,
+      selectedSource: null,
       selectedRequirement: null,
       loading: false,
+      loadingMore: false,
       error: null,
+      totalCount: 0,
+      hasMore: false,
+      currentOffset: 0,
     });
     vi.mocked(fetch).mockReset();
   });
@@ -83,7 +88,12 @@ describe('policyStore', () => {
 
   it('should fetch policies and extract categories', async () => {
     vi.mocked(fetch).mockResolvedValue({
-      json: async () => ({ policies: mockPolicies }),
+      json: async () => ({
+        policies: mockPolicies,
+        categories: ['결제', '배송', '장바구니'],
+        total: mockPolicies.length,
+        hasMore: false,
+      }),
     } as Response);
 
     await usePolicyStore.getState().fetchPolicies('project-1');

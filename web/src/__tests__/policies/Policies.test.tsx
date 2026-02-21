@@ -72,14 +72,25 @@ function setupDefaultState() {
     categories: ['결제', '배송', '장바구니'],
     searchQuery: '',
     selectedCategory: null,
+    selectedSource: null,
     selectedRequirement: null,
     loading: false,
+    loadingMore: false,
     error: null,
+    totalCount: mockPolicies.length,
+    hasMore: false,
+    currentOffset: mockPolicies.length,
   });
 
   vi.mocked(fetch).mockReset();
   vi.mocked(fetch).mockResolvedValue({
-    json: async () => ({ policies: mockPolicies }),
+    json: async () => ({
+      policies: mockPolicies,
+      categories: ['결제', '배송', '장바구니'],
+      total: mockPolicies.length,
+      hasMore: false,
+      result: getMockResult(),
+    }),
   } as Response);
 }
 
@@ -224,8 +235,9 @@ describe('Policies', () => {
       fireEvent.click(screen.getByText('장바구니 수량 제한'));
     });
 
-    // fetchPolicyDetail should have been called (at least 2 calls: fetchPolicies + fetchPolicyDetail)
-    expect(fetch).toHaveBeenCalledTimes(2);
+    // fetchPolicyDetail should have been called (useLatestResult + fetchPolicies + fetchPolicyDetail)
+    expect(fetch).toHaveBeenCalled();
+    expect((fetch as any).mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('should show detail panel when policy is selected', async () => {

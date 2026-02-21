@@ -1,18 +1,19 @@
 /**
  * @module web/pages/Policies
- * @description 정책 목록 페이지 - 필터 + 카드 목록 + 상세 패널 레이아웃
+ * @description 정책 목록 페이지 - 필터 + 카드 목록 + InfiniteScroll + 상세 패널 레이아웃
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { usePolicyStore } from '../stores/policyStore';
 import { useResultStore } from '../stores/resultStore';
-import { useEnsureResult } from '../hooks/useEnsureResult';
+import { useLatestResult } from '../hooks/useAnalysisResult';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import PolicyCard from '../components/policies/PolicyCard';
 import PolicyFilter from '../components/policies/PolicyFilter';
 import PolicyDetail from '../components/policies/PolicyDetail';
 
 function Policies() {
-  useEnsureResult();
+  useLatestResult();
   const currentResult = useResultStore((s) => s.currentResult);
 
   const {
@@ -20,20 +21,33 @@ function Policies() {
     selectedPolicy,
     searchQuery,
     selectedCategory,
+    selectedSource,
     selectedRequirement,
     loading,
+    loadingMore,
+    hasMore,
     error,
     fetchPolicies,
+    fetchMorePolicies,
     fetchPolicyDetail,
     clearSelection,
   } = usePolicyStore();
 
-  // 프로젝트 ID 기반 정책 목록 로드
+  // 정책 목록 로드 - currentResult 없이도 동작 (서버가 활성 프로젝트 자동 감지)
   useEffect(() => {
-    if (currentResult) {
-      fetchPolicies(currentResult.analysisId);
-    }
+    fetchPolicies(currentResult?.analysisId);
   }, [currentResult, fetchPolicies]);
+
+  // InfiniteScroll 설정
+  const handleLoadMore = useCallback(() => {
+    fetchMorePolicies();
+  }, [fetchMorePolicies]);
+
+  const { sentinelRef } = useInfiniteScroll({
+    hasMore,
+    loading: loadingMore,
+    onLoadMore: handleLoadMore,
+  });
 
   // 기획서에서 요구사항 및 작업 목록 추출
   const requirements = currentResult?.parsedSpec?.requirements;
@@ -43,7 +57,12 @@ function Policies() {
   const filteredPolicies = useMemo(() => {
     let filtered = policies;
 
-    // 요구사항 필터: requirement → tasks → policies 체인
+    // 소스 필터
+    if (selectedSource) {
+      filtered = filtered.filter((p) => p.source === selectedSource);
+    }
+
+    // 요구사항 필터: requirement -> tasks -> policies 체인
     if (selectedRequirement && tasks) {
       const relatedTaskIds = tasks
         .filter((t) => t.sourceRequirementIds?.includes(selectedRequirement))
@@ -99,21 +118,13 @@ function Policies() {
     }
 
     return filtered;
-  }, [policies, selectedRequirement, tasks, selectedCategory, searchQuery]);
+  }, [policies, selectedRequirement, tasks, selectedCategory, selectedSource, searchQuery]);
 
   const handlePolicyClick = (policyId: string) => {
     if (currentResult) {
       fetchPolicyDetail(currentResult.analysisId, policyId);
     }
   };
-
-  if (!currentResult) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-400">데이터 로딩 중...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -122,9 +133,11 @@ function Policies() {
         <h2 className="text-xl font-bold text-gray-900">
           정책 목록
         </h2>
-        <p className="text-sm text-gray-500 mt-1">
-          {currentResult.specTitle}
-        </p>
+        {currentResult && (
+          <p className="text-sm text-gray-500 mt-1">
+            {currentResult.specTitle}
+          </p>
+        )}
       </div>
 
       {/* Error banner */}
@@ -174,15 +187,28 @@ function Policies() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredPolicies.map((policy) => (
-                  <PolicyCard
-                    key={policy.id}
-                    policy={policy}
-                    isSelected={selectedPolicy?.id === policy.id}
-                    onClick={() => handlePolicyClick(policy.id)}
-                  />
-                ))}
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredPolicies.map((policy) => (
+                    <PolicyCard
+                      key={policy.id}
+                      policy={policy}
+                      isSelected={selectedPolicy?.id === policy.id}
+                      onClick={() => handlePolicyClick(policy.id)}
+                    />
+                  ))}
+                </div>
+
+                {/* InfiniteScroll sentinel */}
+                <div ref={sentinelRef} className="h-4" />
+
+                {/* Loading more indicator */}
+                {loadingMore && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600" />
+                    <span className="ml-2 text-sm text-gray-500">더 불러오는 중...</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -61,9 +61,14 @@ describe('PolicyFilter', () => {
       categories: ['장바구니', '결제', '배송'],
       searchQuery: '',
       selectedCategory: null,
+      selectedSource: null,
       selectedRequirement: null,
       loading: false,
+      loadingMore: false,
       error: null,
+      totalCount: 0,
+      hasMore: false,
+      currentOffset: 0,
     });
   });
 
@@ -83,7 +88,9 @@ describe('PolicyFilter', () => {
   it('should render all category buttons', () => {
     render(<PolicyFilter resultCount={5} totalCount={10} />);
 
-    expect(screen.getByText('전체')).toBeInTheDocument();
+    // '전체' appears multiple times (source filter + category filter)
+    const allButtons = screen.getAllByText('전체');
+    expect(allButtons.length).toBeGreaterThanOrEqual(2); // source "전체" + category "전체"
     expect(screen.getByText('장바구니')).toBeInTheDocument();
     expect(screen.getByText('결제')).toBeInTheDocument();
     expect(screen.getByText('배송')).toBeInTheDocument();
@@ -119,7 +126,10 @@ describe('PolicyFilter', () => {
 
     render(<PolicyFilter resultCount={5} totalCount={10} />);
 
-    fireEvent.click(screen.getByText('전체'));
+    // There are multiple '전체' buttons (source + category). Click the category one.
+    const allButtons = screen.getAllByText('전체');
+    // Category '전체' is the second one (after source '전체')
+    fireEvent.click(allButtons[1]);
 
     const state = usePolicyStore.getState();
     expect(state.selectedCategory).toBeNull();

@@ -199,9 +199,11 @@ export interface PolicyInfo {
     /** 정책 설명 */
     description: string;
     /** 출처 */
-    source: 'comment' | 'readme' | 'manual';
+    source: 'comment' | 'readme' | 'manual' | 'annotation';
     /** 원본 텍스트 */
     sourceText: string;
+    /** 신뢰도 (0.0~1.0, AI 추론 등 옵셔널) */
+    confidence?: number;
     /** 파일 경로 */
     filePath: FilePath;
     /** 라인 번호 */

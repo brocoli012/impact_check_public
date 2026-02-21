@@ -21,6 +21,16 @@ const ANNOTATION_EXTENSION = '.annotations.yaml';
 /** meta.json 파일명 */
 const META_FILENAME = 'meta.json';
 
+/** 캐시 엔트리 */
+interface CacheEntry {
+  data: Map<string, AnnotationFile>;
+  timestamp: number;
+  lastUpdatedAt: string | null;
+}
+
+/** 캐시 TTL: 5분 (밀리초) */
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 /**
  * AnnotationManager - 보강 주석 파일의 CRUD 및 병합을 담당
  *
@@ -30,9 +40,12 @@ const META_FILENAME = 'meta.json';
  *   - userModified 항목 보존 병합
  *   - 삭제된 함수의 보강 주석 정리
  *   - meta.json 통계 관리
+ *   - loadAll() 비동기 + 5분 TTL 인메모리 캐시
  */
 export class AnnotationManager {
   private readonly basePath: string;
+  /** loadAll() 인메모리 캐시 (projectId -> CacheEntry) */
+  private readonly loadAllCache = new Map<string, CacheEntry>();
 
   /**
    * @param basePath - 보강 주석 기본 저장 경로 (기본값: ~/.impact)
@@ -88,11 +101,37 @@ export class AnnotationManager {
   }
 
   /**
-   * 특정 프로젝트의 모든 보강 주석을 로드
+   * 특정 프로젝트의 모든 보강 주석을 로드 (5분 TTL 인메모리 캐시 적용)
+   *
+   * 캐시 무효화 조건:
+   *   - TTL 만료 (5분)
+   *   - meta.json의 lastUpdatedAt이 캐시 생성 시점과 다를 때
+   *
    * @param projectId - 프로젝트 ID
    * @returns 파일경로 -> AnnotationFile 맵
    */
   async loadAll(projectId: string): Promise<Map<string, AnnotationFile>> {
+    // 캐시 유효성 확인
+    const cached = this.loadAllCache.get(projectId);
+    if (cached) {
+      const now = Date.now();
+      const isExpired = (now - cached.timestamp) > CACHE_TTL_MS;
+
+      if (!isExpired) {
+        // TTL 내: meta.json lastUpdatedAt 비교로 무효화 판단
+        const meta = await this.getMeta(projectId);
+        const currentLastUpdated = meta?.lastUpdatedAt || null;
+        if (currentLastUpdated === cached.lastUpdatedAt) {
+          logger.debug(`loadAll cache hit for project: ${projectId}`);
+          return cached.data;
+        }
+        logger.debug(`loadAll cache invalidated (meta changed) for project: ${projectId}`);
+      } else {
+        logger.debug(`loadAll cache expired for project: ${projectId}`);
+      }
+    }
+
+    // 캐시 미스: 실제 로드
     const result = new Map<string, AnnotationFile>();
     const projectDir = path.join(this.basePath, 'annotations', projectId);
 
@@ -104,7 +143,7 @@ export class AnnotationManager {
 
     for (const yamlFile of yamlFiles) {
       try {
-        const content = fs.readFileSync(yamlFile, 'utf-8');
+        const content = await fs.promises.readFile(yamlFile, 'utf-8');
         const parsed = yaml.load(content) as AnnotationFile;
         if (parsed && parsed.file) {
           result.set(parsed.file, parsed);
@@ -114,7 +153,27 @@ export class AnnotationManager {
       }
     }
 
+    // 캐시에 저장
+    const meta = await this.getMeta(projectId);
+    this.loadAllCache.set(projectId, {
+      data: result,
+      timestamp: Date.now(),
+      lastUpdatedAt: meta?.lastUpdatedAt || null,
+    });
+
     return result;
+  }
+
+  /**
+   * loadAll 캐시를 수동으로 무효화
+   * @param projectId - 프로젝트 ID (생략 시 전체 캐시 클리어)
+   */
+  invalidateCache(projectId?: string): void {
+    if (projectId) {
+      this.loadAllCache.delete(projectId);
+    } else {
+      this.loadAllCache.clear();
+    }
   }
 
   /**

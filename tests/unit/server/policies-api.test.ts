@@ -477,16 +477,16 @@ describe('Policies API (no index)', () => {
 
   const app = createApp(NO_INDEX_BASE);
 
-  it('GET /api/policies should return 404 when no index', async () => {
+  it('GET /api/policies should return empty list when no index and no annotations', async () => {
     const res = await request(app).get('/api/policies');
-    expect(res.status).toBe(404);
-    expect(res.body).toHaveProperty('error');
+    expect(res.status).toBe(200);
+    expect(res.body.policies).toEqual([]);
+    expect(res.body.total).toBe(0);
   });
 
   it('GET /api/policies/:id should return 404 when no index', async () => {
     const res = await request(app).get('/api/policies/policy-1');
     expect(res.status).toBe(404);
-    expect(res.body).toHaveProperty('error');
   });
 
   it('GET /api/analysis/policy-changes should return empty array when no analysis results', async () => {

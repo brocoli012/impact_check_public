@@ -12,9 +12,12 @@ import { AnnotationFile, AnnotationMeta } from '../../types/annotations';
  *   - userModified 항목 보존 병합
  *   - 삭제된 함수의 보강 주석 정리
  *   - meta.json 통계 관리
+ *   - loadAll() 비동기 + 5분 TTL 인메모리 캐시
  */
 export declare class AnnotationManager {
     private readonly basePath;
+    /** loadAll() 인메모리 캐시 (projectId -> CacheEntry) */
+    private readonly loadAllCache;
     /**
      * @param basePath - 보강 주석 기본 저장 경로 (기본값: ~/.impact)
      */
@@ -34,11 +37,21 @@ export declare class AnnotationManager {
      */
     load(projectId: string, filePath: string): Promise<AnnotationFile | null>;
     /**
-     * 특정 프로젝트의 모든 보강 주석을 로드
+     * 특정 프로젝트의 모든 보강 주석을 로드 (5분 TTL 인메모리 캐시 적용)
+     *
+     * 캐시 무효화 조건:
+     *   - TTL 만료 (5분)
+     *   - meta.json의 lastUpdatedAt이 캐시 생성 시점과 다를 때
+     *
      * @param projectId - 프로젝트 ID
      * @returns 파일경로 -> AnnotationFile 맵
      */
     loadAll(projectId: string): Promise<Map<string, AnnotationFile>>;
+    /**
+     * loadAll 캐시를 수동으로 무효화
+     * @param projectId - 프로젝트 ID (생략 시 전체 캐시 클리어)
+     */
+    invalidateCache(projectId?: string): void;
     /**
      * sourceHash 비교 - 원본 파일 변경 여부 확인
      * @param projectId - 프로젝트 ID

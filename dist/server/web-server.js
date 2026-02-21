@@ -52,6 +52,8 @@ const result_manager_1 = require("../core/analysis/result-manager");
 const config_manager_1 = require("../config/config-manager");
 const indexer_1 = require("../core/indexing/indexer");
 const annotation_loader_1 = require("../core/annotations/annotation-loader");
+const annotation_manager_1 = require("../core/annotations/annotation-manager");
+const policy_converter_1 = require("../core/annotations/policy-converter");
 const cross_project_manager_1 = require("../core/cross-project/cross-project-manager");
 const logger_1 = require("../utils/logger");
 const file_1 = require("../utils/file");
@@ -266,12 +268,107 @@ function createApp(basePath) {
         }
     });
     // ============================================================
-    // 정책 (Policy) API 엔드포인트
+    // 프로젝트 현황 (Project Status) API 엔드포인트
     // ============================================================
     const indexer = new indexer_1.Indexer();
     // AnnotationManager expects basePath to be the .impact directory itself
     const impactBase = basePath || process.env.HOME || process.env.USERPROFILE || '.';
     const annotationLoader = new annotation_loader_1.AnnotationLoader(path.join(impactBase, '.impact'));
+    const annotationManager = new annotation_manager_1.AnnotationManager(path.join(impactBase, '.impact'));
+    /**
+     * GET /api/project/status - 프로젝트 현황 조회
+     * 인덱스/어노테이션/분석 결과 존재 여부 반환
+     */
+    app.get('/api/project/status', async (_req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.json({
+                    projectId: null,
+                    projectPath: null,
+                    hasIndex: false,
+                    hasAnnotations: false,
+                    hasResults: false,
+                });
+                return;
+            }
+            // 프로젝트 경로 읽기
+            const projectsPath = path.join(impactBase, '.impact', 'projects.json');
+            const projectsConfig = (0, file_1.readJsonFile)(projectsPath);
+            const projectEntry = projectsConfig?.projects?.find(p => p.id === projectId);
+            const projectPath = projectEntry?.path || null;
+            // 인덱스 존재 여부
+            const projectDir = (0, file_1.getProjectDir)(projectId, basePath);
+            const indexMetaPath = path.join(projectDir, 'index', 'meta.json');
+            const hasIndex = fs.existsSync(indexMetaPath);
+            // 어노테이션 존재 여부
+            const annotationMeta = await annotationManager.getMeta(projectId);
+            const hasAnnotations = annotationMeta !== null && annotationMeta.totalAnnotations > 0;
+            // 분석 결과 존재 여부
+            const latestResult = await resultManager.getLatest(projectId);
+            const hasResults = latestResult !== null;
+            res.json({
+                projectId,
+                projectPath,
+                hasIndex,
+                hasAnnotations,
+                hasResults,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get project status:', error);
+            res.status(500).json({ error: 'Failed to get project status' });
+        }
+    });
+    /**
+     * GET /api/project/index-meta - 인덱스 메타 정보 조회
+     */
+    app.get('/api/project/index-meta', async (_req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.json({ meta: null, message: 'No active project' });
+                return;
+            }
+            const projectDir = (0, file_1.getProjectDir)(projectId, basePath);
+            const indexMetaPath = path.join(projectDir, 'index', 'meta.json');
+            if (!fs.existsSync(indexMetaPath)) {
+                res.json({ meta: null, message: 'No index found' });
+                return;
+            }
+            const meta = (0, file_1.readJsonFile)(indexMetaPath);
+            res.json({ meta });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get index meta:', error);
+            res.status(500).json({ error: 'Failed to get index meta' });
+        }
+    });
+    /**
+     * GET /api/project/annotation-meta - 어노테이션 메타 정보 조회
+     */
+    app.get('/api/project/annotation-meta', async (_req, res) => {
+        try {
+            const projectId = await getProjectId();
+            if (!projectId) {
+                res.json({ meta: null, message: 'No active project' });
+                return;
+            }
+            const meta = await annotationManager.getMeta(projectId);
+            if (!meta) {
+                res.json({ meta: null, message: 'No annotations found' });
+                return;
+            }
+            res.json({ meta });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get annotation meta:', error);
+            res.status(500).json({ error: 'Failed to get annotation meta' });
+        }
+    });
+    // ============================================================
+    // 정책 (Policy) API 엔드포인트
+    // ============================================================
     /**
      * GET /api/policies - 정책 목록 조회
      * 쿼리 파라미터: ?category=배송 (카테고리 필터), ?search=무료 (검색)
@@ -284,14 +381,29 @@ function createApp(basePath) {
                 return;
             }
             const index = await indexer.loadIndex(projectId, basePath);
-            if (!index) {
-                res.status(404).json({ error: 'No index found. Run indexing first.' });
+            // 인덱스 없어도 어노테이션만으로 정책 조회 가능
+            const indexPolicies = index?.policies || [];
+            // 어노테이션에서 추론된 정책 로드 및 변환
+            let annotationPolicies = [];
+            try {
+                const annotations = await annotationManager.loadAll(projectId);
+                if (annotations.size > 0) {
+                    annotationPolicies = (0, policy_converter_1.convertAnnotationsToPolicies)(annotations);
+                }
+            }
+            catch (err) {
+                logger_1.logger.warn('Failed to load annotation policies:', err);
+            }
+            // 인덱스 + 어노테이션 정책 병합 (중복 제거)
+            const allMergedPolicies = (0, policy_converter_1.mergePolicies)(indexPolicies, annotationPolicies);
+            if (allMergedPolicies.length === 0 && !index) {
+                res.json({ policies: [], total: 0, offset: 0, limit: 0, hasMore: false, categories: [] });
                 return;
             }
             // 분석 결과에서 tasks 로드하여 relatedTaskIds 역매핑에 사용
             const latestResult = await resultManager.getLatest(projectId);
             const tasks = latestResult?.tasks || [];
-            let policies = index.policies || [];
+            let policies = allMergedPolicies;
             // 카테고리 필터
             const category = req.query.category;
             if (category) {
@@ -304,9 +416,8 @@ function createApp(basePath) {
                 policies = policies.filter(p => p.name.toLowerCase().includes(lowerSearch) ||
                     p.description.toLowerCase().includes(lowerSearch));
             }
-            // 카테고리 목록 추출 (필터 전 전체 인덱스에서)
-            const allPolicies = index.policies || [];
-            const categories = [...new Set(allPolicies.map(p => p.category))].sort();
+            // 카테고리 목록 추출 (필터 전 전체 병합 목록에서)
+            const categories = [...new Set(allMergedPolicies.map(p => p.category))].sort();
             /**
              * 정책별 relatedTaskIds 역매핑 계산
              * 전략: task의 affectedFiles/relatedApis와 policy의 filePath/relatedComponents/relatedApis를 매칭
@@ -352,21 +463,31 @@ function createApp(basePath) {
                 }
                 return taskIds;
             }
+            // 페이지네이션 파라미터
+            const offset = parseInt(req.query.offset, 10) || 0;
+            const limit = parseInt(req.query.limit, 10) || 0; // 0 = 전체
+            const total = policies.length;
+            // 전체 매핑 후 슬라이스 (offset/limit)
+            const mappedAll = policies.map((p, idx) => ({
+                id: p.id || `policy_${idx}`,
+                name: p.name,
+                category: p.category,
+                description: p.description,
+                file: p.filePath,
+                confidence: p.confidence ?? 0,
+                affectedFiles: [p.filePath, ...(p.relatedComponents || [])].filter(Boolean),
+                relatedTaskIds: p.relatedTaskIds?.length > 0
+                    ? p.relatedTaskIds
+                    : computeRelatedTaskIds(p),
+                source: p.source || 'comment',
+            }));
+            const paged = limit > 0 ? mappedAll.slice(offset, offset + limit) : mappedAll;
             res.json({
-                policies: policies.map((p, idx) => ({
-                    id: p.id || `policy_${idx}`,
-                    name: p.name,
-                    category: p.category,
-                    description: p.description,
-                    file: p.filePath,
-                    confidence: 0,
-                    affectedFiles: [p.filePath, ...(p.relatedComponents || [])].filter(Boolean),
-                    relatedTaskIds: p.relatedTaskIds?.length > 0
-                        ? p.relatedTaskIds
-                        : computeRelatedTaskIds(p),
-                    source: p.source || 'comment',
-                })),
-                total: policies.length,
+                policies: paged,
+                total,
+                offset,
+                limit: limit || total,
+                hasMore: limit > 0 ? (offset + limit) < total : false,
                 categories,
             });
         }
