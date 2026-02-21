@@ -52,8 +52,64 @@ interface ChecklistData {
 /** 서버 인스턴스 관리를 위한 변수 */
 let serverInstance: http.Server | null = null;
 
-/** 캐시된 활성 프로젝트 경로 (서버 시작 시 1회 로드) */
-let cachedProjectPath: string | null = null;
+/**
+ * ProjectContext - 활성 프로젝트 관리 (cachedProjectPath 대체)
+ * 인메모리 캐시 + invalidate() 메서드로 안전한 프로젝트 전환 지원
+ */
+class ProjectContext {
+  private cachedId: string | null = null;
+  private readonly configManager: ConfigManager;
+
+  constructor(configManager: ConfigManager) {
+    this.configManager = configManager;
+  }
+
+  /**
+   * 활성 프로젝트 ID 반환
+   * @param requestProjectId - 요청별 프로젝트 ID (쿼리 파라미터)
+   * @returns 프로젝트 ID 또는 null
+   */
+  async getActiveProjectId(requestProjectId?: string): Promise<string | null> {
+    // 쿼리 파라미터 우선: 유효한 requestProjectId가 있으면 즉시 반환
+    if (requestProjectId && isValidId(requestProjectId)) {
+      return requestProjectId;
+    }
+    // 캐시된 값이 없으면 configManager에서 로드
+    if (this.cachedId === null) {
+      await this.configManager.load();
+      this.cachedId = this.configManager.getActiveProject() || '';
+    }
+    return this.cachedId || null;
+  }
+
+  /** 캐시 무효화 (설정 변경 시) */
+  invalidate(): void {
+    this.cachedId = null;
+  }
+
+  /**
+   * 활성 프로젝트 전환
+   * @param projectId - 전환할 프로젝트 ID
+   */
+  switchProject(projectId: string): void {
+    this.configManager.setActiveProject(projectId);
+    this.cachedId = projectId;
+  }
+
+  /** 현재 캐시된 프로젝트 ID (SSE 이벤트용) */
+  getCachedId(): string | null {
+    return this.cachedId || null;
+  }
+
+  /** 초기 로드 (서버 시작 시 1회) */
+  async initialize(): Promise<void> {
+    await this.configManager.load();
+    this.cachedId = this.configManager.getActiveProject() || '';
+  }
+}
+
+/** 전역 ProjectContext 인스턴스 */
+let projectContext: ProjectContext | null = null;
 
 /**
  * 포트가 사용 가능한지 확인
@@ -106,12 +162,21 @@ export function createApp(basePath?: string): express.Application {
   const resultManager = new ResultManager(basePath);
   const configManager = new ConfigManager(basePath);
 
-  /** 캐시된 프로젝트 ID를 반환하거나, 미로드 시 1회 로드 후 캐시 */
-  async function getProjectId(): Promise<string | null> {
-    if (cachedProjectPath !== null) return cachedProjectPath || null;
-    await configManager.load();
-    cachedProjectPath = configManager.getActiveProject() || '';
-    return cachedProjectPath || null;
+  // ProjectContext 초기화 (전역 인스턴스가 없으면 생성)
+  if (!projectContext) {
+    projectContext = new ProjectContext(configManager);
+  }
+  const ctx = projectContext;
+
+  /** SSE 클라이언트 목록 */
+  const sseClients: Set<Response> = new Set();
+
+  /** SSE 이벤트 브로드캐스트 */
+  function broadcastSSE(event: string, data: Record<string, unknown>): void {
+    const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+      client.write(msg);
+    }
   }
 
   app.use(express.json());
@@ -123,9 +188,9 @@ export function createApp(basePath?: string): express.Application {
   /**
    * GET /api/results - 분석 결과 목록 조회
    */
-  app.get('/api/results', async (_req: Request, res: Response) => {
+  app.get('/api/results', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.json({ results: [], message: 'No active project' });
@@ -143,9 +208,9 @@ export function createApp(basePath?: string): express.Application {
   /**
    * GET /api/results/latest - 최신 분석 결과 조회
    */
-  app.get('/api/results/latest', async (_req: Request, res: Response) => {
+  app.get('/api/results/latest', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.json({ result: null, message: 'No active project' });
@@ -171,7 +236,7 @@ export function createApp(basePath?: string): express.Application {
    */
   app.get('/api/results/:id', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.status(404).json({ error: 'No active project' });
@@ -202,7 +267,7 @@ export function createApp(basePath?: string): express.Application {
    */
   app.get('/api/checklist/:resultId', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.status(404).json({ error: 'No active project' });
@@ -229,7 +294,7 @@ export function createApp(basePath?: string): express.Application {
    */
   app.patch('/api/checklist/:resultId/:itemId', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.status(404).json({ error: 'No active project' });
@@ -292,9 +357,9 @@ export function createApp(basePath?: string): express.Application {
    * GET /api/project/status - 프로젝트 현황 조회
    * 인덱스/어노테이션/분석 결과 존재 여부 반환
    */
-  app.get('/api/project/status', async (_req: Request, res: Response) => {
+  app.get('/api/project/status', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.json({
@@ -342,9 +407,9 @@ export function createApp(basePath?: string): express.Application {
   /**
    * GET /api/project/index-meta - 인덱스 메타 정보 조회
    */
-  app.get('/api/project/index-meta', async (_req: Request, res: Response) => {
+  app.get('/api/project/index-meta', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.json({ meta: null, message: 'No active project' });
@@ -370,9 +435,9 @@ export function createApp(basePath?: string): express.Application {
   /**
    * GET /api/project/annotation-meta - 어노테이션 메타 정보 조회
    */
-  app.get('/api/project/annotation-meta', async (_req: Request, res: Response) => {
+  app.get('/api/project/annotation-meta', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.json({ meta: null, message: 'No active project' });
@@ -403,7 +468,7 @@ export function createApp(basePath?: string): express.Application {
    */
   app.get('/api/policies', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.status(404).json({ error: 'No active project' });
@@ -547,7 +612,7 @@ export function createApp(basePath?: string): express.Application {
    */
   app.get('/api/policies/:id', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.status(404).json({ error: 'No active project' });
@@ -682,9 +747,9 @@ export function createApp(basePath?: string): express.Application {
   /**
    * GET /api/analysis/policy-changes - 분석 결과의 policyChanges 목록 반환
    */
-  app.get('/api/analysis/policy-changes', async (_req: Request, res: Response) => {
+  app.get('/api/analysis/policy-changes', async (req: Request, res: Response) => {
     try {
-      const projectId = await getProjectId();
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
 
       if (!projectId) {
         res.json({ policyChanges: [], message: 'No active project' });
@@ -707,6 +772,124 @@ export function createApp(basePath?: string): express.Application {
       logger.error('Failed to get policy changes:', error);
       res.status(500).json({ error: 'Failed to get policy changes' });
     }
+  });
+
+  // ============================================================
+  // 멀티 프로젝트 (Multi Project) API 엔드포인트
+  // ============================================================
+
+  /**
+   * GET /api/projects - 프로젝트 목록 + 요약 통계
+   */
+  app.get('/api/projects', async (_req: Request, res: Response) => {
+    try {
+      const projectsPath = path.join(impactBase, '.impact', 'projects.json');
+      const projectsConfig = readJsonFile<ProjectsConfig>(projectsPath);
+
+      if (!projectsConfig || !projectsConfig.projects) {
+        res.json({ projects: [], activeProject: null, total: 0 });
+        return;
+      }
+
+      const activeProject = projectsConfig.activeProject || null;
+
+      // 각 프로젝트의 분석 결과 요약 수집
+      const projects = await Promise.all(
+        projectsConfig.projects.map(async (entry) => {
+          const summaries = await resultManager.list(entry.id);
+          const latestResult = summaries.length > 0
+            ? await resultManager.getLatest(entry.id)
+            : null;
+
+          return {
+            id: entry.id,
+            name: entry.name,
+            path: entry.path,
+            status: entry.status,
+            createdAt: entry.createdAt,
+            lastUsedAt: entry.lastUsedAt,
+            techStack: entry.techStack || [],
+            resultCount: summaries.length,
+            latestGrade: latestResult?.grade || null,
+            latestScore: latestResult?.totalScore ?? null,
+            latestAnalyzedAt: latestResult?.analyzedAt || null,
+            taskCount: latestResult?.tasks?.length ?? 0,
+            policyWarningCount: latestResult?.policyWarnings?.length ?? 0,
+          };
+        }),
+      );
+
+      res.json({
+        projects,
+        activeProject,
+        total: projects.length,
+      });
+    } catch (error) {
+      logger.error('Failed to get projects:', error);
+      res.status(500).json({ error: 'Failed to get projects' });
+    }
+  });
+
+  /**
+   * POST /api/projects/switch - 활성 프로젝트 전환
+   */
+  app.post('/api/projects/switch', async (req: Request, res: Response) => {
+    try {
+      const { projectId } = req.body as { projectId: string };
+
+      if (!projectId || !isValidId(projectId)) {
+        res.status(400).json({ error: 'Invalid projectId' });
+        return;
+      }
+
+      // 프로젝트 존재 확인
+      const projectsPath = path.join(impactBase, '.impact', 'projects.json');
+      const projectsConfig = readJsonFile<ProjectsConfig>(projectsPath);
+      const projectEntry = projectsConfig?.projects?.find(p => p.id === projectId);
+
+      if (!projectEntry) {
+        res.status(404).json({ error: `Project '${projectId}' not found` });
+        return;
+      }
+
+      // ProjectContext를 통한 전환
+      ctx.switchProject(projectId);
+
+      // SSE 이벤트 브로드캐스트
+      broadcastSSE('project-switched', {
+        projectId,
+        projectName: projectEntry.name,
+        switchedAt: new Date().toISOString(),
+      });
+
+      res.json({
+        activeProject: projectId,
+        message: `Switched to ${projectEntry.name}`,
+      });
+    } catch (error) {
+      logger.error('Failed to switch project:', error);
+      res.status(500).json({ error: 'Failed to switch project' });
+    }
+  });
+
+  /**
+   * GET /api/events - Server-Sent Events (SSE) 스트림
+   */
+  app.get('/api/events', (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // 연결 시 현재 활성 프로젝트 정보 전송
+    const currentId = ctx.getCachedId();
+    res.write(`event: connected\ndata: ${JSON.stringify({ activeProject: currentId })}\n\n`);
+
+    sseClients.add(res);
+
+    req.on('close', () => {
+      sseClients.delete(res);
+    });
   });
 
   // ============================================================
@@ -822,10 +1005,10 @@ export async function startServer(basePath?: string, preferredPort: number = 384
 
   const port = await findAvailablePort(preferredPort);
 
-  // 서버 시작 전 config를 1회 로드하여 캐시
+  // ProjectContext 초기화 (서버 시작 전 1회 로드)
   const configManager = new ConfigManager(basePath);
-  await configManager.load();
-  cachedProjectPath = configManager.getActiveProject() || '';
+  projectContext = new ProjectContext(configManager);
+  await projectContext.initialize();
 
   const app = createApp(basePath);
 

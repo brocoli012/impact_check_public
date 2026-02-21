@@ -4,11 +4,12 @@
  * 프로젝트 간 의존성을 노드와 엣지로 시각화
  */
 
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   type Node,
   type Edge,
+  type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -26,6 +27,8 @@ export interface ProjectLink {
 interface CrossProjectDiagramProps {
   /** 프로젝트 의존성 링크 목록 */
   links: ProjectLink[];
+  /** 노드 클릭 핸들러 (프로젝트 ID 전달) */
+  onNodeClick?: (projectId: string) => void;
 }
 
 /** 링크 타입별 색상 매핑 */
@@ -48,7 +51,7 @@ const LINK_TYPE_LABELS: Record<string, string> = {
   'event-subscriber': 'Event Sub',
 };
 
-function CrossProjectDiagram({ links }: CrossProjectDiagramProps) {
+function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
   if (!links || links.length === 0) {
     return (
       <div data-testid="cross-project-diagram-empty" className="text-sm text-gray-400 py-8 text-center">
@@ -123,12 +126,20 @@ function CrossProjectDiagram({ links }: CrossProjectDiagramProps) {
     };
   }, [links]);
 
+  /** 노드 클릭 핸들러 */
+  const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
+    if (onNodeClick) {
+      onNodeClick(node.id);
+    }
+  }, [onNodeClick]);
+
   return (
     <div data-testid="cross-project-diagram">
       <div style={{ height: 400, width: '100%' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
+          onNodeClick={handleNodeClick}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           zoomOnScroll={false}
@@ -138,7 +149,7 @@ function CrossProjectDiagram({ links }: CrossProjectDiagramProps) {
           panOnScroll={false}
           nodesDraggable={false}
           nodesConnectable={false}
-          elementsSelectable={false}
+          elementsSelectable={onNodeClick ? true : false}
           proOptions={{ hideAttribution: true }}
         />
       </div>

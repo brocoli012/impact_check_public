@@ -48,6 +48,8 @@ interface ResultState {
   fetchAllResults: () => Promise<void>;
   /** 특정 결과로 전환 */
   switchResult: (resultId: string) => Promise<void>;
+  /** 데이터 초기화 (프로젝트 전환 시) */
+  reset: () => void;
 }
 
 /** 결과 스토어 */
@@ -102,6 +104,15 @@ export const useResultStore = create<ResultState>()(
             isLoading: false,
           });
         }
+      },
+
+      reset: () => {
+        set({
+          currentResult: null,
+          resultList: [],
+          isLoading: false,
+          error: null,
+        });
       },
     }),
     {

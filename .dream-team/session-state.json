@@ -4,7 +4,7 @@
   "projectPath": "/Users/youngilkang/AI_project/Kurly_Impact_Checker",
   "mode": "team",
   "createdAt": "2026-02-13T00:00:00Z",
-  "lastUpdatedAt": "2026-02-21T09:00:00Z",
+  "lastUpdatedAt": "2026-02-21T10:00:00Z",
   "currentAgent": {
     "role": "master",
     "allowedTools": [
@@ -121,7 +121,7 @@
       "id": "REQ-011",
       "type": "REQ",
       "title": "대시보드 독립 조회 & 정책 어노테이션 연동",
-      "status": "ready",
+      "status": "done",
       "priority": "HIGH",
       "epic": "EPIC-001",
       "tasks": "TASK-060~069",
@@ -489,12 +489,36 @@
         "qaResult": "PASS",
         "matchRate": "100%"
       }
+    },
+    {
+      "phase": "REQ-011: 대시보드 독립 조회 & 정책 어노테이션",
+      "status": "done",
+      "completedAt": "2026-02-21",
+      "summary": {
+        "modules": [
+          "PolicyInfo확장",
+          "AnnotationManager비동기캐시",
+          "프로젝트현황API",
+          "InfiniteScroll",
+          "PolicyConverter",
+          "정책통합API",
+          "소스배지+필터",
+          "ProjectOverview",
+          "Policies독립조회"
+        ],
+        "tests": 1741,
+        "newTests": 279,
+        "taskCount": "10/10 done (TASK-060~069)",
+        "tpoComplexity": "7/10",
+        "qaResult": "PASS",
+        "matchRate": "100%"
+      }
     }
   ],
   "currentPhase": {
-    "phase": "REQ-011~013 구현 준비",
+    "phase": "REQ-011 완료, REQ-012 준비",
     "status": "in_progress",
-    "description": "REQ-011(33pts/10T), REQ-012(42pts/14T), REQ-013(123pts/29T) 통합 로드맵 수립 완료. 총 53 TASK, 198pts. REQ-011 Phase 1부터 순차 착수 예정."
+    "description": "REQ-011 대시보드 독립 조회 & 정책 어노테이션 연동 완료. 10 TASK(060~069), 1741 테스트, 커밋 bbb993c. REQ-012 Phase 1 착수 대기."
   },
   "sessionHistory": [
     {
@@ -898,6 +922,12 @@
       "timestamp": "2026-02-21T09:00:00Z",
       "agent": "master",
       "description": "REQ-011~013 통합 구현 로드맵 작성 - 53 TASK(060~112), 198pts, 11개 Phase, 13 커밋 포인트, 7 마일스톤. 병렬화 시 ~22일 예상."
+    },
+    {
+      "action": "req011_complete",
+      "timestamp": "2026-02-21T10:00:00Z",
+      "agent": "master",
+      "description": "REQ-011 대시보드 독립 조회 & 정책 어노테이션 연동 완료 - 10 TASK(060~069), 33pts, 1741테스트(279 신규), 커밋 bbb993c"
     }
   ],
   "documents": {

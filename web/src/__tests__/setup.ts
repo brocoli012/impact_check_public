@@ -12,7 +12,12 @@ global.IntersectionObserver = class IntersectionObserver {
   readonly root: Element | null = null;
   readonly rootMargin: string = '';
   readonly thresholds: ReadonlyArray<number> = [];
-  constructor(private callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+    // mock - no-op
+    void callback;
+    void options;
+  }
   observe() {}
   unobserve() {}
   disconnect() {}

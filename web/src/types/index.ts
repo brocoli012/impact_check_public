@@ -377,3 +377,24 @@ export interface AnalysisSummary {
   keyFindings: string[];
   riskAreas: string[];
 }
+
+// ============================================================
+// REQ-012: 멀티 프로젝트 타입
+// ============================================================
+
+/** 프로젝트 정보 (GET /api/projects 응답 항목) */
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  path: string;
+  status: 'active' | 'archived';
+  createdAt: string;
+  lastUsedAt: string;
+  techStack: string[];
+  resultCount: number;
+  latestGrade: Grade | null;
+  latestScore: number | null;
+  latestAnalyzedAt: string | null;
+  taskCount: number;
+  policyWarningCount: number;
+}

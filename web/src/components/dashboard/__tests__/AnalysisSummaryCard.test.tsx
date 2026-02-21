@@ -5,7 +5,7 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import AnalysisSummaryCard, { type AnalysisSummaryCardProps } from '../AnalysisSummaryCard';
+import AnalysisSummaryCard from '../AnalysisSummaryCard';
 import type { AnalysisSummary } from '../../../types';
 
 /* ------------------------------------------------------------------ */

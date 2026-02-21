@@ -28,7 +28,7 @@ const SOURCE_TABS = [
   { value: 'annotation', label: 'AI 추론' },
 ] as const;
 
-function PolicyFilter({ resultCount, totalCount, requirements, tasks }: PolicyFilterProps) {
+function PolicyFilter({ resultCount, totalCount, requirements, tasks: _tasks }: PolicyFilterProps) {
   const {
     categories,
     searchQuery,

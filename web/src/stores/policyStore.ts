@@ -55,6 +55,8 @@ interface PolicyState {
   setSelectedRequirement: (reqId: string | null) => void;
   /** 선택 초기화 */
   clearSelection: () => void;
+  /** 데이터 초기화 (프로젝트 전환 시) */
+  reset: () => void;
 }
 
 /** API 응답에서 Policy 매핑 */
@@ -181,4 +183,20 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   setSelectedRequirement: (reqId: string | null) => set({ selectedRequirement: reqId }),
 
   clearSelection: () => set({ selectedPolicy: null }),
+
+  reset: () => set({
+    policies: [],
+    selectedPolicy: null,
+    categories: [],
+    searchQuery: '',
+    selectedCategory: null,
+    selectedSource: null,
+    selectedRequirement: null,
+    loading: false,
+    loadingMore: false,
+    error: null,
+    totalCount: 0,
+    hasMore: false,
+    currentOffset: 0,
+  }),
 }));

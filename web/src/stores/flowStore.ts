@@ -43,6 +43,8 @@ interface FlowState {
   toggleGradeFilter: (grade: Grade) => void;
   /** 요구사항 필터 설정 */
   setRequirementFilter: (reqId: string | null) => void;
+  /** 데이터 초기화 (프로젝트 전환 시) */
+  reset: () => void;
 }
 
 /** 기본 필터 상태 */
@@ -96,4 +98,11 @@ export const useFlowStore = create<FlowState>((set) => ({
     set((state) => ({
       filter: { ...state.filter, requirementFilter: reqId },
     })),
+
+  reset: () =>
+    set({
+      filter: defaultFilter,
+      expandedNodeIds: new Set<string>(),
+      selectedNodeId: null,
+    }),
 }));
