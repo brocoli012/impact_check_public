@@ -563,21 +563,46 @@ function createApp(basePath) {
                 return;
             }
             const index = await indexer.loadIndex(projectId, basePath);
-            if (!index) {
-                res.status(404).json({ error: 'No index found. Run indexing first.' });
+            // 인덱스 + 어노테이션 병합 정책 (목록 API와 동일한 로직)
+            const indexPolicies = index?.policies || [];
+            let detailAnnotationPolicies = [];
+            try {
+                const annotations = await annotationManager.loadAll(projectId);
+                if (annotations.size > 0) {
+                    detailAnnotationPolicies = (0, policy_converter_1.convertAnnotationsToPolicies)(annotations);
+                }
+            }
+            catch (err) {
+                logger_1.logger.warn('Failed to load annotation policies for detail:', err);
+            }
+            const allPolicies = (0, policy_converter_1.mergePolicies)(indexPolicies, detailAnnotationPolicies);
+            if (allPolicies.length === 0) {
+                res.status(404).json({ error: 'No policies found. Run indexing first.' });
                 return;
             }
             const policyId = getParam(req.params, 'id');
-            const policies = index.policies || [];
-            // ID 또는 배열 인덱스로 검색
-            let policy = policies.find(p => p.id === policyId);
+            // ID 또는 배열 인덱스로 검색 (병합된 전체 목록에서)
+            let policy = allPolicies.find(p => p.id === policyId);
             if (!policy) {
                 // policy_N 형식이면 인덱스로 찾기
                 const indexMatch = policyId.match(/^policy_(\d+)$/);
                 if (indexMatch) {
                     const idx = parseInt(indexMatch[1], 10);
-                    if (idx >= 0 && idx < policies.length) {
-                        policy = policies[idx];
+                    if (idx >= 0 && idx < allPolicies.length) {
+                        policy = allPolicies[idx];
+                    }
+                }
+            }
+            if (!policy) {
+                // ann_policy_N 형식이면 인덱스로 찾기
+                const annIndexMatch = policyId.match(/^ann_policy_(\d+)$/);
+                if (annIndexMatch) {
+                    const idx = parseInt(annIndexMatch[1], 10);
+                    // ann_policy_N은 병합 목록에서 annotation 정책의 순서에 해당
+                    // 병합 목록 전체에서 해당 ID를 가진 정책을 재검색 (ID가 부여된 상태)
+                    // 또는 단순히 allPolicies 배열에서 idx로 찾기 (목록 API에서 부여한 인덱스)
+                    if (idx >= 0 && idx < allPolicies.length) {
+                        policy = allPolicies[idx];
                     }
                 }
             }

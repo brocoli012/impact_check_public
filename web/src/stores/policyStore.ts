@@ -153,9 +153,14 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   },
 
   fetchPolicyDetail: async (projectId: string, policyId: string) => {
+    const resolvedProjectId = projectId || useProjectStore.getState().activeProjectId;
+    if (!resolvedProjectId) {
+      set({ error: '프로젝트가 선택되지 않았습니다.', loadingDetail: false });
+      return;
+    }
     set({ loadingDetail: true, error: null });
     try {
-      const response = await fetch(`/api/policies/${policyId}?projectId=${projectId}`);
+      const response = await fetch(`/api/policies/${policyId}?projectId=${resolvedProjectId}`);
       const data = await response.json();
       if (data.policy) {
         const policyDetail: PolicyDetail = {

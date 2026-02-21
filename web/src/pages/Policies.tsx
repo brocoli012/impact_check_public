@@ -136,7 +136,7 @@ function Policies() {
   }, [policies, selectedRequirement, tasks, selectedCategory, selectedSource, searchQuery]);
 
   const handlePolicyClick = (policyId: string) => {
-    const projectId = currentResult?.analysisId || activeProjectId;
+    const projectId = currentResult?.analysisId || activeProjectId || useProjectStore.getState().activeProjectId;
     if (projectId) {
       fetchPolicyDetail(projectId, policyId);
     }
