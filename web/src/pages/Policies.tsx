@@ -3,9 +3,10 @@
  * @description 정책 목록 페이지 - 필터 + 카드 목록 + InfiniteScroll + 상세 패널 레이아웃
  */
 
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { usePolicyStore } from '../stores/policyStore';
 import { useResultStore } from '../stores/resultStore';
+import { useProjectStore } from '../stores/projectStore';
 import { useLatestResult } from '../hooks/useAnalysisResult';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import PolicyCard from '../components/policies/PolicyCard';
@@ -33,10 +34,23 @@ function Policies() {
     clearSelection,
   } = usePolicyStore();
 
-  // 정책 목록 로드 - currentResult 없이도 동작 (서버가 활성 프로젝트 자동 감지)
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+
+  // 마운트 시 항상 정책 목록 로드 (탭 전환 후 복귀 시에도 동작)
+  const mountedRef = useRef(false);
   useEffect(() => {
-    fetchPolicies(currentResult?.analysisId);
-  }, [currentResult, fetchPolicies]);
+    const projectId = activeProjectId || currentResult?.analysisId;
+    fetchPolicies(projectId || undefined);
+    mountedRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // currentResult 또는 activeProjectId 변경 시 재조회
+  useEffect(() => {
+    if (!mountedRef.current) return; // 초기 마운트는 위 effect에서 처리
+    const projectId = activeProjectId || currentResult?.analysisId;
+    fetchPolicies(projectId || undefined);
+  }, [currentResult, activeProjectId, fetchPolicies]);
 
   // InfiniteScroll 설정
   const handleLoadMore = useCallback(() => {
@@ -121,8 +135,9 @@ function Policies() {
   }, [policies, selectedRequirement, tasks, selectedCategory, selectedSource, searchQuery]);
 
   const handlePolicyClick = (policyId: string) => {
-    if (currentResult) {
-      fetchPolicyDetail(currentResult.analysisId, policyId);
+    const projectId = currentResult?.analysisId || activeProjectId;
+    if (projectId) {
+      fetchPolicyDetail(projectId, policyId);
     }
   };
 

@@ -6,6 +6,7 @@
 
 import { create } from 'zustand';
 import type { Policy, PolicyDetail } from '../types';
+import { useProjectStore } from './projectStore';
 
 /** 한 번에 로드할 정책 수 */
 const PAGE_SIZE = 50;
@@ -86,10 +87,12 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   currentOffset: 0,
 
   fetchPolicies: async (projectId?: string) => {
-    set({ loading: true, error: null, policies: [], currentOffset: 0, hasMore: false });
+    set({ loading: true, error: null });
     try {
       const params = new URLSearchParams();
-      if (projectId) params.set('projectId', projectId);
+      // projectId 우선순위: 인자 > activeProjectId
+      const resolvedProjectId = projectId || useProjectStore.getState().activeProjectId;
+      if (resolvedProjectId) params.set('projectId', resolvedProjectId);
       params.set('offset', '0');
       params.set('limit', String(PAGE_SIZE));
 
@@ -123,6 +126,8 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
     set({ loadingMore: true });
     try {
       const params = new URLSearchParams();
+      const activeProjectId = useProjectStore.getState().activeProjectId;
+      if (activeProjectId) params.set('projectId', activeProjectId);
       params.set('offset', String(currentOffset));
       params.set('limit', String(PAGE_SIZE));
 
