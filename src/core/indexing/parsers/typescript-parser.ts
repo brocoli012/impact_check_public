@@ -35,6 +35,8 @@ import type {
 } from '@swc/core';
 import { BaseParser } from './base-parser';
 import { ParsedFile, FunctionInfo } from '../types';
+import { ModelInfo, ModelField } from '../../../types/index';
+import { camelToSnakeCase } from './jvm-parser-utils';
 import { logger } from '../../../utils/logger';
 
 /** 정책 주석 패턴 */
@@ -376,6 +378,9 @@ export class TypeScriptParser extends BaseParser {
         line,
       });
     }
+
+    // TypeORM @Entity() 데코레이터 감지
+    this.detectTypeOrmEntity(node, name, this.currentFilePath, line, result);
 
     // 클래스 메서드 추출
     for (const member of node.body) {
@@ -804,6 +809,136 @@ export class TypeScriptParser extends BaseParser {
         }
       }
     }
+  }
+
+  // ============================================================
+  // TypeORM Entity Detection
+  // ============================================================
+
+  /**
+   * TypeORM @Entity() 데코레이터를 감지하여 ModelInfo를 생성
+   */
+  private detectTypeOrmEntity(
+    node: ClassDeclaration,
+    className: string,
+    filePath: string,
+    _line: number,
+    result: ParsedFile,
+  ): void {
+    // SWC AST의 decorators 필드 확인
+    const decorators = (node as any).decorators;
+    if (!decorators || !Array.isArray(decorators)) return;
+
+    // @Entity() 데코레이터 찾기
+    let entityDecorator: any = null;
+    for (const dec of decorators) {
+      if (!dec.expression) continue;
+
+      let name: string | undefined;
+      if (dec.expression.type === 'CallExpression') {
+        const callee = dec.expression.callee;
+        if (callee?.type === 'Identifier') {
+          name = callee.value;
+        }
+      } else if (dec.expression.type === 'Identifier') {
+        name = dec.expression.value;
+      }
+
+      if (name === 'Entity') {
+        entityDecorator = dec;
+        break;
+      }
+    }
+
+    if (!entityDecorator) return;
+
+    // 테이블명 추출 (@Entity("tableName") 또는 @Entity({ name: "tableName" }))
+    let tableName = camelToSnakeCase(className);
+    if (entityDecorator.expression?.type === 'CallExpression') {
+      const args = entityDecorator.expression.arguments;
+      if (args && args.length > 0) {
+        const firstArg = args[0]?.expression;
+        if (firstArg?.type === 'StringLiteral') {
+          tableName = firstArg.value;
+        } else if (firstArg?.type === 'ObjectExpression') {
+          for (const prop of firstArg.properties || []) {
+            if (
+              prop.type === 'KeyValueProperty' &&
+              prop.key?.type === 'Identifier' &&
+              prop.key.value === 'name' &&
+              prop.value?.type === 'StringLiteral'
+            ) {
+              tableName = prop.value.value;
+            }
+          }
+        }
+      }
+    }
+
+    // 클래스 필드에서 @Column() 데코레이터 파싱
+    const fields: ModelField[] = [];
+    for (const member of node.body) {
+      if (member.type === 'ClassProperty' || member.type === 'ClassMethod') {
+        const memberDecorators = (member as any).decorators;
+        if (!memberDecorators || !Array.isArray(memberDecorators)) continue;
+
+        const memberDecoNames: string[] = [];
+        for (const dec of memberDecorators) {
+          let decName: string | undefined;
+          if (dec.expression?.type === 'CallExpression' && dec.expression.callee?.type === 'Identifier') {
+            decName = dec.expression.callee.value;
+          } else if (dec.expression?.type === 'Identifier') {
+            decName = dec.expression.value;
+          }
+          if (decName) memberDecoNames.push(decName);
+        }
+
+        if (member.type === 'ClassProperty') {
+          const keyNode = member.key;
+          if (keyNode?.type === 'Identifier') {
+            const fieldName = keyNode.value;
+            const typeAnno = (member as any).typeAnnotation;
+            const fieldType = typeAnno?.typeAnnotation
+              ? this.tsTypeToString(typeAnno.typeAnnotation)
+              : 'unknown';
+
+            const isPrimaryKey = memberDecoNames.includes('PrimaryGeneratedColumn') || memberDecoNames.includes('PrimaryColumn');
+            const isRelation = memberDecoNames.some(d =>
+              ['ManyToOne', 'OneToMany', 'ManyToMany', 'OneToOne'].includes(d)
+            );
+            const relAnnotation = memberDecoNames.find(d =>
+              ['ManyToOne', 'OneToMany', 'ManyToMany', 'OneToOne'].includes(d)
+            );
+
+            fields.push({
+              name: fieldName,
+              type: fieldType,
+              required: true,
+              columnName: camelToSnakeCase(fieldName),
+              isPrimaryKey: isPrimaryKey || undefined,
+              isRelation: isRelation || undefined,
+              relationType: relAnnotation,
+            });
+          }
+        }
+      }
+    }
+
+    const model: ModelInfo = {
+      id: `model-${filePath}-${className}`,
+      name: className,
+      filePath,
+      type: 'entity',
+      fields,
+      relatedApis: [],
+      tableName,
+      annotations: ['@Entity'],
+    };
+
+    if (!result.models) {
+      result.models = [];
+    }
+    result.models.push(model);
   }
 
   // ============================================================

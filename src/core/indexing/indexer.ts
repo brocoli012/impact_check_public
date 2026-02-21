@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { CodeIndex, IndexMeta, FileInfo, ChangedFileSet } from '../../types/index';
+import { CodeIndex, IndexMeta, FileInfo, ChangedFileSet, ModelInfo, EventInfo } from '../../types/index';
 import { ParsedFile } from './types';
 import { FileScanner } from './scanner';
 import { TypeScriptParser } from './parsers/typescript-parser';
@@ -226,6 +226,8 @@ export class Indexer {
     const components: CodeIndex['components'] = [];
     const apiEndpoints: CodeIndex['apis'] = [];
     const screens: CodeIndex['screens'] = [];
+    const collectedModels: ModelInfo[] = [];
+    const collectedEvents: EventInfo[] = [];
     let compCounter = 0;
     let apiCounter = 0;
     let screenCounter = 0;
@@ -305,6 +307,16 @@ export class Indexer {
               complexity: parsed.functions.length > 5 ? 'high' : parsed.functions.length > 2 ? 'medium' : 'low',
             },
           });
+        }
+
+        // 모델 수집
+        if (parsed.models && parsed.models.length > 0) {
+          collectedModels.push(...parsed.models);
+        }
+
+        // 이벤트 수집
+        if (parsed.events && parsed.events.length > 0) {
+          collectedEvents.push(...parsed.events);
         }
 
         // 그래프 노드 등록
@@ -387,8 +399,9 @@ export class Indexer {
         screens: screens.length,
         components: components.length,
         apiEndpoints: apiEndpoints.length,
-        models: 0,
+        models: collectedModels.length,
         modules: dependencyGraph.graph.nodes.filter(n => n.type === 'module').length,
+        events: collectedEvents.length,
       },
     };
 
@@ -398,7 +411,8 @@ export class Indexer {
       screens,
       components,
       apis: apiEndpoints,
-      models: [],
+      models: collectedModels,
+      events: collectedEvents,
       policies: allPolicies,
       dependencies: dependencyGraph,
     };
@@ -569,6 +583,7 @@ export class Indexer {
         apiEndpoints: updatedApis.length,
         models: existingIndex.models.length,
         modules: dependencyGraph.graph.nodes.filter(n => n.type === 'module').length,
+        events: (existingIndex.events || []).length,
       },
     };
 
@@ -579,6 +594,7 @@ export class Indexer {
       components: updatedComponents,
       apis: updatedApis,
       models: existingIndex.models,
+      events: existingIndex.events || [],
       policies: allPolicies,
       dependencies: dependencyGraph,
     };
@@ -650,6 +666,7 @@ export class Indexer {
     writeJsonFile(path.join(indexDir, 'components.json'), index.components);
     writeJsonFile(path.join(indexDir, 'apis.json'), index.apis);
     writeJsonFile(path.join(indexDir, 'models.json'), index.models);
+    writeJsonFile(path.join(indexDir, 'events.json'), index.events);
     writeJsonFile(path.join(indexDir, 'policies.json'), index.policies);
     writeJsonFile(path.join(indexDir, 'dependencies.json'), index.dependencies);
 
@@ -678,6 +695,7 @@ export class Indexer {
       const components = readJsonFile<CodeIndex['components']>(path.join(indexDir, 'components.json'));
       const apis = readJsonFile<CodeIndex['apis']>(path.join(indexDir, 'apis.json'));
       const models = readJsonFile<CodeIndex['models']>(path.join(indexDir, 'models.json'));
+      const events = readJsonFile<CodeIndex['events']>(path.join(indexDir, 'events.json'));
       const policies = readJsonFile<CodeIndex['policies']>(path.join(indexDir, 'policies.json'));
       const dependencies = readJsonFile<CodeIndex['dependencies']>(path.join(indexDir, 'dependencies.json'));
 
@@ -692,6 +710,7 @@ export class Indexer {
         components: components || [],
         apis: apis || [],
         models: models || [],
+        events: events || [],
         policies: policies || [],
         dependencies: dependencies || { graph: { nodes: [], edges: [] } },
       };

@@ -57,6 +57,12 @@ class JavaParser extends base_parser_1.BaseParser {
             const className = classNameMatch ? classNameMatch[1] : '';
             // DI 패턴 파싱
             this.parseDIPatterns(processed, content, lineTable, className, result);
+            // 엔티티 모델 파싱 (JPA @Entity)
+            if ((0, jvm_parser_utils_1.isEntityClass)(classAnnotations)) {
+                this.parseEntityModels(processed, content, lineTable, filePath, classAnnotations, result);
+            }
+            // 이벤트 발행/구독 패턴 파싱
+            this.parseEventPatterns(processed, content, lineTable, filePath, result);
         }
         catch (err) {
             logger_1.logger.debug(`JavaParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -386,6 +392,194 @@ class JavaParser extends base_parser_1.BaseParser {
                 });
             }
         }
+    }
+    // ============================================================
+    // 엔티티 모델 파싱
+    // ============================================================
+    /**
+     * JPA 엔티티 클래스에서 모델 정보를 추출
+     * @Table(name=...) → tableName, @Column(name=...) → columnName,
+     * @Id → isPrimaryKey, @ManyToOne 등 → isRelation
+     */
+    parseEntityModels(processed, content, _lineTable, filePath, classAnnotations, result) {
+        // 클래스명 추출
+        const classMatch = processed.match(/(?:public\s+)?(?:abstract\s+)?(?:class|record)\s+(\w+)/);
+        if (!classMatch)
+            return;
+        const className = classMatch[1];
+        // @Table(name=...) 추출 (2-pass)
+        const tableName = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, 'Table', 'name')
+            || (0, jvm_parser_utils_1.camelToSnakeCase)(className);
+        // @Schema 추출 (있으면)
+        const schema = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, 'Table', 'schema') || undefined;
+        // 필드 파싱: private Type fieldName; 패턴
+        const fields = [];
+        const fieldRegex = /(?:private|protected)\s+(?:final\s+)?(?:(?:@\w+(?:\([^)]*\))?\s*)*)?([\w<>[\],?\s]+)\s+(\w+)\s*(?:=\s*[^;]*)?\s*;/g;
+        let fieldMatch;
+        // 클래스 본체 시작 위치 찾기
+        const classBodyStart = processed.indexOf('{', classMatch.index);
+        if (classBodyStart === -1)
+            return;
+        while ((fieldMatch = fieldRegex.exec(processed)) !== null) {
+            if (fieldMatch.index < classBodyStart)
+                continue;
+            const fieldType = fieldMatch[1].trim();
+            const fieldName = fieldMatch[2];
+            // 메서드 파라미터가 아닌 실제 필드인지 확인 (세미콜론으로 끝남)
+            if (!fieldName || fieldName === 'class')
+                continue;
+            // 필드 앞의 어노테이션 블록 추출
+            const fieldAnnotationBlock = this.extractAnnotationBlockBefore(processed, fieldMatch.index);
+            const fieldAnnotations = [];
+            const annoRegex = /@(\w+)/g;
+            let annoMatch;
+            while ((annoMatch = annoRegex.exec(fieldAnnotationBlock)) !== null) {
+                fieldAnnotations.push(annoMatch[1]);
+            }
+            // @Column(name=...) 추출
+            const columnName = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, 'Column', 'name')
+                || undefined;
+            // @Column(columnDefinition=...) 추출
+            const columnType = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, 'Column', 'columnDefinition')
+                || undefined;
+            // @Id 판별
+            const isPrimaryKey = fieldAnnotations.includes('Id') || fieldAnnotations.includes('EmbeddedId');
+            // 관계 매핑 판별
+            const relAnnotation = fieldAnnotations.find(a => jvm_parser_utils_1.RELATION_ANNOTATIONS.includes(a));
+            const isRelation = !!relAnnotation;
+            // 관계 대상 추출 (제네릭 또는 직접 타입)
+            let relationTarget;
+            if (isRelation) {
+                // List<Order> → Order, Set<Product> → Product
+                const genericMatch = fieldType.match(/<(\w+)>/);
+                if (genericMatch) {
+                    relationTarget = genericMatch[1];
+                }
+                else {
+                    // 직접 참조 타입
+                    const simpleType = fieldType.replace(/\s+/g, '');
+                    if (simpleType && !['int', 'long', 'double', 'float', 'boolean', 'String', 'byte', 'short', 'char'].includes(simpleType)) {
+                        relationTarget = simpleType;
+                    }
+                }
+            }
+            fields.push({
+                name: fieldName,
+                type: fieldType,
+                required: !fieldType.includes('?'),
+                columnName: columnName || (0, jvm_parser_utils_1.camelToSnakeCase)(fieldName),
+                columnType,
+                isPrimaryKey: isPrimaryKey || undefined,
+                isRelation: isRelation || undefined,
+                relationType: relAnnotation,
+                relationTarget,
+            });
+        }
+        const model = {
+            id: `model-${filePath}-${className}`,
+            name: className,
+            filePath,
+            type: 'entity',
+            fields,
+            relatedApis: [],
+            tableName,
+            schema,
+            annotations: classAnnotations.map(a => `@${a}`),
+        };
+        if (!result.models) {
+            result.models = [];
+        }
+        result.models.push(model);
+    }
+    // ============================================================
+    // 이벤트 패턴 파싱
+    // ============================================================
+    /**
+     * 이벤트 발행/구독 패턴을 감지하여 EventInfo를 추출
+     */
+    parseEventPatterns(processed, content, lineTable, filePath, result) {
+        if (!result.events) {
+            result.events = [];
+        }
+        let eventCounter = 0;
+        // 이벤트 발행 패턴 감지
+        for (const pattern of jvm_parser_utils_1.EVENT_PUBLISHER_PATTERNS) {
+            const regex = new RegExp(pattern.regex.source, 'g');
+            let match;
+            while ((match = regex.exec(content)) !== null) {
+                const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);
+                eventCounter++;
+                const eventName = match[1] || 'unknown';
+                // topic 추출 (Kafka의 경우 첫 번째 인자가 토픽)
+                let topic;
+                if (pattern.type === 'kafka') {
+                    topic = match[1]; // regex가 "topic"을 캡처
+                }
+                result.events.push({
+                    id: `event-${filePath}-pub-${eventCounter}`,
+                    name: eventName,
+                    topic,
+                    type: pattern.type,
+                    role: 'publisher',
+                    filePath,
+                    handler: this.findEnclosingMethod(processed, lineTable, match.index) || '<unknown>',
+                    line,
+                });
+            }
+        }
+        // 이벤트 구독 패턴 감지 (어노테이션 기반)
+        for (const subAnno of jvm_parser_utils_1.EVENT_SUBSCRIBER_ANNOTATIONS) {
+            const annoRegex = new RegExp(`@${subAnno.name}(?:\\s*\\([^)]*\\))?`, 'g');
+            let match;
+            while ((match = annoRegex.exec(processed)) !== null) {
+                const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);
+                eventCounter++;
+                // 토픽/큐 추출
+                let topic;
+                if (subAnno.topicAttr) {
+                    topic = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, subAnno.name, subAnno.topicAttr) || undefined;
+                }
+                // 핸들러 메서드명 추출 (어노테이션 다음의 메서드)
+                const afterAnno = processed.substring(match.index + match[0].length);
+                const methodMatch = afterAnno.match(/\s*(?:public\s+|private\s+|protected\s+)?(?:\w+\s+)+(\w+)\s*\(/);
+                const handlerName = methodMatch ? methodMatch[1] : '<unknown>';
+                // 이벤트명 추출 (Spring Event의 경우 파라미터 타입)
+                let eventName = subAnno.name;
+                if (subAnno.type === 'spring-event') {
+                    const paramMatch = afterAnno.match(/\(\s*(?:final\s+)?(\w+)\s+\w+\s*\)/);
+                    if (paramMatch) {
+                        eventName = paramMatch[1];
+                    }
+                }
+                else if (topic) {
+                    eventName = topic;
+                }
+                result.events.push({
+                    id: `event-${filePath}-sub-${eventCounter}`,
+                    name: eventName,
+                    topic,
+                    type: subAnno.type,
+                    role: 'subscriber',
+                    filePath,
+                    handler: handlerName,
+                    line,
+                });
+            }
+        }
+    }
+    /**
+     * 주어진 오프셋을 포함하는 메서드 이름을 찾기
+     */
+    findEnclosingMethod(processed, _lineTable, offset) {
+        const methodSigRegex = /(?:public|protected|private)\s+(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?(?:<[^>]+>\s+)?([\w<>\[\],?\s]+)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+)?\s*\{/g;
+        let match;
+        let lastMethodName = null;
+        while ((match = methodSigRegex.exec(processed)) !== null) {
+            if (match.index > offset)
+                break;
+            lastMethodName = match[2];
+        }
+        return lastMethodName;
     }
     // ============================================================
     // 주석 추출

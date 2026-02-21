@@ -134,6 +134,7 @@ function createMockCodeIndex(): CodeIndex {
         extractedAt: '2025-01-01T00:00:00Z',
       },
     ],
+    events: [],
     dependencies: { graph: { nodes: [], edges: [] } },
   };
 }

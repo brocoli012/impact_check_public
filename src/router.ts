@@ -22,6 +22,7 @@ import { AskCommand } from './commands/ask';
 import { PolicyCheckCommand } from './commands/policy-check';
 import { SummaryCommand } from './commands/summary';
 import { CrossAnalyzeCommand } from './commands/cross-analyze';
+import { ReverseCommand } from './commands/reverse';
 
 /** 알 수 없는 명령어 에러 */
 export class UnknownCommandError extends Error {
@@ -67,6 +68,7 @@ const COMMANDS: Record<string, CommandConstructor> = {
   'policy-check': PolicyCheckCommand,
   'summary': SummaryCommand,
   'cross-analyze': CrossAnalyzeCommand,
+  'reverse': ReverseCommand,
 } as const;
 
 /**

@@ -66,6 +66,8 @@ export interface IndexMeta {
         models: number;
         /** 모듈 수 */
         modules: number;
+        /** 이벤트 수 */
+        events?: number;
     };
 }
 /** 화면 정보 (screens.json 항목) */
@@ -150,6 +152,12 @@ export interface ModelInfo {
     fields: ModelField[];
     /** 관련 API ID 목록 */
     relatedApis: UniqueId[];
+    /** DB 테이블명 (@Table(name=...) 또는 클래스명 → snake_case) */
+    tableName?: string;
+    /** DB 스키마명 */
+    schema?: string;
+    /** 클래스/엔티티에 부착된 어노테이션 목록 */
+    annotations?: string[];
 }
 /** 모델 필드 */
 export interface ModelField {
@@ -161,6 +169,42 @@ export interface ModelField {
     required: boolean;
     /** 설명 */
     description?: string;
+    /** DB 컬럼명 (@Column(name=...) 또는 필드명 → snake_case) */
+    columnName?: string;
+    /** DB 컬럼 타입 */
+    columnType?: string;
+    /** 기본키 여부 (@Id) */
+    isPrimaryKey?: boolean;
+    /** 관계 매핑 여부 */
+    isRelation?: boolean;
+    /** 관계 유형 (@ManyToOne, @OneToMany, @ManyToMany, @OneToOne) */
+    relationType?: string;
+    /** 관계 대상 엔티티명 */
+    relationTarget?: string;
+}
+/** 이벤트 발행/구독 정보 */
+export interface EventInfo {
+    /** 이벤트 고유 ID */
+    id: UniqueId;
+    /** 이벤트 이름 */
+    name: string;
+    /** 메시지 토픽 (Kafka, RabbitMQ 등) */
+    topic?: string;
+    /** 이벤트 시스템 유형 */
+    type: 'spring-event' | 'kafka' | 'rabbitmq' | 'sqs' | 'sns' | 'node-event' | 'custom';
+    /** 발행/구독 역할 */
+    role: 'publisher' | 'subscriber';
+    /** 파일 경로 */
+    filePath: FilePath;
+    /** 핸들러 함수/메서드명 */
+    handler: string;
+    /** 라인 번호 */
+    line: number;
+    /** 페이로드 필드 목록 */
+    payloadFields?: {
+        name: string;
+        type: string;
+    }[];
 }
 /** 의존 관계 그래프 (dependencies.json 스키마) */
 export interface DependencyGraph {
@@ -257,6 +301,8 @@ export interface CodeIndex {
     apis: ApiEndpoint[];
     /** 데이터 모델 목록 */
     models: ModelInfo[];
+    /** 이벤트 발행/구독 목록 */
+    events: EventInfo[];
     /** 정책 목록 */
     policies: PolicyInfo[];
     /** 의존 관계 그래프 */

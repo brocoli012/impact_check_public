@@ -79,6 +79,7 @@ function createTestIndex(
     components: components || [],
     apis,
     models: [],
+    events: [],
     policies: [],
     dependencies: { graph: { nodes: [], edges: [] } },
   };

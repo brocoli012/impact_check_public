@@ -64,6 +64,12 @@ class KotlinParser extends base_parser_1.BaseParser {
             this.parsePropertyInjection(processed, content, lineTable, result);
             // data class 필드 파싱
             this.parseDataClassFields(processed, content, lineTable, filePath, result);
+            // 엔티티 모델 파싱 (JPA @Entity)
+            if ((0, jvm_parser_utils_1.isEntityClass)(classAnnotations)) {
+                this.parseEntityModels(processed, content, lineTable, filePath, classAnnotations, result);
+            }
+            // 이벤트 발행/구독 패턴 파싱
+            this.parseEventPatterns(processed, content, lineTable, filePath, result);
         }
         catch (err) {
             logger_1.logger.debug(`KotlinParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -353,6 +359,164 @@ class KotlinParser extends base_parser_1.BaseParser {
                 }
             }
         }
+    }
+    // ============================================================
+    // 엔티티 모델 파싱
+    // ============================================================
+    parseEntityModels(processed, content, _lineTable, filePath, classAnnotations, result) {
+        // 클래스명 추출
+        const classMatch = processed.match(/(?:open\s+|abstract\s+|data\s+)?class\s+(\w+)/);
+        if (!classMatch)
+            return;
+        const className = classMatch[1];
+        // @Table(name=...) 추출
+        const tableName = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, 'Table', 'name')
+            || (0, jvm_parser_utils_1.camelToSnakeCase)(className);
+        const schema = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, 'Table', 'schema') || undefined;
+        // Kotlin 필드 파싱: val/var fieldName: Type 패턴
+        const fields = [];
+        // Primary constructor 필드
+        const constructorMatch = processed.match(/class\s+\w+\s*\(([\s\S]*?)\)\s*(?::\s*[^{]+)?\s*\{?/);
+        if (constructorMatch) {
+            const paramsStr = constructorMatch[1];
+            const paramRegex = /(?:(?:@\w+(?:\([^)]*\))?\s*)*)(?:(?:private|protected|internal)\s+)?(?:val|var)\s+(\w+)\s*:\s*([\w<>?,.\s]+)/g;
+            let paramMatch;
+            while ((paramMatch = paramRegex.exec(paramsStr)) !== null) {
+                const fieldName = paramMatch[1];
+                const fieldType = paramMatch[2].trim();
+                // 필드 앞의 어노테이션 블록
+                const beforeField = paramsStr.substring(0, paramMatch.index);
+                const lastCommaIdx = beforeField.lastIndexOf(',');
+                const fieldAnnoBlock = beforeField.substring(lastCommaIdx + 1);
+                const fieldAnnotations = [];
+                const annoRegex = /@(\w+)/g;
+                let annoMatch;
+                while ((annoMatch = annoRegex.exec(fieldAnnoBlock)) !== null) {
+                    fieldAnnotations.push(annoMatch[1]);
+                }
+                const isPrimaryKey = fieldAnnotations.includes('Id') || fieldAnnotations.includes('EmbeddedId');
+                const relAnnotation = fieldAnnotations.find(a => jvm_parser_utils_1.RELATION_ANNOTATIONS.includes(a));
+                const isRelation = !!relAnnotation;
+                let relationTarget;
+                if (isRelation) {
+                    const genericMatch = fieldType.match(/<(\w+)>/);
+                    if (genericMatch) {
+                        relationTarget = genericMatch[1];
+                    }
+                    else {
+                        const simpleType = fieldType.replace(/[?\s]/g, '');
+                        if (!['Int', 'Long', 'Double', 'Float', 'Boolean', 'String', 'Byte', 'Short', 'Char'].includes(simpleType)) {
+                            relationTarget = simpleType;
+                        }
+                    }
+                }
+                fields.push({
+                    name: fieldName,
+                    type: fieldType,
+                    required: !fieldType.includes('?'),
+                    columnName: (0, jvm_parser_utils_1.camelToSnakeCase)(fieldName),
+                    isPrimaryKey: isPrimaryKey || undefined,
+                    isRelation: isRelation || undefined,
+                    relationType: relAnnotation,
+                    relationTarget,
+                });
+            }
+        }
+        const model = {
+            id: `model-${filePath}-${className}`,
+            name: className,
+            filePath,
+            type: 'entity',
+            fields,
+            relatedApis: [],
+            tableName,
+            schema,
+            annotations: classAnnotations.map(a => `@${a}`),
+        };
+        if (!result.models) {
+            result.models = [];
+        }
+        result.models.push(model);
+    }
+    // ============================================================
+    // 이벤트 패턴 파싱
+    // ============================================================
+    parseEventPatterns(processed, content, lineTable, filePath, result) {
+        if (!result.events) {
+            result.events = [];
+        }
+        let eventCounter = 0;
+        // 이벤트 발행 패턴 감지
+        for (const pattern of jvm_parser_utils_1.EVENT_PUBLISHER_PATTERNS) {
+            const regex = new RegExp(pattern.regex.source, 'g');
+            let match;
+            while ((match = regex.exec(content)) !== null) {
+                const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);
+                eventCounter++;
+                const eventName = match[1] || 'unknown';
+                let topic;
+                if (pattern.type === 'kafka') {
+                    topic = match[1];
+                }
+                result.events.push({
+                    id: `event-${filePath}-pub-${eventCounter}`,
+                    name: eventName,
+                    topic,
+                    type: pattern.type,
+                    role: 'publisher',
+                    filePath,
+                    handler: this.findEnclosingFunction(processed, match.index) || '<unknown>',
+                    line,
+                });
+            }
+        }
+        // 이벤트 구독 패턴 감지
+        for (const subAnno of jvm_parser_utils_1.EVENT_SUBSCRIBER_ANNOTATIONS) {
+            const annoRegex = new RegExp(`@${subAnno.name}(?:\\s*\\([^)]*\\))?`, 'g');
+            let match;
+            while ((match = annoRegex.exec(processed)) !== null) {
+                const line = (0, jvm_parser_utils_1.getLineFromTable)(lineTable, match.index);
+                eventCounter++;
+                let topic;
+                if (subAnno.topicAttr) {
+                    topic = (0, jvm_parser_utils_1.parseAnnotationAttribute)(processed, content, subAnno.name, subAnno.topicAttr) || undefined;
+                }
+                const afterAnno = processed.substring(match.index + match[0].length);
+                const funMatch = afterAnno.match(/\s*(?:(?:override|open|suspend|private|protected|public)\s+)*fun\s+(\w+)\s*\(/);
+                const handlerName = funMatch ? funMatch[1] : '<unknown>';
+                let eventName = subAnno.name;
+                if (subAnno.type === 'spring-event') {
+                    const paramMatch = afterAnno.match(/\(\s*(\w+)\s*:\s*(\w+)\s*\)/);
+                    if (paramMatch) {
+                        eventName = paramMatch[2];
+                    }
+                }
+                else if (topic) {
+                    eventName = topic;
+                }
+                result.events.push({
+                    id: `event-${filePath}-sub-${eventCounter}`,
+                    name: eventName,
+                    topic,
+                    type: subAnno.type,
+                    role: 'subscriber',
+                    filePath,
+                    handler: handlerName,
+                    line,
+                });
+            }
+        }
+    }
+    findEnclosingFunction(processed, offset) {
+        const funRegex = /fun\s+(?:[\w<>?,.]+\.)?(\w+)\s*\(/g;
+        let match;
+        let lastFuncName = null;
+        while ((match = funRegex.exec(processed)) !== null) {
+            if (match.index > offset)
+                break;
+            lastFuncName = match[1];
+        }
+        return lastFuncName;
     }
     // ============================================================
     // 주석 추출

@@ -8,14 +8,17 @@
 
 import { BaseParser } from './base-parser';
 import { ParsedFile, FunctionInfo } from '../types';
+import { ModelInfo, ModelField } from '../../../types/index';
 import { parseJava, TreeSitterNode } from './tree-sitter-loader';
 import {
   SPRING_ROUTE_ANNOTATIONS,
+  RELATION_ANNOTATIONS,
   parseAnnotationValue,
   resolveSpringHttpMethod,
   combineRoutePaths,
   isSpringComponent,
   isEntityClass,
+  camelToSnakeCase,
 } from './jvm-parser-utils';
 import { logger } from '../../../utils/logger';
 
@@ -200,6 +203,9 @@ export class JavaAstParser extends BaseParser {
         filePath,
         line,
       });
+
+      // 엔티티 모델 추출
+      this.parseEntityModel(node, className, filePath, line, annotations, result);
     }
 
     // 클래스 레벨 @RequestMapping 경로 추출
@@ -347,6 +353,107 @@ export class JavaAstParser extends BaseParser {
         });
       }
     }
+  }
+
+  // ============================================================
+  // 엔티티 모델 파싱
+  // ============================================================
+
+  private parseEntityModel(
+    node: TreeSitterNode,
+    className: string,
+    filePath: string,
+    _line: number,
+    annotations: Array<{ name: string; text: string }>,
+    result: ParsedFile,
+  ): void {
+    // @Table(name=...) 추출
+    const tableAnno = annotations.find(a => a.name === 'Table');
+    let tableName = camelToSnakeCase(className);
+    if (tableAnno) {
+      const nameMatch = tableAnno.text.match(/name\s*=\s*"([^"]*)"/);
+      if (nameMatch) tableName = nameMatch[1];
+      else {
+        const directMatch = tableAnno.text.match(/@Table\s*\(\s*"([^"]*)"/);
+        if (directMatch) tableName = directMatch[1];
+      }
+    }
+
+    const schema = tableAnno?.text.match(/schema\s*=\s*"([^"]*)"/)
+      ? tableAnno.text.match(/schema\s*=\s*"([^"]*)"/)![1]
+      : undefined;
+
+    // 필드 추출
+    const fields: ModelField[] = [];
+    const body = node.namedChildren.find((n: TreeSitterNode) =>
+      n.type === 'class_body' || n.type === 'record_body'
+    );
+
+    if (body) {
+      for (const member of body.namedChildren) {
+        if (member.type === 'field_declaration') {
+          const memberAnnotations = this.extractAnnotations(member);
+          const memberAnnoNames = memberAnnotations.map(a => a.name);
+          const typeNode = this.findChildByFieldName(member, 'type');
+          const declarator = member.namedChildren.find((n: TreeSitterNode) => n.type === 'variable_declarator');
+
+          if (typeNode && declarator) {
+            const nameNode = declarator.namedChildren.find((n: TreeSitterNode) => n.type === 'identifier');
+            if (nameNode) {
+              const fieldName = nameNode.text;
+              const fieldType = typeNode.text;
+
+              const isPrimaryKey = memberAnnoNames.includes('Id') || memberAnnoNames.includes('EmbeddedId');
+              const relAnnotation = memberAnnoNames.find(a => RELATION_ANNOTATIONS.includes(a));
+
+              let relationTarget: string | undefined;
+              if (relAnnotation) {
+                const genericMatch = fieldType.match(/<(\w+)>/);
+                if (genericMatch) {
+                  relationTarget = genericMatch[1];
+                } else if (!['int', 'long', 'double', 'float', 'boolean', 'String'].includes(fieldType)) {
+                  relationTarget = fieldType;
+                }
+              }
+
+              // @Column(name=...) 추출
+              const columnAnno = memberAnnotations.find(a => a.name === 'Column');
+              const columnName = columnAnno?.text.match(/name\s*=\s*"([^"]*)"/)
+                ? columnAnno.text.match(/name\s*=\s*"([^"]*)"/)![1]
+                : camelToSnakeCase(fieldName);
+
+              fields.push({
+                name: fieldName,
+                type: fieldType,
+                required: true,
+                columnName,
+                isPrimaryKey: isPrimaryKey || undefined,
+                isRelation: !!relAnnotation || undefined,
+                relationType: relAnnotation,
+                relationTarget,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const model: ModelInfo = {
+      id: `model-${filePath}-${className}`,
+      name: className,
+      filePath,
+      type: 'entity',
+      fields,
+      relatedApis: [],
+      tableName,
+      schema,
+      annotations: annotations.map(a => `@${a.name}`),
+    };
+
+    if (!result.models) {
+      result.models = [];
+    }
+    result.models.push(model);
   }
 
   // ============================================================

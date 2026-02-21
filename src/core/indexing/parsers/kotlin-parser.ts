@@ -19,13 +19,19 @@ import {
   ParsedFile,
   FunctionInfo,
 } from '../types';
+import { ModelInfo, ModelField } from '../../../types/index';
 import {
   SPRING_ROUTE_ANNOTATIONS,
+  RELATION_ANNOTATIONS,
+  EVENT_PUBLISHER_PATTERNS,
+  EVENT_SUBSCRIBER_ANNOTATIONS,
   parseAnnotationValue,
+  parseAnnotationAttribute,
   resolveSpringHttpMethod,
   combineRoutePaths,
   isSpringComponent,
   isEntityClass,
+  camelToSnakeCase,
   buildLineOffsetTable,
   getLineFromTable,
   stripStringsAndComments,
@@ -86,6 +92,14 @@ export class KotlinParser extends BaseParser {
 
       // data class 필드 파싱
       this.parseDataClassFields(processed, content, lineTable, filePath, result);
+
+      // 엔티티 모델 파싱 (JPA @Entity)
+      if (isEntityClass(classAnnotations)) {
+        this.parseEntityModels(processed, content, lineTable, filePath, classAnnotations, result);
+      }
+
+      // 이벤트 발행/구독 패턴 파싱
+      this.parseEventPatterns(processed, content, lineTable, filePath, result);
 
     } catch (err) {
       logger.debug(`KotlinParser failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -445,6 +459,201 @@ export class KotlinParser extends BaseParser {
         }
       }
     }
+  }
+
+  // ============================================================
+  // 엔티티 모델 파싱
+  // ============================================================
+
+  private parseEntityModels(
+    processed: string,
+    content: string,
+    _lineTable: number[],
+    filePath: string,
+    classAnnotations: string[],
+    result: ParsedFile,
+  ): void {
+    // 클래스명 추출
+    const classMatch = processed.match(/(?:open\s+|abstract\s+|data\s+)?class\s+(\w+)/);
+    if (!classMatch) return;
+
+    const className = classMatch[1];
+
+    // @Table(name=...) 추출
+    const tableName = parseAnnotationAttribute(processed, content, 'Table', 'name')
+      || camelToSnakeCase(className);
+
+    const schema = parseAnnotationAttribute(processed, content, 'Table', 'schema') || undefined;
+
+    // Kotlin 필드 파싱: val/var fieldName: Type 패턴
+    const fields: ModelField[] = [];
+
+    // Primary constructor 필드
+    const constructorMatch = processed.match(/class\s+\w+\s*\(([\s\S]*?)\)\s*(?::\s*[^{]+)?\s*\{?/);
+    if (constructorMatch) {
+      const paramsStr = constructorMatch[1];
+      const paramRegex = /(?:(?:@\w+(?:\([^)]*\))?\s*)*)(?:(?:private|protected|internal)\s+)?(?:val|var)\s+(\w+)\s*:\s*([\w<>?,.\s]+)/g;
+      let paramMatch: RegExpExecArray | null;
+
+      while ((paramMatch = paramRegex.exec(paramsStr)) !== null) {
+        const fieldName = paramMatch[1];
+        const fieldType = paramMatch[2].trim();
+
+        // 필드 앞의 어노테이션 블록
+        const beforeField = paramsStr.substring(0, paramMatch.index);
+        const lastCommaIdx = beforeField.lastIndexOf(',');
+        const fieldAnnoBlock = beforeField.substring(lastCommaIdx + 1);
+        const fieldAnnotations: string[] = [];
+        const annoRegex = /@(\w+)/g;
+        let annoMatch: RegExpExecArray | null;
+        while ((annoMatch = annoRegex.exec(fieldAnnoBlock)) !== null) {
+          fieldAnnotations.push(annoMatch[1]);
+        }
+
+        const isPrimaryKey = fieldAnnotations.includes('Id') || fieldAnnotations.includes('EmbeddedId');
+        const relAnnotation = fieldAnnotations.find(a => RELATION_ANNOTATIONS.includes(a));
+        const isRelation = !!relAnnotation;
+
+        let relationTarget: string | undefined;
+        if (isRelation) {
+          const genericMatch = fieldType.match(/<(\w+)>/);
+          if (genericMatch) {
+            relationTarget = genericMatch[1];
+          } else {
+            const simpleType = fieldType.replace(/[?\s]/g, '');
+            if (!['Int', 'Long', 'Double', 'Float', 'Boolean', 'String', 'Byte', 'Short', 'Char'].includes(simpleType)) {
+              relationTarget = simpleType;
+            }
+          }
+        }
+
+        fields.push({
+          name: fieldName,
+          type: fieldType,
+          required: !fieldType.includes('?'),
+          columnName: camelToSnakeCase(fieldName),
+          isPrimaryKey: isPrimaryKey || undefined,
+          isRelation: isRelation || undefined,
+          relationType: relAnnotation,
+          relationTarget,
+        });
+      }
+    }
+
+    const model: ModelInfo = {
+      id: `model-${filePath}-${className}`,
+      name: className,
+      filePath,
+      type: 'entity',
+      fields,
+      relatedApis: [],
+      tableName,
+      schema,
+      annotations: classAnnotations.map(a => `@${a}`),
+    };
+
+    if (!result.models) {
+      result.models = [];
+    }
+    result.models.push(model);
+  }
+
+  // ============================================================
+  // 이벤트 패턴 파싱
+  // ============================================================
+
+  private parseEventPatterns(
+    processed: string,
+    content: string,
+    lineTable: number[],
+    filePath: string,
+    result: ParsedFile,
+  ): void {
+    if (!result.events) {
+      result.events = [];
+    }
+
+    let eventCounter = 0;
+
+    // 이벤트 발행 패턴 감지
+    for (const pattern of EVENT_PUBLISHER_PATTERNS) {
+      const regex = new RegExp(pattern.regex.source, 'g');
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(content)) !== null) {
+        const line = getLineFromTable(lineTable, match.index);
+        eventCounter++;
+        const eventName = match[1] || 'unknown';
+
+        let topic: string | undefined;
+        if (pattern.type === 'kafka') {
+          topic = match[1];
+        }
+
+        result.events!.push({
+          id: `event-${filePath}-pub-${eventCounter}`,
+          name: eventName,
+          topic,
+          type: pattern.type,
+          role: 'publisher',
+          filePath,
+          handler: this.findEnclosingFunction(processed, match.index) || '<unknown>',
+          line,
+        });
+      }
+    }
+
+    // 이벤트 구독 패턴 감지
+    for (const subAnno of EVENT_SUBSCRIBER_ANNOTATIONS) {
+      const annoRegex = new RegExp(`@${subAnno.name}(?:\\s*\\([^)]*\\))?`, 'g');
+      let match: RegExpExecArray | null;
+      while ((match = annoRegex.exec(processed)) !== null) {
+        const line = getLineFromTable(lineTable, match.index);
+        eventCounter++;
+
+        let topic: string | undefined;
+        if (subAnno.topicAttr) {
+          topic = parseAnnotationAttribute(processed, content, subAnno.name, subAnno.topicAttr) || undefined;
+        }
+
+        const afterAnno = processed.substring(match.index + match[0].length);
+        const funMatch = afterAnno.match(/\s*(?:(?:override|open|suspend|private|protected|public)\s+)*fun\s+(\w+)\s*\(/);
+        const handlerName = funMatch ? funMatch[1] : '<unknown>';
+
+        let eventName = subAnno.name;
+        if (subAnno.type === 'spring-event') {
+          const paramMatch = afterAnno.match(/\(\s*(\w+)\s*:\s*(\w+)\s*\)/);
+          if (paramMatch) {
+            eventName = paramMatch[2];
+          }
+        } else if (topic) {
+          eventName = topic;
+        }
+
+        result.events!.push({
+          id: `event-${filePath}-sub-${eventCounter}`,
+          name: eventName,
+          topic,
+          type: subAnno.type,
+          role: 'subscriber',
+          filePath,
+          handler: handlerName,
+          line,
+        });
+      }
+    }
+  }
+
+  private findEnclosingFunction(processed: string, offset: number): string | null {
+    const funRegex = /fun\s+(?:[\w<>?,.]+\.)?(\w+)\s*\(/g;
+    let match: RegExpExecArray | null;
+    let lastFuncName: string | null = null;
+
+    while ((match = funRegex.exec(processed)) !== null) {
+      if (match.index > offset) break;
+      lastFuncName = match[1];
+    }
+
+    return lastFuncName;
   }
 
   // ============================================================

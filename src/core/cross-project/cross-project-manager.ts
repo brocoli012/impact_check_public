@@ -8,7 +8,8 @@ import { CrossProjectConfig, ProjectLink, ProjectGroup, LinkType } from './types
 import { readJsonFile, writeJsonFile, getImpactDir } from '../../utils/file';
 import { logger } from '../../utils/logger';
 import { Indexer } from '../indexing/indexer';
-import { ApiEndpoint } from '../../types/index';
+import { ApiEndpoint, CodeIndex } from '../../types/index';
+import { SharedEntityIndexer } from './shared-entity-indexer';
 
 /** 기본 설정 (파일 없을 때 반환) */
 function createDefaultConfig(): CrossProjectConfig {
@@ -287,6 +288,71 @@ export class CrossProjectManager {
               apis: matchedPaths,
               autoDetected: true,
             });
+          }
+        }
+      }
+    }
+
+    // 3. 테이블/이벤트 기반 공유 엔티티 감지
+    const projectIndexMap = new Map<string, CodeIndex>();
+    for (const projectId of projectIds) {
+      const index = await indexer.loadIndex(projectId);
+      if (index) {
+        projectIndexMap.set(projectId, index);
+      }
+    }
+
+    if (projectIndexMap.size >= 2) {
+      const sharedIndexer = new SharedEntityIndexer();
+      const sharedIndex = sharedIndexer.build(projectIndexMap);
+
+      // 공유 테이블 기반 링크 생성
+      const sharedTables = sharedIndexer.getSharedTables(sharedIndex);
+      for (const [tableName, refs] of Object.entries(sharedTables)) {
+        const projects = [...new Set(refs.map(r => r.projectId))];
+        for (let i = 0; i < projects.length; i++) {
+          for (let j = i + 1; j < projects.length; j++) {
+            const linkId = `${projects[i]}-${projects[j]}-shared-db`;
+            const existingLink = detectedLinks.find(l => l.id === linkId);
+            if (!existingLink) {
+              detectedLinks.push({
+                id: linkId,
+                source: projects[i],
+                target: projects[j],
+                type: 'shared-db',
+                apis: [tableName],
+                autoDetected: true,
+              });
+            } else if (existingLink.apis) {
+              if (!existingLink.apis.includes(tableName)) {
+                existingLink.apis.push(tableName);
+              }
+            }
+          }
+        }
+      }
+
+      // 공유 이벤트 기반 링크 생성
+      const sharedEvents = sharedIndexer.getSharedEvents(sharedIndex);
+      for (const [eventKey, refs] of Object.entries(sharedEvents)) {
+        const publishers = refs.filter(r => r.role === 'publisher');
+        const subscribers = refs.filter(r => r.role === 'subscriber');
+
+        for (const pub of publishers) {
+          for (const sub of subscribers) {
+            if (pub.projectId === sub.projectId) continue;
+
+            const pubLinkId = `${pub.projectId}-${sub.projectId}-event-pub`;
+            if (!detectedLinks.find(l => l.id === pubLinkId)) {
+              detectedLinks.push({
+                id: pubLinkId,
+                source: pub.projectId,
+                target: sub.projectId,
+                type: 'event-publisher',
+                apis: [eventKey],
+                autoDetected: true,
+              });
+            }
           }
         }
       }

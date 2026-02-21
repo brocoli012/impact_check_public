@@ -65,6 +65,7 @@ function createMockCodeIndex(): CodeIndex {
     }],
     apis: [],
     models: [],
+    events: [],
     policies: [],
     dependencies: { graph: { nodes: [], edges: [] } },
   };

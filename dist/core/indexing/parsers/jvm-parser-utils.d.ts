@@ -63,6 +63,64 @@ export declare function isEntityClass(annotations: string[]): boolean;
  * @returns DI 어노테이션이면 true
  */
 export declare function isDIAnnotation(annotationName: string): boolean;
+/** JPA 관계 매핑 어노테이션 */
+export declare const RELATION_ANNOTATIONS: string[];
+/** 이벤트 발행 관련 패턴 상수 */
+export declare const EVENT_PUBLISHER_PATTERNS: ({
+    regex: RegExp;
+    type: "spring-event";
+} | {
+    regex: RegExp;
+    type: "kafka";
+} | {
+    regex: RegExp;
+    type: "rabbitmq";
+})[];
+/** 이벤트 구독 관련 어노테이션 패턴 */
+export declare const EVENT_SUBSCRIBER_ANNOTATIONS: ({
+    name: string;
+    type: "spring-event";
+    topicAttr?: undefined;
+} | {
+    name: string;
+    type: "kafka";
+    topicAttr: string;
+} | {
+    name: string;
+    type: "rabbitmq";
+    topicAttr: string;
+})[];
+/**
+ * camelCase/PascalCase를 snake_case로 변환
+ * @param str - 입력 문자열
+ * @returns snake_case 문자열
+ *
+ * @example
+ * camelToSnakeCase('OrderItem') → 'order_item'
+ * camelToSnakeCase('deliveryFee') → 'delivery_fee'
+ * camelToSnakeCase('HTMLParser') → 'html_parser'
+ */
+export declare function camelToSnakeCase(str: string): string;
+/**
+ * 어노테이션 속성 값을 추출 (2-pass 매칭)
+ *
+ * stripStringsAndComments()가 문자열 내부를 마스킹하므로,
+ * processed 텍스트에서 어노테이션 위치를 찾고 content 원본에서 실제 문자열 값을 추출
+ *
+ * @param processed - stripStringsAndComments() 처리된 텍스트
+ * @param content - 원본 소스 코드
+ * @param annotationName - 어노테이션 이름 (@ 제외)
+ * @param attributeName - 속성 이름 (예: 'name', 'topics', 'queues')
+ * @returns 추출된 문자열 값, 없으면 null
+ *
+ * @example
+ * // @Table(name = "orders") → "orders"
+ * parseAnnotationAttribute(processed, content, 'Table', 'name')
+ *
+ * // @Table("orders") → "orders" (value 속성으로 간주)
+ * parseAnnotationAttribute(processed, content, 'Table', 'name')
+ */
+export declare function parseAnnotationAttribute(processed: string, content: string, annotationName: string, attributeName: string): string | null;
 /**
  * raw 어노테이션 문자열에서 어노테이션 이름만 추출
  * @param rawAnnotation - raw 어노테이션 문자열

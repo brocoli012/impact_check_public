@@ -29,7 +29,7 @@ export interface ProjectLink {
     confirmedAt?: string;
 }
 /** 의존성 유형 */
-export type LinkType = 'api-consumer' | 'api-provider' | 'shared-library' | 'shared-types' | 'event-publisher' | 'event-subscriber';
+export type LinkType = 'api-consumer' | 'api-provider' | 'shared-library' | 'shared-types' | 'event-publisher' | 'event-subscriber' | 'shared-db';
 /** 프로젝트 그룹 */
 export interface ProjectGroup {
     /** 그룹 이름 */

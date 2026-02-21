@@ -25,6 +25,7 @@ const ask_1 = require("./commands/ask");
 const policy_check_1 = require("./commands/policy-check");
 const summary_1 = require("./commands/summary");
 const cross_analyze_1 = require("./commands/cross-analyze");
+const reverse_1 = require("./commands/reverse");
 /** 알 수 없는 명령어 에러 */
 class UnknownCommandError extends Error {
     /**
@@ -61,6 +62,7 @@ const COMMANDS = {
     'policy-check': policy_check_1.PolicyCheckCommand,
     'summary': summary_1.SummaryCommand,
     'cross-analyze': cross_analyze_1.CrossAnalyzeCommand,
+    'reverse': reverse_1.ReverseCommand,
 };
 /**
  * 명령어를 라우팅하여 적절한 Command 인스턴스를 반환

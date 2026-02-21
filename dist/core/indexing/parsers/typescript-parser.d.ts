@@ -116,6 +116,10 @@ export declare class TypeScriptParser extends BaseParser {
      */
     private detectRouteDefinition;
     /**
+     * TypeORM @Entity() 데코레이터를 감지하여 ModelInfo를 생성
+     */
+    private detectTypeOrmEntity;
+    /**
      * Span에서 라인 번호 계산
      * SWC의 누적 span offset을 보정하기 위해 spanBaseOffset을 차감
      */

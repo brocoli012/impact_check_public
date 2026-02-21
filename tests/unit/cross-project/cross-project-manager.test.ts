@@ -508,6 +508,7 @@ describe('CrossProjectManager', () => {
         components: [],
         apis,
         models: [],
+        events: [],
         policies: [],
         dependencies: { graph: { nodes: [], edges: [] } },
       };

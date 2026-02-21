@@ -28,6 +28,7 @@ export declare class JavaAstParser extends BaseParser {
     private processMethod;
     private processConstructor;
     private processField;
+    private parseEntityModel;
     private extractAnnotations;
     private extractModifiers;
     private extractMethodParams;

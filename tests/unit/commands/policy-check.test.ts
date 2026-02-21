@@ -126,6 +126,7 @@ function createTestIndex(overrides?: Partial<CodeIndex>): CodeIndex {
       },
     ],
     models: [],
+    events: [],
     policies: [
       createTestPolicy(),
       createTestPolicy({

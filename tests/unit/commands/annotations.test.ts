@@ -238,6 +238,7 @@ describe('AnnotationsCommand', () => {
       components: [],
       apis: [],
       models: [],
+      events: [],
       policies: [],
       dependencies: { graph: { nodes: [], edges: [] } },
     });

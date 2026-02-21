@@ -2,7 +2,7 @@
  * @module core/indexing/types
  * @description 코드 인덱싱 시스템 내부 타입 정의
  */
-import { FileInfo } from '../../types/index';
+import { FileInfo, ModelInfo, EventInfo } from '../../types/index';
 /**
  * 파일 스캔 결과
  *
@@ -53,6 +53,10 @@ export interface ParsedFile {
     routeDefinitions: RouteInfo[];
     /** 주석 목록 */
     comments: CommentInfo[];
+    /** 파싱된 엔티티 모델 목록 (JVM/ORM 파서에서 추출) */
+    models?: ModelInfo[];
+    /** 파싱된 이벤트 발행/구독 목록 */
+    events?: EventInfo[];
 }
 /**
  * Import 정보

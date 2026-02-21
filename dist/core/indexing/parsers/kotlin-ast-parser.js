@@ -164,6 +164,8 @@ class KotlinAstParser extends base_parser_1.BaseParser {
                 filePath,
                 line,
             });
+            // 엔티티 모델 추출
+            this.parseEntityModel(node, className, filePath, line, annotations, result);
         }
         // 클래스 레벨 @RequestMapping 경로
         const classBasePath = this.extractRequestMappingPath(annotations);
@@ -342,6 +344,84 @@ class KotlinAstParser extends base_parser_1.BaseParser {
                 });
             }
         }
+    }
+    // ============================================================
+    // 엔티티 모델 파싱
+    // ============================================================
+    parseEntityModel(classNode, className, filePath, _line, annotations, result) {
+        // @Table(name=...) 추출
+        const tableAnno = annotations.find(a => a.name === 'Table');
+        let tableName = (0, jvm_parser_utils_1.camelToSnakeCase)(className);
+        if (tableAnno) {
+            const nameMatch = tableAnno.text.match(/name\s*=\s*"([^"]*)"/);
+            if (nameMatch)
+                tableName = nameMatch[1];
+            else {
+                const directMatch = tableAnno.text.match(/@Table\s*\(\s*"([^"]*)"/);
+                if (directMatch)
+                    tableName = directMatch[1];
+            }
+        }
+        const schema = tableAnno?.text.match(/schema\s*=\s*"([^"]*)"/)
+            ? tableAnno.text.match(/schema\s*=\s*"([^"]*)"/)[1]
+            : undefined;
+        // Primary constructor에서 필드 추출
+        const fields = [];
+        const constructor = classNode.namedChildren.find((n) => n.type === 'primary_constructor');
+        if (constructor) {
+            for (const param of constructor.namedChildren) {
+                if (param.type === 'class_parameter') {
+                    const nameNode = param.namedChildren.find((n) => n.type === 'simple_identifier');
+                    const typeNode = param.namedChildren.find((n) => n.type === 'user_type' || n.type === 'nullable_type');
+                    if (nameNode && typeNode) {
+                        const fieldName = nameNode.text;
+                        const fieldType = typeNode.text;
+                        const memberAnnotations = this.extractAnnotations(param);
+                        const memberAnnoNames = memberAnnotations.map(a => a.name);
+                        const isPrimaryKey = memberAnnoNames.includes('Id') || memberAnnoNames.includes('EmbeddedId');
+                        const relAnnotation = memberAnnoNames.find(a => jvm_parser_utils_1.RELATION_ANNOTATIONS.includes(a));
+                        let relationTarget;
+                        if (relAnnotation) {
+                            const genericMatch = fieldType.match(/<(\w+)>/);
+                            if (genericMatch) {
+                                relationTarget = genericMatch[1];
+                            }
+                            else {
+                                const simpleType = fieldType.replace('?', '');
+                                if (!['Int', 'Long', 'Double', 'Float', 'Boolean', 'String'].includes(simpleType)) {
+                                    relationTarget = simpleType;
+                                }
+                            }
+                        }
+                        fields.push({
+                            name: fieldName,
+                            type: fieldType,
+                            required: !fieldType.includes('?'),
+                            columnName: (0, jvm_parser_utils_1.camelToSnakeCase)(fieldName),
+                            isPrimaryKey: isPrimaryKey || undefined,
+                            isRelation: !!relAnnotation || undefined,
+                            relationType: relAnnotation,
+                            relationTarget,
+                        });
+                    }
+                }
+            }
+        }
+        const model = {
+            id: `model-${filePath}-${className}`,
+            name: className,
+            filePath,
+            type: 'entity',
+            fields,
+            relatedApis: [],
+            tableName,
+            schema,
+            annotations: annotations.map(a => `@${a.name}`),
+        };
+        if (!result.models) {
+            result.models = [];
+        }
+        result.models.push(model);
     }
     // ============================================================
     // Property 처리 (DI annotation)

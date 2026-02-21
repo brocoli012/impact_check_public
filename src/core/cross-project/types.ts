@@ -42,7 +42,8 @@ export type LinkType =
   | 'shared-library'
   | 'shared-types'
   | 'event-publisher'
-  | 'event-subscriber';
+  | 'event-subscriber'
+  | 'shared-db';
 
 /** 프로젝트 그룹 */
 export interface ProjectGroup {

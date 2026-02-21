@@ -30,6 +30,7 @@ export declare class KotlinAstParser extends BaseParser {
     private processFunction;
     private processPrimaryConstructor;
     private processDataClassFields;
+    private parseEntityModel;
     private processProperty;
     private extractComments;
     private extractAnnotations;

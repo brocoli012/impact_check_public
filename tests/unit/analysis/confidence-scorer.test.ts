@@ -26,6 +26,7 @@ function createMinimalIndex(): CodeIndex {
     components: [],
     apis: [],
     models: [],
+    events: [],
     policies: [],
     dependencies: { graph: { nodes: [], edges: [] } },
   };
@@ -54,6 +55,7 @@ function createRichIndex(): CodeIndex {
       { id: 'api-1', method: 'GET', path: '/api/test', filePath: 'api.ts', handler: 'handler', calledBy: [], requestParams: [], responseType: 'any', relatedModels: [] },
     ],
     models: [],
+    events: [],
     policies: [
       { id: 'pol-1', name: 'Policy1', description: 'Test', source: 'comment', sourceText: '', filePath: 'p1.tsx', lineNumber: 1, category: 'test', relatedComponents: [], relatedApis: [], relatedModules: [], extractedAt: '' },
     ],

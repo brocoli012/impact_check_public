@@ -123,6 +123,7 @@ function createTestCodeIndex(): CodeIndex {
         relatedApis: ['api-1'],
       },
     ],
+    events: [],
     policies: [
       {
         id: 'pol-1',

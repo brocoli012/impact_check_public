@@ -241,6 +241,122 @@ export function isDIAnnotation(annotationName: string): boolean {
 }
 
 // ============================================================
+// 어노테이션 속성 추출 (2-pass)
+// ============================================================
+
+/** JPA 관계 매핑 어노테이션 */
+export const RELATION_ANNOTATIONS = ['ManyToOne', 'OneToMany', 'ManyToMany', 'OneToOne'];
+
+/** 이벤트 발행 관련 패턴 상수 */
+export const EVENT_PUBLISHER_PATTERNS = [
+  { regex: /[aA]pplicationEventPublisher\s*\.\s*publishEvent\s*\(\s*new\s+(\w+)\s*\(/, type: 'spring-event' as const },
+  { regex: /[kK]afkaTemplate[^.]*\.\s*send\s*\(\s*"([^"]*)"/, type: 'kafka' as const },
+  { regex: /[rR]abbitTemplate[^.]*\.\s*convertAndSend\s*\(/, type: 'rabbitmq' as const },
+];
+
+/** 이벤트 구독 관련 어노테이션 패턴 */
+export const EVENT_SUBSCRIBER_ANNOTATIONS = [
+  { name: 'EventListener', type: 'spring-event' as const },
+  { name: 'KafkaListener', type: 'kafka' as const, topicAttr: 'topics' },
+  { name: 'RabbitListener', type: 'rabbitmq' as const, topicAttr: 'queues' },
+];
+
+/**
+ * camelCase/PascalCase를 snake_case로 변환
+ * @param str - 입력 문자열
+ * @returns snake_case 문자열
+ *
+ * @example
+ * camelToSnakeCase('OrderItem') → 'order_item'
+ * camelToSnakeCase('deliveryFee') → 'delivery_fee'
+ * camelToSnakeCase('HTMLParser') → 'html_parser'
+ */
+export function camelToSnakeCase(str: string): string {
+  if (!str) return '';
+  return str
+    // 대문자 연속 다음에 대문자+소문자가 오는 경우 분리 (HTMLParser → HTML_Parser)
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    // 소문자/숫자 다음에 대문자가 오는 경우 분리 (orderItem → order_Item)
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+}
+
+/**
+ * 어노테이션 속성 값을 추출 (2-pass 매칭)
+ *
+ * stripStringsAndComments()가 문자열 내부를 마스킹하므로,
+ * processed 텍스트에서 어노테이션 위치를 찾고 content 원본에서 실제 문자열 값을 추출
+ *
+ * @param processed - stripStringsAndComments() 처리된 텍스트
+ * @param content - 원본 소스 코드
+ * @param annotationName - 어노테이션 이름 (@ 제외)
+ * @param attributeName - 속성 이름 (예: 'name', 'topics', 'queues')
+ * @returns 추출된 문자열 값, 없으면 null
+ *
+ * @example
+ * // @Table(name = "orders") → "orders"
+ * parseAnnotationAttribute(processed, content, 'Table', 'name')
+ *
+ * // @Table("orders") → "orders" (value 속성으로 간주)
+ * parseAnnotationAttribute(processed, content, 'Table', 'name')
+ */
+export function parseAnnotationAttribute(
+  processed: string,
+  content: string,
+  annotationName: string,
+  attributeName: string,
+): string | null {
+  try {
+    // Pass 1: processed 텍스트에서 어노테이션 위치를 찾음
+    const annoRegex = new RegExp(`@${annotationName}\\s*\\(`);
+    const annoMatch = annoRegex.exec(processed);
+    if (!annoMatch) return null;
+
+    const parenStart = processed.indexOf('(', annoMatch.index);
+    if (parenStart === -1) return null;
+
+    const parenEnd = findMatchingParen(processed, parenStart);
+    if (parenEnd === -1) return null;
+
+    // Pass 2: content 원본에서 해당 위치의 실제 값을 추출
+    const originalInner = content.substring(parenStart + 1, parenEnd).trim();
+    if (!originalInner) return null;
+
+    // "attributeName = "value"" 패턴
+    const attrRegex = new RegExp(`${attributeName}\\s*=\\s*"([^"]*)"`, 'i');
+    const attrMatch = originalInner.match(attrRegex);
+    if (attrMatch) return attrMatch[1];
+
+    // 배열 형태: attributeName = {"value1", "value2"} → 첫 번째 값
+    const arrayAttrRegex = new RegExp(`${attributeName}\\s*=\\s*\\{\\s*"([^"]*)"`, 'i');
+    const arrayAttrMatch = originalInner.match(arrayAttrRegex);
+    if (arrayAttrMatch) return arrayAttrMatch[1];
+
+    // name 속성이 유일한 경우 value로 간주: @Table("orders")
+    if (attributeName === 'name' || attributeName === 'value') {
+      // 직접 문자열 값만 있는 경우: @Table("orders")
+      const directMatch = originalInner.match(/^"([^"]*)"$/);
+      if (directMatch) return directMatch[1];
+
+      // value = "xxx" 패턴
+      const valueMatch = originalInner.match(/value\s*=\s*"([^"]*)"/);
+      if (valueMatch) return valueMatch[1];
+
+      // 첫 번째 인자가 문자열인 경우 (다른 속성이 없을 때)
+      if (!originalInner.includes('=')) {
+        const firstArgMatch = originalInner.match(/^"([^"]*)"/);
+        if (firstArgMatch) return firstArgMatch[1];
+      }
+    }
+
+    return null;
+  } catch (err) {
+    logger.debug(`Failed to parse annotation attribute: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+// ============================================================
 // 텍스트 파싱 헬퍼
 // ============================================================
 

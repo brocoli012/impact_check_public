@@ -53,6 +53,7 @@ function createMockCodeIndex(overrides?: Partial<CodeIndex['meta']>): CodeIndex 
     components: [],
     apis: [],
     models: [],
+    events: [],
     policies: [{ id: 'p1', name: 'test', description: 'test', source: 'manual' as const, sourceText: '', filePath: '', lineNumber: 0, category: 'business', relatedComponents: [], relatedApis: [], relatedModules: [], extractedAt: '2025-01-01T00:00:00Z' }],
     dependencies: { graph: { nodes: [], edges: [] } },
   };

@@ -36,6 +36,20 @@ export declare class JavaParser extends BaseParser {
      */
     private extractAnnotationBlockBefore;
     private parseDIPatterns;
+    /**
+     * JPA 엔티티 클래스에서 모델 정보를 추출
+     * @Table(name=...) → tableName, @Column(name=...) → columnName,
+     * @Id → isPrimaryKey, @ManyToOne 등 → isRelation
+     */
+    private parseEntityModels;
+    /**
+     * 이벤트 발행/구독 패턴을 감지하여 EventInfo를 추출
+     */
+    private parseEventPatterns;
+    /**
+     * 주어진 오프셋을 포함하는 메서드 이름을 찾기
+     */
+    private findEnclosingMethod;
     private extractComments;
     private parseMethodParams;
     /**

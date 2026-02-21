@@ -252,6 +252,7 @@ describe('Indexer.getChangedFiles()', () => {
         components: [],
         apis: [],
         models: [],
+        events: [],
         policies: [],
         dependencies: { graph: { nodes: [], edges: [] } },
       });
@@ -275,6 +276,7 @@ describe('Indexer.getChangedFiles()', () => {
         components: [],
         apis: [],
         models: [],
+        events: [],
         policies: [],
         dependencies: { graph: { nodes: [], edges: [] } },
       });

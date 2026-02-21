@@ -45,6 +45,9 @@ export declare class KotlinParser extends BaseParser {
     private parsePrimaryConstructorDI;
     private parsePropertyInjection;
     private parseDataClassFields;
+    private parseEntityModels;
+    private parseEventPatterns;
+    private findEnclosingFunction;
     private extractComments;
     private parseKotlinParams;
     private estimateMethodEndLine;

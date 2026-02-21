@@ -105,6 +105,7 @@ function createTestCodeIndex(overrides?: Partial<CodeIndex>): CodeIndex {
       },
     ],
     models: [],
+    events: [],
     policies: [
       {
         id: 'policy-1',
@@ -300,6 +301,7 @@ describe('index-summarizer', () => {
         components: [],
         apis: [],
         models: [],
+        events: [],
         policies: [],
         dependencies: { graph: { nodes: [], edges: [] } },
       });

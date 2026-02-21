@@ -221,6 +221,8 @@ class Indexer {
         const components = [];
         const apiEndpoints = [];
         const screens = [];
+        const collectedModels = [];
+        const collectedEvents = [];
         let compCounter = 0;
         let apiCounter = 0;
         let screenCounter = 0;
@@ -292,6 +294,14 @@ class Indexer {
                     },
                 });
             }
+            // 모델 수집
+            if (parsed.models && parsed.models.length > 0) {
+                collectedModels.push(...parsed.models);
+            }
+            // 이벤트 수집
+            if (parsed.events && parsed.events.length > 0) {
+                collectedEvents.push(...parsed.events);
+            }
             // 그래프 노드 등록
             this.graphBuilder.addNode(parsed);
             // 정책 추출용 경량 참조 보존 (filePath + comments만)
@@ -356,8 +366,9 @@ class Indexer {
                 screens: screens.length,
                 components: components.length,
                 apiEndpoints: apiEndpoints.length,
-                models: 0,
+                models: collectedModels.length,
                 modules: dependencyGraph.graph.nodes.filter(n => n.type === 'module').length,
+                events: collectedEvents.length,
             },
         };
         const codeIndex = {
@@ -366,7 +377,8 @@ class Indexer {
             screens,
             components,
             apis: apiEndpoints,
-            models: [],
+            models: collectedModels,
+            events: collectedEvents,
             policies: allPolicies,
             dependencies: dependencyGraph,
         };
@@ -507,6 +519,7 @@ class Indexer {
                 apiEndpoints: updatedApis.length,
                 models: existingIndex.models.length,
                 modules: dependencyGraph.graph.nodes.filter(n => n.type === 'module').length,
+                events: (existingIndex.events || []).length,
             },
         };
         const updatedIndex = {
@@ -516,6 +529,7 @@ class Indexer {
             components: updatedComponents,
             apis: updatedApis,
             models: existingIndex.models,
+            events: existingIndex.events || [],
             policies: allPolicies,
             dependencies: dependencyGraph,
         };
@@ -578,6 +592,7 @@ class Indexer {
         (0, file_1.writeJsonFile)(path.join(indexDir, 'components.json'), index.components);
         (0, file_1.writeJsonFile)(path.join(indexDir, 'apis.json'), index.apis);
         (0, file_1.writeJsonFile)(path.join(indexDir, 'models.json'), index.models);
+        (0, file_1.writeJsonFile)(path.join(indexDir, 'events.json'), index.events);
         (0, file_1.writeJsonFile)(path.join(indexDir, 'policies.json'), index.policies);
         (0, file_1.writeJsonFile)(path.join(indexDir, 'dependencies.json'), index.dependencies);
         logger_1.logger.info(`Index saved to: ${indexDir}`);
@@ -602,6 +617,7 @@ class Indexer {
             const components = (0, file_1.readJsonFile)(path.join(indexDir, 'components.json'));
             const apis = (0, file_1.readJsonFile)(path.join(indexDir, 'apis.json'));
             const models = (0, file_1.readJsonFile)(path.join(indexDir, 'models.json'));
+            const events = (0, file_1.readJsonFile)(path.join(indexDir, 'events.json'));
             const policies = (0, file_1.readJsonFile)(path.join(indexDir, 'policies.json'));
             const dependencies = (0, file_1.readJsonFile)(path.join(indexDir, 'dependencies.json'));
             if (!meta) {
@@ -614,6 +630,7 @@ class Indexer {
                 components: components || [],
                 apis: apis || [],
                 models: models || [],
+                events: events || [],
                 policies: policies || [],
                 dependencies: dependencies || { graph: { nodes: [], edges: [] } },
             };
