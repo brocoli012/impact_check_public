@@ -13,6 +13,9 @@ import { useFlowStore } from '../stores/flowStore';
 import ProjectCard from '../components/projects/ProjectCard';
 import CrossProjectDiagram, { type ProjectLink } from '../components/cross-project/CrossProjectDiagram';
 import CrossProjectSummary, { type ProjectGroup } from '../components/cross-project/CrossProjectSummary';
+import SharedEntityMap from '../components/cross-project/SharedEntityMap';
+import ReverseSearch from '../components/cross-project/ReverseSearch';
+import { useSharedEntityStore } from '../stores/sharedEntityStore';
 
 function ProjectHub() {
   const navigate = useNavigate();
@@ -31,11 +34,19 @@ function ProjectHub() {
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const [groups, setGroups] = useState<ProjectGroup[]>([]);
 
+  // 공유 엔티티 스토어
+  const {
+    tables: sharedTables,
+    events: sharedEvents,
+    fetchSharedEntities,
+  } = useSharedEntityStore();
+
   // 초기 로드
   useEffect(() => {
     fetchProjects();
     fetchCrossProjectData();
-  }, [fetchProjects]);
+    fetchSharedEntities();
+  }, [fetchProjects, fetchSharedEntities]);
 
   /** 크로스 프로젝트 데이터 로드 */
   const fetchCrossProjectData = useCallback(async () => {
@@ -208,6 +219,23 @@ function ProjectHub() {
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">크로스 프로젝트 현황</h3>
             <CrossProjectSummary links={links} groups={groups} />
+          </div>
+        </div>
+      )}
+
+      {/* 공유 엔티티/이벤트 섹션 */}
+      {(sharedTables.length > 0 || sharedEvents.length > 0) && (
+        <div className="space-y-4 mt-8">
+          <h3 className="text-lg font-bold text-gray-900">공유 엔티티 & 이벤트</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">공유 엔티티 맵</h4>
+              <SharedEntityMap tables={sharedTables} events={sharedEvents} />
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">역추적 검색</h4>
+              <ReverseSearch />
+            </div>
           </div>
         </div>
       )}

@@ -11,6 +11,8 @@ import ModuleNode from './ModuleNode';
 import CheckNode from './CheckNode';
 import PolicyNode from './PolicyNode';
 import PolicyWarningNode from './PolicyWarningNode';
+import EntityNode from './EntityNode';
+import EventNode from './EventNode';
 import CustomEdge from './CustomEdge';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -25,6 +27,8 @@ export const nodeTypes = {
   check: CheckNode as any,
   policy: PolicyNode as any,
   policyWarning: PolicyWarningNode as any,
+  entityNode: EntityNode as any,
+  eventNode: EventNode as any,
 };
 
 /** React Flow에 등록할 커스텀 엣지 타입 맵 */

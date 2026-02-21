@@ -78,6 +78,23 @@ export interface PolicyWarningNodeData {
   [key: string]: unknown;
 }
 
+/** 엔티티(테이블) 노드 데이터 */
+export interface EntityNodeData {
+  label: string;
+  projects: string[];
+  fieldCount?: number;
+  isShared: boolean;
+  [key: string]: unknown;
+}
+
+/** 이벤트 노드 데이터 */
+export interface EventNodeData {
+  label: string;
+  publishers: string[];
+  subscribers: string[];
+  [key: string]: unknown;
+}
+
 /** 모든 노드 데이터 유니온 */
 export type FlowNodeData =
   | RequirementNodeData
@@ -87,7 +104,9 @@ export type FlowNodeData =
   | ModuleNodeData
   | CheckNodeData
   | PolicyNodeData
-  | PolicyWarningNodeData;
+  | PolicyWarningNodeData
+  | EntityNodeData
+  | EventNodeData;
 
 /** 엣지 유형 */
 export type EdgeType = 'normal' | 'strong' | 'weak';

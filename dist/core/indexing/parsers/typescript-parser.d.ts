@@ -4,6 +4,7 @@
  */
 import { BaseParser } from './base-parser';
 import { ParsedFile } from '../types';
+import { EventInfo } from '../../../types/index';
 /**
  * TypeScriptParser - TypeScript/JavaScript 파일을 SWC로 파싱하여 구조화된 정보 추출
  *
@@ -119,6 +120,19 @@ export declare class TypeScriptParser extends BaseParser {
      * TypeORM @Entity() 데코레이터를 감지하여 ModelInfo를 생성
      */
     private detectTypeOrmEntity;
+    /**
+     * TS/Node.js 이벤트 패턴을 감지하여 EventInfo를 추출
+     *
+     * 감지 패턴:
+     *   - EventEmitter: .emit('eventName'), .on('eventName'), .once('eventName'), .addListener('eventName')
+     *   - RxJS: new Subject<T>(), subject.next(), observable.subscribe()
+     *   - Custom pub/sub: .publish('topic'), .dispatch('action'), .trigger('event')
+     */
+    parseEventPatterns(filePath: string, content: string): EventInfo[];
+    /**
+     * 주어진 라인이 속한 함수/메서드 이름을 찾는 간단한 휴리스틱
+     */
+    private findEnclosingFunctionName;
     /**
      * Span에서 라인 번호 계산
      * SWC의 누적 span offset을 보정하기 위해 spanBaseOffset을 차감

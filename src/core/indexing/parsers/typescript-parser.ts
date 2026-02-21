@@ -35,7 +35,7 @@ import type {
 } from '@swc/core';
 import { BaseParser } from './base-parser';
 import { ParsedFile, FunctionInfo } from '../types';
-import { ModelInfo, ModelField } from '../../../types/index';
+import { ModelInfo, ModelField, EventInfo } from '../../../types/index';
 import { camelToSnakeCase } from './jvm-parser-utils';
 import { logger } from '../../../utils/logger';
 
@@ -117,6 +117,13 @@ export class TypeScriptParser extends BaseParser {
 
       // React 컴포넌트 판별 (함수 중 JSX를 반환하는 것)
       this.detectReactComponents(ast, result);
+
+      // TS/Node.js 이벤트 패턴 감지
+      const detectedEvents = this.parseEventPatterns(filePath, content);
+      if (detectedEvents.length > 0) {
+        if (!result.events) result.events = [];
+        result.events.push(...detectedEvents);
+      }
 
     } catch (err) {
       logger.debug(`Failed to parse ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
@@ -939,6 +946,166 @@ export class TypeScriptParser extends BaseParser {
       result.models = [];
     }
     result.models.push(model);
+  }
+
+  // ============================================================
+  // TS/Node.js Event Pattern Detection
+  // ============================================================
+
+  /**
+   * TS/Node.js 이벤트 패턴을 감지하여 EventInfo를 추출
+   *
+   * 감지 패턴:
+   *   - EventEmitter: .emit('eventName'), .on('eventName'), .once('eventName'), .addListener('eventName')
+   *   - RxJS: new Subject<T>(), subject.next(), observable.subscribe()
+   *   - Custom pub/sub: .publish('topic'), .dispatch('action'), .trigger('event')
+   */
+  parseEventPatterns(filePath: string, content: string): EventInfo[] {
+    const events: EventInfo[] = [];
+    const lines = content.split('\n');
+    let eventCounter = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // Skip comments and empty lines
+      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*') || !trimmed) continue;
+
+      // 1. EventEmitter patterns: .emit('eventName')
+      const emitMatch = trimmed.match(/\.emit\(\s*['"`]([^'"`]+)['"`]/);
+      if (emitMatch) {
+        eventCounter++;
+        events.push({
+          id: `event-${filePath}-emit-${eventCounter}`,
+          name: emitMatch[1],
+          type: 'node-event',
+          role: 'publisher',
+          filePath,
+          handler: this.findEnclosingFunctionName(lines, i) || '<module>',
+          line: i + 1,
+        });
+      }
+
+      // 2. EventEmitter subscriber: .on('eventName'), .once('eventName'), .addListener('eventName')
+      const onMatch = trimmed.match(/\.(on|once|addListener)\(\s*['"`]([^'"`]+)['"`]/);
+      if (onMatch) {
+        eventCounter++;
+        events.push({
+          id: `event-${filePath}-on-${eventCounter}`,
+          name: onMatch[2],
+          type: 'node-event',
+          role: 'subscriber',
+          filePath,
+          handler: this.findEnclosingFunctionName(lines, i) || '<module>',
+          line: i + 1,
+        });
+      }
+
+      // 3. RxJS Subject.next() - publisher
+      const nextMatch = trimmed.match(/(\w+)\.(next)\(/);
+      if (nextMatch && !trimmed.includes('// ignore-event')) {
+        // Heuristic: check if the variable was declared as a Subject
+        const varName = nextMatch[1];
+        const subjectPattern = new RegExp(`(new\\s+(?:Subject|BehaviorSubject|ReplaySubject|AsyncSubject))|${varName}\\s*[:=].*Subject`);
+        const isSubject = lines.slice(Math.max(0, i - 50), i).some(l => subjectPattern.test(l));
+        if (isSubject) {
+          eventCounter++;
+          events.push({
+            id: `event-${filePath}-rxjs-pub-${eventCounter}`,
+            name: varName,
+            type: 'custom',
+            role: 'publisher',
+            filePath,
+            handler: this.findEnclosingFunctionName(lines, i) || '<module>',
+            line: i + 1,
+          });
+        }
+      }
+
+      // 4. Custom pub/sub patterns: .publish(), .dispatch(), .trigger()
+      const customPubMatch = trimmed.match(/\.(publish|dispatch|trigger)\(\s*['"`]([^'"`]+)['"`]/);
+      if (customPubMatch) {
+        eventCounter++;
+        events.push({
+          id: `event-${filePath}-custom-pub-${eventCounter}`,
+          name: customPubMatch[2],
+          topic: customPubMatch[2],
+          type: 'custom',
+          role: 'publisher',
+          filePath,
+          handler: this.findEnclosingFunctionName(lines, i) || '<module>',
+          line: i + 1,
+        });
+      }
+
+      // 5. Custom subscribe patterns: .subscribe('topic'), .listen('topic')
+      // Check BEFORE RxJS subscribe since string-arg subscribe is custom pub/sub
+      const customSubMatch = trimmed.match(/\.(subscribe|listen)\(\s*['"`]([^'"`]+)['"`]/);
+      if (customSubMatch) {
+        eventCounter++;
+        events.push({
+          id: `event-${filePath}-custom-sub-${eventCounter}`,
+          name: customSubMatch[2],
+          topic: customSubMatch[2],
+          type: 'custom',
+          role: 'subscriber',
+          filePath,
+          handler: this.findEnclosingFunctionName(lines, i) || '<module>',
+          line: i + 1,
+        });
+      }
+
+      // 6. RxJS .subscribe() without string arg - subscriber
+      if (!customSubMatch) {
+        const subscribeMatch = trimmed.match(/(\w+)\.(subscribe)\(/);
+        if (subscribeMatch) {
+          const varName = subscribeMatch[1];
+          // Heuristic: check if it's an Observable/Subject
+          const observablePattern = new RegExp(`(Observable|Subject|BehaviorSubject|ReplaySubject|pipe|from|of)|(${varName}\\s*[:=])`);
+          const isObservable = lines.slice(Math.max(0, i - 50), i + 1).some(l => observablePattern.test(l));
+          if (isObservable) {
+            eventCounter++;
+            events.push({
+              id: `event-${filePath}-rxjs-sub-${eventCounter}`,
+              name: varName,
+              type: 'custom',
+              role: 'subscriber',
+              filePath,
+              handler: this.findEnclosingFunctionName(lines, i) || '<module>',
+              line: i + 1,
+            });
+          }
+        }
+      }
+    }
+
+    return events;
+  }
+
+  /**
+   * 주어진 라인이 속한 함수/메서드 이름을 찾는 간단한 휴리스틱
+   */
+  private findEnclosingFunctionName(lines: string[], lineIndex: number): string | null {
+    // 위로 올라가며 function/method 선언 찾기
+    for (let i = lineIndex; i >= Math.max(0, lineIndex - 30); i--) {
+      const line = lines[i].trim();
+
+      // function declaration
+      const funcMatch = line.match(/(?:async\s+)?function\s+(\w+)/);
+      if (funcMatch) return funcMatch[1];
+
+      // arrow function / const assignment
+      const arrowMatch = line.match(/(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(/);
+      if (arrowMatch) return arrowMatch[1];
+
+      // class method
+      const methodMatch = line.match(/(?:async\s+)?(\w+)\s*\([^)]*\)\s*[:{]/);
+      if (methodMatch && !['if', 'for', 'while', 'switch', 'catch', 'else'].includes(methodMatch[1])) {
+        return methodMatch[1];
+      }
+    }
+    return null;
   }
 
   // ============================================================

@@ -55,6 +55,7 @@ const annotation_loader_1 = require("../core/annotations/annotation-loader");
 const annotation_manager_1 = require("../core/annotations/annotation-manager");
 const policy_converter_1 = require("../core/annotations/policy-converter");
 const cross_project_manager_1 = require("../core/cross-project/cross-project-manager");
+const shared_entity_indexer_1 = require("../core/cross-project/shared-entity-indexer");
 const logger_1 = require("../utils/logger");
 const file_1 = require("../utils/file");
 /** Express 라우트 파라미터에서 안전하게 문자열을 추출 */
@@ -850,6 +851,152 @@ function createApp(basePath) {
         catch (error) {
             logger_1.logger.error('Failed to get cross-project groups:', error);
             res.status(500).json({ error: 'Failed to get cross-project groups' });
+        }
+    });
+    // ============================================================
+    // 공유 엔티티 역추적 (Reverse Tracking) API 엔드포인트
+    // ============================================================
+    const sharedEntityIndexer = new shared_entity_indexer_1.SharedEntityIndexer();
+    /**
+     * 프로젝트 인덱스 맵 로드 (역추적 API용)
+     * projects.json에 등록된 모든 프로젝트의 CodeIndex를 로드
+     */
+    async function loadProjectIndexMap() {
+        const projectsPath = path.join(impactBase, '.impact', 'projects.json');
+        const projectsConfig = (0, file_1.readJsonFile)(projectsPath);
+        const projectIndexMap = new Map();
+        if (!projectsConfig?.projects)
+            return projectIndexMap;
+        for (const project of projectsConfig.projects) {
+            try {
+                const index = await indexer.loadIndex(project.id, basePath);
+                if (index) {
+                    projectIndexMap.set(project.id, index);
+                }
+            }
+            catch {
+                // 인덱스 로드 실패는 무시
+            }
+        }
+        return projectIndexMap;
+    }
+    /**
+     * GET /api/reverse/table/:name - 특정 테이블을 참조하는 프로젝트 조회
+     */
+    app.get('/api/reverse/table/:name', async (req, res) => {
+        try {
+            const tableName = getParam(req.params, 'name');
+            if (!tableName) {
+                res.status(400).json({ error: 'Table name is required' });
+                return;
+            }
+            const projectIndexMap = await loadProjectIndexMap();
+            const sharedIndex = sharedEntityIndexer.build(projectIndexMap);
+            const refs = sharedEntityIndexer.findProjectsByTable(sharedIndex, tableName);
+            const isShared = new Set(refs.map(r => r.projectId)).size >= 2;
+            res.json({
+                tableName,
+                references: refs,
+                total: refs.length,
+                isShared,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to reverse lookup table:`, error);
+            res.status(500).json({ error: 'Failed to reverse lookup table' });
+        }
+    });
+    /**
+     * GET /api/reverse/event/:name - 특정 이벤트를 참조하는 프로젝트 조회
+     */
+    app.get('/api/reverse/event/:name', async (req, res) => {
+        try {
+            const eventName = getParam(req.params, 'name');
+            if (!eventName) {
+                res.status(400).json({ error: 'Event name is required' });
+                return;
+            }
+            const projectIndexMap = await loadProjectIndexMap();
+            const sharedIndex = sharedEntityIndexer.build(projectIndexMap);
+            const refs = sharedEntityIndexer.findProjectsByEvent(sharedIndex, eventName);
+            const publishers = refs.filter(r => r.role === 'publisher');
+            const subscribers = refs.filter(r => r.role === 'subscriber');
+            res.json({
+                eventName,
+                references: refs,
+                publishers,
+                subscribers,
+                total: refs.length,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to reverse lookup event:`, error);
+            res.status(500).json({ error: 'Failed to reverse lookup event' });
+        }
+    });
+    /**
+     * GET /api/reverse/search?q= - 키워드로 테이블/이벤트 검색
+     */
+    app.get('/api/reverse/search', async (req, res) => {
+        try {
+            const query = req.query.q || '';
+            if (!query.trim()) {
+                res.status(400).json({ error: 'Search query (q) is required' });
+                return;
+            }
+            const projectIndexMap = await loadProjectIndexMap();
+            const sharedIndex = sharedEntityIndexer.build(projectIndexMap);
+            const results = sharedEntityIndexer.search(sharedIndex, query.trim());
+            res.json({
+                query: query.trim(),
+                tables: results.tables,
+                events: results.events,
+                totalTables: results.tables.length,
+                totalEvents: results.events.length,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to search reverse index:`, error);
+            res.status(500).json({ error: 'Failed to search reverse index' });
+        }
+    });
+    /**
+     * GET /api/shared-entities - 공유 테이블/이벤트 요약 정보
+     */
+    app.get('/api/shared-entities', async (_req, res) => {
+        try {
+            const projectIndexMap = await loadProjectIndexMap();
+            const sharedIndex = sharedEntityIndexer.build(projectIndexMap);
+            const sharedTables = sharedEntityIndexer.getSharedTables(sharedIndex);
+            const sharedEvents = sharedEntityIndexer.getSharedEvents(sharedIndex);
+            // 테이블 요약
+            const tables = Object.entries(sharedTables).map(([name, refs]) => ({
+                name,
+                projects: [...new Set(refs.map(r => r.projectId))],
+                referenceCount: refs.length,
+            }));
+            // 이벤트 요약
+            const events = Object.entries(sharedEvents).map(([name, refs]) => ({
+                name,
+                publishers: refs.filter(r => r.role === 'publisher').map(r => r.projectId),
+                subscribers: refs.filter(r => r.role === 'subscriber').map(r => r.projectId),
+                referenceCount: refs.length,
+            }));
+            res.json({
+                tables,
+                events,
+                stats: {
+                    totalTables: Object.keys(sharedIndex.tables).length,
+                    sharedTables: tables.length,
+                    totalEvents: Object.keys(sharedIndex.events).length,
+                    sharedEvents: events.length,
+                    projectCount: projectIndexMap.size,
+                },
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get shared entities:', error);
+            res.status(500).json({ error: 'Failed to get shared entities' });
         }
     });
     // ============================================================
