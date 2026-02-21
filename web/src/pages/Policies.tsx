@@ -25,6 +25,7 @@ function Policies() {
     selectedSource,
     selectedRequirement,
     loading,
+    loadingDetail,
     loadingMore,
     hasMore,
     error,
@@ -229,6 +230,16 @@ function Policies() {
           </div>
 
           {/* Right: Selected policy detail panel */}
+          {loadingDetail && !selectedPolicy && (
+            <div className="w-96 shrink-0">
+              <div className="bg-white rounded-lg border border-gray-200 p-5 sticky top-20">
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500 ml-2">정책 상세를 불러오는 중...</p>
+                </div>
+              </div>
+            </div>
+          )}
           {selectedPolicy && (
             <PolicyDetail
               policy={selectedPolicy}

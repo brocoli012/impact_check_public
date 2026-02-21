@@ -75,6 +75,7 @@ function setupDefaultState() {
     selectedSource: null,
     selectedRequirement: null,
     loading: false,
+    loadingDetail: false,
     loadingMore: false,
     error: null,
     totalCount: mockPolicies.length,

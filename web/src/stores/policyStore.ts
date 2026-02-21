@@ -29,6 +29,8 @@ interface PolicyState {
   selectedRequirement: string | null;
   /** 로딩 상태 */
   loading: boolean;
+  /** 상세 조회 로딩 상태 */
+  loadingDetail: boolean;
   /** 추가 로딩 상태 (더 불러오기) */
   loadingMore: boolean;
   /** 에러 메시지 */
@@ -80,6 +82,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   selectedSource: null,
   selectedRequirement: null,
   loading: false,
+  loadingDetail: false,
   loadingMore: false,
   error: null,
   totalCount: 0,
@@ -150,7 +153,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   },
 
   fetchPolicyDetail: async (projectId: string, policyId: string) => {
-    set({ loading: true, error: null });
+    set({ loadingDetail: true, error: null });
     try {
       const response = await fetch(`/api/policies/${policyId}?projectId=${projectId}`);
       const data = await response.json();
@@ -167,14 +170,14 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
           // 보강 주석 데이터
           annotation: data.annotation || null,
         };
-        set({ selectedPolicy: policyDetail, loading: false });
+        set({ selectedPolicy: policyDetail, loadingDetail: false });
       } else {
         throw new Error(data.error || '정책을 찾을 수 없습니다.');
       }
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : '정책 상세를 불러올 수 없습니다.',
-        loading: false,
+        loadingDetail: false,
       });
     }
   },
@@ -198,6 +201,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
     selectedSource: null,
     selectedRequirement: null,
     loading: false,
+    loadingDetail: false,
     loadingMore: false,
     error: null,
     totalCount: 0,

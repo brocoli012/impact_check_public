@@ -65,6 +65,7 @@ describe('policyStore', () => {
       selectedSource: null,
       selectedRequirement: null,
       loading: false,
+      loadingDetail: false,
       loadingMore: false,
       error: null,
       totalCount: 0,
@@ -83,6 +84,7 @@ describe('policyStore', () => {
     expect(state.selectedCategory).toBeNull();
     expect(state.selectedRequirement).toBeNull();
     expect(state.loading).toBe(false);
+    expect(state.loadingDetail).toBe(false);
     expect(state.error).toBeNull();
   });
 
@@ -140,7 +142,7 @@ describe('policyStore', () => {
       ...mockPolicyDetail,
       annotation: null,
     });
-    expect(state.loading).toBe(false);
+    expect(state.loadingDetail).toBe(false);
   });
 
   it('should handle fetch policy detail error', async () => {

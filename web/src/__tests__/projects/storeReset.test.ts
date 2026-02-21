@@ -55,6 +55,7 @@ describe('Store reset() methods (TASK-076)', () => {
         selectedCategory: 'cat1',
         selectedSource: 'annotation',
         loading: true,
+        loadingDetail: true,
         error: 'err',
         totalCount: 10,
         hasMore: true,
@@ -75,6 +76,7 @@ describe('Store reset() methods (TASK-076)', () => {
       expect(state.selectedRequirement).toBeNull();
       expect(state.loading).toBe(false);
       expect(state.loadingMore).toBe(false);
+      expect(state.loadingDetail).toBe(false);
       expect(state.error).toBeNull();
       expect(state.totalCount).toBe(0);
       expect(state.hasMore).toBe(false);
