@@ -42,18 +42,18 @@ function Policies() {
   // 마운트 시 항상 정책 목록 로드 (탭 전환 후 복귀 시에도 동작)
   const mountedRef = useRef(false);
   useEffect(() => {
-    const projectId = activeProjectId || currentResult?.analysisId;
+    const projectId = activeProjectId;
     fetchPolicies(projectId || undefined);
     mountedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // currentResult 또는 activeProjectId 변경 시 재조회
+  // activeProjectId 변경 시 재조회
   useEffect(() => {
     if (!mountedRef.current) return; // 초기 마운트는 위 effect에서 처리
-    const projectId = activeProjectId || currentResult?.analysisId;
+    const projectId = activeProjectId;
     fetchPolicies(projectId || undefined);
-  }, [currentResult, activeProjectId, fetchPolicies]);
+  }, [activeProjectId, fetchPolicies]);
 
   // InfiniteScroll 설정
   const handleLoadMore = useCallback(() => {
@@ -138,7 +138,7 @@ function Policies() {
   }, [policies, selectedRequirement, tasks, selectedCategory, selectedSource, searchQuery]);
 
   const handlePolicyClick = (policyId: string) => {
-    const projectId = currentResult?.analysisId || activeProjectId || useProjectStore.getState().activeProjectId;
+    const projectId = activeProjectId || useProjectStore.getState().activeProjectId;
     if (projectId) {
       fetchPolicyDetail(projectId, policyId);
     }
