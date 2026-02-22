@@ -75,6 +75,7 @@ function setupDefaultState() {
     selectedSource: null,
     selectedRequirement: null,
     loading: false,
+    initialLoaded: true,
     loadingDetail: false,
     loadingMore: false,
     error: null,
@@ -198,13 +199,27 @@ describe('Policies', () => {
     });
   });
 
-  it('should show loading state', () => {
-    usePolicyStore.setState({ loading: true });
+  it('should show loading state only during initial load (no policies)', () => {
+    // BUG-005: 초기 로딩(데이터 없음)일 때만 스피너 표시
+    // fetch가 절대 완료되지 않도록 설정하여 loading 상태를 유지
+    vi.mocked(fetch).mockReturnValue(new Promise(() => {}));
+    usePolicyStore.setState({ loading: true, policies: [], totalCount: 0, initialLoaded: false });
 
     // Don't use renderAndWait since we want to test the loading state
     renderWithRouter(<Policies />);
 
     expect(screen.getByText('정책 목록을 불러오는 중...')).toBeInTheDocument();
+  });
+
+  it('should NOT show loading spinner when refetching with existing data', () => {
+    // BUG-005: 데이터가 이미 있는 상태에서 재조회 시 스피너를 표시하지 않음
+    usePolicyStore.setState({ loading: true }); // policies는 setupDefaultState에서 설정됨
+
+    renderWithRouter(<Policies />);
+
+    // 스피너 대신 기존 데이터가 보여야 함
+    expect(screen.queryByText('정책 목록을 불러오는 중...')).not.toBeInTheDocument();
+    expect(screen.getByText('장바구니 수량 제한')).toBeInTheDocument();
   });
 
   it('should show error banner', async () => {

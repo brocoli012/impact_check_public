@@ -29,6 +29,7 @@ function Policies() {
     loadingDetail,
     loadingMore,
     hasMore,
+    totalCount,
     error,
     fetchPolicies,
     fetchMorePolicies,
@@ -170,13 +171,13 @@ function Policies() {
       {/* Filter bar */}
       <PolicyFilter
         resultCount={filteredPolicies.length}
-        totalCount={policies.length}
+        totalCount={totalCount}
         requirements={requirements}
         tasks={tasks}
       />
 
-      {/* Loading state */}
-      {loading && (
+      {/* Loading state - 초기 로딩 시에만 표시 (데이터가 있으면 숨김) */}
+      {loading && policies.length === 0 && (
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3" />
@@ -185,8 +186,8 @@ function Policies() {
         </div>
       )}
 
-      {/* Main content area */}
-      {!loading && (
+      {/* Main content area - 데이터가 있으면 로딩 중에도 유지 */}
+      {(!loading || policies.length > 0) && (
         <div className="flex gap-6">
           {/* Left: Policy card list */}
           <div className="flex-1">

@@ -261,6 +261,7 @@ describe('Policies - ProjectSelector', () => {
       selectedSource: null,
       selectedRequirement: null,
       loading: false,
+      initialLoaded: false,
       loadingDetail: false,
       loadingMore: false,
       hasMore: false,

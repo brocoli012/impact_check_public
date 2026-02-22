@@ -29,6 +29,8 @@ interface PolicyState {
   selectedRequirement: string | null;
   /** 로딩 상태 */
   loading: boolean;
+  /** 초기 데이터 로드 완료 여부 (재조회 시 loading 억제용) */
+  initialLoaded: boolean;
   /** 상세 조회 로딩 상태 */
   loadingDetail: boolean;
   /** 추가 로딩 상태 (더 불러오기) */
@@ -82,6 +84,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   selectedSource: null,
   selectedRequirement: null,
   loading: false,
+  initialLoaded: false,
   loadingDetail: false,
   loadingMore: false,
   error: null,
@@ -90,7 +93,9 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   currentOffset: 0,
 
   fetchPolicies: async (projectId?: string) => {
-    set({ loading: true, error: null });
+    const { initialLoaded } = get();
+    // 초기 로드 완료 후 재조회 시에는 loading을 true로 설정하지 않음 (UI 깜빡임 방지)
+    set({ loading: !initialLoaded, error: null });
     try {
       const params = new URLSearchParams();
       // projectId 우선순위: 인자 > activeProjectId
@@ -113,6 +118,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
         hasMore: data.hasMore ?? false,
         currentOffset: policies.length,
         loading: false,
+        initialLoaded: true,
       });
     } catch (error) {
       set({
@@ -206,6 +212,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
     selectedSource: null,
     selectedRequirement: null,
     loading: false,
+    initialLoaded: false,
     loadingDetail: false,
     loadingMore: false,
     error: null,
