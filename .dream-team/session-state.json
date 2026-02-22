@@ -4,7 +4,7 @@
   "projectPath": "/Users/youngilkang/AI_project/Kurly_Impact_Checker",
   "mode": "team",
   "createdAt": "2026-02-13T00:00:00Z",
-  "lastUpdatedAt": "2026-02-21T11:00:00Z",
+  "lastUpdatedAt": "2026-02-22T14:00:00Z",
   "currentAgent": {
     "role": "master",
     "allowedTools": [
@@ -32,7 +32,9 @@
         "REQ-010",
         "REQ-011",
         "REQ-012",
-        "REQ-013"
+        "REQ-013",
+        "REQ-014",
+        "REQ-015"
       ]
     }
   ],
@@ -148,7 +150,7 @@
       "id": "REQ-013",
       "type": "REQ",
       "title": "크로스 프로젝트 공유 엔티티 영향 추적 + 이벤트 발행/구독",
-      "status": "ready",
+      "status": "done",
       "priority": "HIGH",
       "epic": "EPIC-001",
       "tasks": "TASK-084~112",
@@ -158,6 +160,31 @@
       "estimatedDays": 30,
       "dependsOn": ["REQ-012"],
       "note": "Phase A/B는 REQ-012와 독립 병렬 가능, Phase C/D는 REQ-012 P1 완료 필요"
+    },
+    {
+      "id": "REQ-014",
+      "type": "REQ",
+      "title": "UI/UX 프로젝트 중심 구조 개편",
+      "status": "done",
+      "priority": "HIGH",
+      "epic": "EPIC-001",
+      "tasks": "TASK-113~151",
+      "points": 160,
+      "complexity": "8/10",
+      "phases": 9
+    },
+    {
+      "id": "REQ-015",
+      "type": "REQ",
+      "title": "크로스 프로젝트 자동 영향도 분석 + 상태값 체계",
+      "status": "planned",
+      "priority": "HIGH",
+      "epic": "EPIC-001",
+      "tasks": "TASK-152~192",
+      "points": 127,
+      "complexity": "7/10",
+      "phases": 7,
+      "dependsOn": ["REQ-014"]
     }
   ],
   "violations": [],
@@ -527,12 +554,62 @@
         "qaResult": "PASS",
         "matchRate": "100%"
       }
+    },
+    {
+      "phase": "REQ-013: 크로스 프로젝트 공유 엔티티 영향 추적",
+      "status": "done",
+      "completedAt": "2026-02-21",
+      "summary": {
+        "modules": [
+          "ModelInfo/EventInfo타입확장",
+          "Java/Kotlin파서EntityEvent",
+          "parseAnnotationAttribute",
+          "TypeScriptORM감지",
+          "IndexerModels/Events파이프라인",
+          "SharedEntityIndexer",
+          "ReverseCommand",
+          "REST API reverse/shared-entities",
+          "TS이벤트패턴감지",
+          "EntityNode/EventNode",
+          "SharedEntityMap",
+          "ReverseSearch",
+          "sharedEntityStore",
+          "ProjectHub통합"
+        ],
+        "tests": 1859,
+        "newTests": 84,
+        "taskCount": "29/29 done (TASK-084~112)",
+        "tpoComplexity": "8/10",
+        "qaResult": "PASS",
+        "matchRate": "100%",
+        "commits": ["1ea20e4 Phase A+B", "1c0eb4d Phase C+D"]
+      }
+    },
+    {
+      "phase": "REQ-014: UI/UX 프로젝트 중심 구조 개편",
+      "status": "done",
+      "completedAt": "2026-02-22",
+      "summary": {
+        "modules": [
+          "ProjectSelector(A/B variant)", "EmptyResultGuide", "useProjectSelector",
+          "ProjectBoard", "ProjectStatusBanner", "AnalysisHistoryTable",
+          "ScoreTrendChart", "PolicySummaryCard", "CompareDrawer/Selector/Table",
+          "LNB 자동제어", "FlowChart 전체 모드"
+        ],
+        "tests": 617,
+        "newTests": 106,
+        "taskCount": "39/39 done (TASK-113~151)",
+        "tpoComplexity": "8/10",
+        "qaResult": "PASS",
+        "matchRate": "100%",
+        "commits": ["9db3ef2"]
+      }
     }
   ],
   "currentPhase": {
-    "phase": "REQ-012 완료, REQ-013 준비",
-    "status": "in_progress",
-    "description": "REQ-012 멀티프로젝트 대시보드 완료. 14 TASK(070~083), 1775 테스트, 커밋 b694556. REQ-013 Phase A 착수 대기."
+    "phase": "REQ-015 계획 수립 완료",
+    "status": "planned",
+    "description": "REQ-015 크로스 프로젝트 자동 영향도 분석 + 상태값 체계. 41 TASK(152~192), 127pts, 7 Phase. 문서 8건 작성 완료. 개발 대기 중."
   },
   "sessionHistory": [
     {
@@ -948,6 +1025,36 @@
       "timestamp": "2026-02-21T11:00:00Z",
       "agent": "master",
       "description": "REQ-012 멀티프로젝트 대시보드 완료 - 14 TASK(070~083), 42pts, 1775테스트(34 신규), 커밋 b694556"
+    },
+    {
+      "action": "req013_phaseAB_complete",
+      "timestamp": "2026-02-21T13:00:00Z",
+      "agent": "developer",
+      "description": "REQ-013 Phase A+B 완료 - JVM 엔티티/이벤트 파서 MVP + 역인덱스 빌더, 30 신규 테스트, 커밋 1ea20e4"
+    },
+    {
+      "action": "req013_complete",
+      "timestamp": "2026-02-21T13:03:00Z",
+      "agent": "master",
+      "description": "REQ-013 크로스 프로젝트 공유 엔티티 영향 추적 완료 - 29 TASK(084~112), 123pts, 1859테스트(84 신규), 커밋 1ea20e4+1c0eb4d"
+    },
+    {
+      "action": "req014_complete",
+      "timestamp": "2026-02-22T10:00:00Z",
+      "agent": "master",
+      "description": "REQ-014 UI/UX 프로젝트 중심 구조 개편 완료 - 39 TASK(113~151), 160pts, 617 웹 테스트, 커밋 9db3ef2"
+    },
+    {
+      "action": "req015_planning",
+      "timestamp": "2026-02-22T12:00:00Z",
+      "agent": "master",
+      "description": "REQ-015 계획 수립 - PM/디자이너/TPO/개발자 피드백 15회×2(원본+상태값 보완). 문서 8건, 41 TASK(152~192), 127pts, 7 Phase."
+    },
+    {
+      "action": "req015_status_supplement",
+      "timestamp": "2026-02-22T13:00:00Z",
+      "agent": "master",
+      "description": "REQ-015 상태값 체계 추가 - 사용자 피드백 반영. AnalysisStatus(active/completed/on-hold/archived), Lazy Migration, 보완분석 active 필터링. 12 신규 TASK 추가."
     }
   ],
   "documents": {
@@ -1062,6 +1169,36 @@
       "status": "Ready",
       "files": 1,
       "path": ".dream-team/docs/roadmap/REQ-011-012-013-implementation-roadmap.md"
+    },
+    "prd_015": {
+      "id": "REQ-015",
+      "status": "Approved",
+      "files": 2,
+      "path": ".dream-team/docs/prd/REQ-015-*.md"
+    },
+    "design_015": {
+      "id": "REQ-015",
+      "status": "Approved",
+      "files": 2,
+      "path": ".dream-team/docs/design/REQ-015-*.md"
+    },
+    "techDesign_015": {
+      "id": "REQ-015",
+      "status": "Approved",
+      "files": 2,
+      "path": ".dream-team/docs/technical/REQ-015-technical-review.md, REQ-015-status-technical-update.md"
+    },
+    "devReview_015": {
+      "id": "REQ-015",
+      "status": "Approved",
+      "files": 2,
+      "path": ".dream-team/docs/technical/REQ-015-dev-review*.md"
+    },
+    "roadmap_015": {
+      "id": "ROADMAP-002",
+      "status": "Ready",
+      "files": 1,
+      "path": ".dream-team/docs/roadmap/REQ-015-implementation-roadmap.md"
     }
   }
 }
