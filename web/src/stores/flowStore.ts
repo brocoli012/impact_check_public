@@ -20,6 +20,9 @@ export interface FlowFilterState {
   requirementFilter: string | null;
 }
 
+/** 프로젝트 모드: 'individual' (개별) | 'all' (전체) */
+export type ProjectMode = 'individual' | 'all';
+
 /** 플로우 스토어 상태 */
 interface FlowState {
   /** 필터 상태 */
@@ -28,6 +31,8 @@ interface FlowState {
   expandedNodeIds: Set<string>;
   /** 선택된 노드 ID */
   selectedNodeId: string | null;
+  /** 프로젝트 모드: 개별 vs 전체 */
+  projectMode: ProjectMode;
 
   /** 필터 설정 */
   setFilter: (update: Partial<FlowFilterState>) => void;
@@ -43,6 +48,8 @@ interface FlowState {
   toggleGradeFilter: (grade: Grade) => void;
   /** 요구사항 필터 설정 */
   setRequirementFilter: (reqId: string | null) => void;
+  /** 프로젝트 모드 설정 */
+  setProjectMode: (mode: ProjectMode) => void;
   /** 데이터 초기화 (프로젝트 전환 시) */
   reset: () => void;
 }
@@ -61,6 +68,7 @@ export const useFlowStore = create<FlowState>((set) => ({
   filter: defaultFilter,
   expandedNodeIds: new Set<string>(),
   selectedNodeId: null,
+  projectMode: 'individual',
 
   setFilter: (update) =>
     set((state) => ({
@@ -99,10 +107,13 @@ export const useFlowStore = create<FlowState>((set) => ({
       filter: { ...state.filter, requirementFilter: reqId },
     })),
 
+  setProjectMode: (mode) => set({ projectMode: mode }),
+
   reset: () =>
     set({
       filter: defaultFilter,
       expandedNodeIds: new Set<string>(),
       selectedNodeId: null,
+      projectMode: 'individual',
     }),
 }));

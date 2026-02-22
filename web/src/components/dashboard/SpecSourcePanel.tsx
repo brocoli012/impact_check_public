@@ -175,9 +175,9 @@ function BusinessRuleRow({ rule }: { rule: WebBusinessRule }) {
         </span>
       </div>
       <p className="text-sm text-gray-700">{rule.description}</p>
-      {rule.relatedFeatureIds.length > 0 && (
+      {rule.relatedFeatures.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
-          {rule.relatedFeatureIds.map((fId) => (
+          {rule.relatedFeatures.map((fId) => (
             <span
               key={fId}
               className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-50 text-purple-600"

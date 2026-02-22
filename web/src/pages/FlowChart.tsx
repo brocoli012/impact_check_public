@@ -3,7 +3,7 @@
  * @description 플로우차트 페이지 - React Flow 캔버스, 필터 바, 미니맵, 줌 컨트롤
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -24,6 +24,9 @@ import { useFlowStore } from '../stores/flowStore';
 import { useResultStore } from '../stores/resultStore';
 import { useEnsureResult } from '../hooks/useEnsureResult';
 import DetailPanel from '../components/layout/DetailPanel';
+import ProjectSelector from '../components/common/ProjectSelector';
+import CrossProjectDiagram, { type ProjectLink } from '../components/cross-project/CrossProjectDiagram';
+import CrossProjectSummary, { type ProjectGroup } from '../components/cross-project/CrossProjectSummary';
 import type { Task } from '../types';
 
 /**
@@ -131,6 +134,51 @@ function FlowChart() {
   const selectedNodeId = useFlowStore((s) => s.selectedNodeId);
   const selectNode = useFlowStore((s) => s.selectNode);
   const toggleExpand = useFlowStore((s) => s.toggleExpand);
+  const projectMode = useFlowStore((s) => s.projectMode);
+  const setProjectMode = useFlowStore((s) => s.setProjectMode);
+
+  // 알럿 배너 상태
+  const [showAlert, setShowAlert] = useState(false);
+
+  // 크로스 프로젝트 데이터
+  const [links, setLinks] = useState<ProjectLink[]>([]);
+  const [groups, setGroups] = useState<ProjectGroup[]>([]);
+
+  // 크로스 프로젝트 데이터 로드 (전체 모드 진입 시)
+  useEffect(() => {
+    if (projectMode === 'all') {
+      (async () => {
+        try {
+          const [linksRes, groupsRes] = await Promise.all([
+            fetch('/api/cross-project/links'),
+            fetch('/api/cross-project/groups'),
+          ]);
+          const linksData = await linksRes.json();
+          const groupsData = await groupsRes.json();
+          setLinks(linksData.links || []);
+          setGroups(groupsData.groups || []);
+        } catch {
+          // 크로스 프로젝트 데이터 로드 실패는 무시
+        }
+      })();
+    }
+  }, [projectMode]);
+
+  /** "전체" 선택 시 유효성 검증 */
+  const handleAllSelected = useCallback(() => {
+    if (!currentResult) {
+      setShowAlert(true);
+      return false;
+    }
+    setProjectMode('all');
+    return true;
+  }, [currentResult, setProjectMode]);
+
+  /** 개별 프로젝트 선택 시 -> individual 모드 복원 */
+  const handleProjectChange = useCallback(() => {
+    setProjectMode('individual');
+    setShowAlert(false);
+  }, [setProjectMode]);
 
   // 요구사항 목록
   const requirements = currentResult?.parsedSpec?.requirements;
@@ -199,16 +247,113 @@ function FlowChart() {
     return nodes.find((n) => n.id === selectedNodeId) ?? null;
   }, [selectedNodeId, nodes]);
 
+  // "전체" 모드 + currentResult 있으면 CrossProjectDiagram 오버레이
+  if (projectMode === 'all' && currentResult) {
+    return (
+      <div className="p-6" data-testid="flowchart-all-mode">
+        <ProjectSelector
+          includeAll
+          onAllSelected={handleAllSelected}
+          selectedAll
+          onProjectSelected={handleProjectChange}
+        />
+
+        <div className="mt-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              전체 프로젝트 영향도 - {currentResult.specTitle}
+            </h3>
+            <CrossProjectDiagram links={links} onNodeClick={() => {}} />
+            <div className="mt-4">
+              <CrossProjectSummary links={links} groups={groups} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentResult) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-400">데이터 로딩 중...</div>
+      <div data-testid="flowchart-individual-mode">
+        <div className="px-4 pt-2">
+          <ProjectSelector
+            includeAll
+            onAllSelected={handleAllSelected}
+            onProjectSelected={handleProjectChange}
+          />
+        </div>
+
+        {/* 알럿 배너 */}
+        {showAlert && (
+          <div
+            data-testid="flowchart-alert-banner"
+            className="mx-4 mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.999L13.732 4.001c-.77-1.333-2.694-1.333-3.464 0L3.34 16.001C2.57 17.335 3.532 19.001 5.072 19.001z" />
+              </svg>
+              <span className="text-sm text-amber-700">
+                전체 프로젝트 영향도를 보려면 먼저 좌측 목록에서 기획서를 선택해주세요.
+              </span>
+            </div>
+            <button
+              data-testid="flowchart-alert-close"
+              onClick={() => setShowAlert(false)}
+              className="text-amber-500 hover:text-amber-700 ml-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-center h-96">
+          <div className="text-gray-400">데이터 로딩 중...</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }} data-testid="flowchart-individual-mode">
+      {/* ProjectSelector */}
+      <div className="px-4 pt-2 pb-1">
+        <ProjectSelector
+          includeAll
+          onAllSelected={handleAllSelected}
+          onProjectSelected={handleProjectChange}
+        />
+      </div>
+
+      {/* 알럿 배너 */}
+      {showAlert && (
+        <div
+          data-testid="flowchart-alert-banner"
+          className="mx-4 mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.999L13.732 4.001c-.77-1.333-2.694-1.333-3.464 0L3.34 16.001C2.57 17.335 3.532 19.001 5.072 19.001z" />
+            </svg>
+            <span className="text-sm text-amber-700">
+              전체 프로젝트 영향도를 보려면 먼저 좌측 목록에서 기획서를 선택해주세요.
+            </span>
+          </div>
+          <button
+            data-testid="flowchart-alert-close"
+            onClick={() => setShowAlert(false)}
+            className="text-amber-500 hover:text-amber-700 ml-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* 필터 바 */}
       <div style={{ marginBottom: 8 }}>
         <FilterBar expandableNodeIds={expandableNodeIds} requirements={requirements} />

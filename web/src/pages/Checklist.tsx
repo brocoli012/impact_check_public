@@ -8,6 +8,8 @@ import { useResultStore } from '../stores/resultStore';
 import { useEnsureResult } from '../hooks/useEnsureResult';
 import { useChecklist } from '../hooks/useChecklist';
 import CategoryGroup from '../components/checklist/CategoryGroup';
+import ProjectSelector from '../components/common/ProjectSelector';
+import EmptyResultGuide from '../components/common/EmptyResultGuide';
 
 function Checklist() {
   useEnsureResult();
@@ -74,14 +76,21 @@ function Checklist() {
 
   if (!currentResult) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-400">데이터 로딩 중...</div>
+      <div className="space-y-6">
+        <ProjectSelector />
+        <EmptyResultGuide
+          icon="checklist"
+          description="기획서를 선택하면 체크리스트를 확인할 수 있습니다."
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* ProjectSelector */}
+      <ProjectSelector />
+
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold text-gray-900">

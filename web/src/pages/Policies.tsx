@@ -12,6 +12,7 @@ import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import PolicyCard from '../components/policies/PolicyCard';
 import PolicyFilter from '../components/policies/PolicyFilter';
 import PolicyDetail from '../components/policies/PolicyDetail';
+import ProjectSelector from '../components/common/ProjectSelector';
 
 function Policies() {
   useLatestResult();
@@ -144,6 +145,9 @@ function Policies() {
 
   return (
     <div className="space-y-6">
+      {/* ProjectSelector */}
+      <ProjectSelector />
+
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold text-gray-900">

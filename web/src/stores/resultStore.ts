@@ -39,6 +39,8 @@ interface ResultState {
 
   /** LNB 토글 */
   toggleLnb: () => void;
+  /** LNB 상태 직접 설정 (라우트 기반 자동 제어용) */
+  setLnbCollapsed: (collapsed: boolean) => void;
   /** 검색어 설정 */
   setSearchQuery: (query: string) => void;
   /** 정렬 옵션 설정 */
@@ -71,6 +73,7 @@ export const useResultStore = create<ResultState>()(
       setError: (error) => set({ error }),
 
       toggleLnb: () => set((s) => ({ lnbCollapsed: !s.lnbCollapsed })),
+      setLnbCollapsed: (collapsed) => set({ lnbCollapsed: collapsed }),
       setSearchQuery: (query) => set({ searchQuery: query }),
       setSortBy: (sort) => set({ sortBy: sort }),
 
@@ -118,7 +121,6 @@ export const useResultStore = create<ResultState>()(
     {
       name: 'result-store',
       partialize: (state) => ({
-        lnbCollapsed: state.lnbCollapsed,
         sortBy: state.sortBy,
       }),
     },

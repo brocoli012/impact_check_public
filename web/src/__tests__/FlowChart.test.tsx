@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import FlowChart from '../pages/FlowChart';
 import { useResultStore } from '../stores/resultStore';
 import { useFlowStore } from '../stores/flowStore';
+import { useProjectStore } from '../stores/projectStore';
 import { getMockResult } from '../utils/mockData';
 import { transformToFlow } from '../utils/flowTransformer';
 
@@ -19,6 +20,29 @@ function renderWithRouter(ui: React.ReactElement) {
 
 describe('FlowChart Page', () => {
   beforeEach(() => {
+    // 프로젝트 스토어 초기화 (ProjectSelector용)
+    useProjectStore.setState({
+      projects: [
+        {
+          id: 'proj-1',
+          name: 'Test Project',
+          path: '/test',
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00Z',
+          lastUsedAt: '2026-02-20T00:00:00Z',
+          techStack: ['React'],
+          resultCount: 1,
+          latestGrade: 'Medium',
+          latestScore: 50,
+          latestAnalyzedAt: '2026-02-20T00:00:00Z',
+          taskCount: 5,
+          policyWarningCount: 0,
+        },
+      ],
+      activeProjectId: 'proj-1',
+      isLoading: false,
+      error: null,
+    });
     // 스토어 초기화
     useResultStore.setState({
       currentResult: getMockResult(),
@@ -36,20 +60,21 @@ describe('FlowChart Page', () => {
       },
       expandedNodeIds: new Set(),
       selectedNodeId: null,
+      projectMode: 'individual',
     });
   });
 
   it('should render FlowChart without crashing', () => {
     renderWithRouter(<FlowChart />);
     // React Flow 캔버스가 렌더링되었는지 확인
-    // FilterBar의 버튼이 존재하는지 확인
-    expect(screen.getByText('전체')).toBeInTheDocument();
+    // FilterBar의 버튼이 존재하는지 확인 (aria-label로 특정)
+    expect(screen.getByLabelText('전체 작업 보기')).toBeInTheDocument();
   });
 
   it('should render filter bar with FE/BE toggle', () => {
     renderWithRouter(<FlowChart />);
 
-    expect(screen.getByText('전체')).toBeInTheDocument();
+    expect(screen.getByLabelText('전체 작업 보기')).toBeInTheDocument();
     expect(screen.getByText('FE')).toBeInTheDocument();
     expect(screen.getByText('BE')).toBeInTheDocument();
   });

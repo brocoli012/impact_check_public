@@ -496,7 +496,7 @@ export function getMockResult(): AnalysisResult {
         {
           id: 'BR-001',
           description: '장바구니 최대 수량 50개 제한',
-          relatedFeatureIds: ['FEAT-001'],
+          relatedFeatures: ['FEAT-001'],
         },
       ],
       ambiguities: ['묶음 배송 정책 세부 규칙 미정의'],

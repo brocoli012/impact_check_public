@@ -12,6 +12,8 @@ import type { Grade, TaskType, TaskScore } from '../types';
 import TicketCard from '../components/tickets/TicketCard';
 import TicketDetail from '../components/tickets/TicketDetail';
 import DependencyDiagram from '../components/tickets/DependencyDiagram';
+import ProjectSelector from '../components/common/ProjectSelector';
+import EmptyResultGuide from '../components/common/EmptyResultGuide';
 
 /** 필터 상태 */
 interface TicketFilter {
@@ -152,8 +154,11 @@ function Tickets() {
 
   if (!currentResult) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-400">데이터 로딩 중...</div>
+      <div className="space-y-6">
+        <ProjectSelector />
+        <EmptyResultGuide
+          description="기획서를 선택하면 작업 티켓 목록을 확인할 수 있습니다."
+        />
       </div>
     );
   }
@@ -162,6 +167,9 @@ function Tickets() {
     <div className="flex gap-6">
       {/* Main content */}
       <div className="flex-1 min-w-0 space-y-6">
+        {/* ProjectSelector */}
+        <ProjectSelector />
+
         {/* Header */}
         <div>
           <h2 className="text-xl font-bold text-gray-900">

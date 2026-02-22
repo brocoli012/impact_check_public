@@ -368,7 +368,7 @@ export interface WebFeature {
 export interface WebBusinessRule {
   id: string;
   description: string;
-  relatedFeatureIds: string[];
+  relatedFeatures: string[];
 }
 
 /** 분석 요약 */

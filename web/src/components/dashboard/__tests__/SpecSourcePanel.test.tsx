@@ -75,12 +75,12 @@ function getDefaultParsedSpec(): WebParsedSpec {
       {
         id: 'BR-001',
         description: '로그인 실패 5회 시 계정 잠금',
-        relatedFeatureIds: ['FEAT-001'],
+        relatedFeatures: ['FEAT-001'],
       },
       {
         id: 'BR-002',
         description: '비밀번호 90일 주기 변경 필수',
-        relatedFeatureIds: ['FEAT-001', 'FEAT-002'],
+        relatedFeatures: ['FEAT-001', 'FEAT-002'],
       },
     ],
     ambiguities: [

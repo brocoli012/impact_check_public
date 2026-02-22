@@ -7,6 +7,8 @@ import { useResultStore } from '../stores/resultStore';
 import { useEnsureResult } from '../hooks/useEnsureResult';
 import { useOwners } from '../hooks/useOwners';
 import OwnerCard from '../components/owners/OwnerCard';
+import ProjectSelector from '../components/common/ProjectSelector';
+import EmptyResultGuide from '../components/common/EmptyResultGuide';
 
 function Owners() {
   useEnsureResult();
@@ -16,14 +18,20 @@ function Owners() {
 
   if (!currentResult) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-400">데이터 로딩 중...</div>
+      <div className="space-y-6">
+        <ProjectSelector />
+        <EmptyResultGuide
+          description="기획서를 선택하면 확인 요청 대상 담당자를 확인할 수 있습니다."
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* ProjectSelector */}
+      <ProjectSelector />
+
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold text-gray-900">

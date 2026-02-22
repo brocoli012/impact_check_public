@@ -10,7 +10,8 @@ import ActionGuide from '../components/dashboard/ActionGuide';
 import CriticalAlertBanner from '../components/dashboard/CriticalAlertBanner';
 import AnalysisSummaryCard from '../components/dashboard/AnalysisSummaryCard';
 import SpecSourcePanel from '../components/dashboard/SpecSourcePanel';
-import ProjectOverview from '../components/dashboard/ProjectOverview';
+import ProjectSelector from '../components/common/ProjectSelector';
+import EmptyResultGuide from '../components/common/EmptyResultGuide';
 import CrossProjectDiagram from '../components/cross-project/CrossProjectDiagram';
 import CrossProjectSummary from '../components/cross-project/CrossProjectSummary';
 import type { ProjectLink } from '../components/cross-project/CrossProjectDiagram';
@@ -113,14 +114,19 @@ function Dashboard() {
 
   if (!currentResult) {
     return (
-      <div className="space-y-6">
-        <ProjectOverview />
+      <div className="p-6">
+        <ProjectSelector />
+        <EmptyResultGuide
+          description="기획서를 선택하면 분석 결과를 확인할 수 있습니다."
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <ProjectSelector />
+
       {error && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
           <p className="text-sm text-amber-700">{error}</p>
