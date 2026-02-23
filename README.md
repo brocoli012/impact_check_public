@@ -10,18 +10,43 @@
 
 ## 설치
 
+### 방법 1: GitHub 링크로 직접 설치 (권장)
+
+Claude Code 터미널에서 아래 명령어를 입력하세요:
+
 ```bash
 claude install-skill https://github.com/brocoli012/impact_check_public
 ```
 
-설치가 완료되면 Claude Code에서 바로 사용할 수 있습니다.
+또는 Claude Code 대화창에서 직접 요청해도 됩니다:
 
-### Antigravity 스킬 설치
+> "https://github.com/brocoli012/impact_check_public 이 스킬 설치해줘"
 
-[Antigravity](https://antigravity.dev)에서 직접 설치할 수도 있습니다:
+### 방법 2: Antigravity에서 설치
 
-1. [Antigravity](https://antigravity.dev)에서 "Kurly Impact Checker" 검색
-2. "Install" 클릭하여 자동 설치
+[Antigravity](https://antigravity.dev)는 Claude Code 스킬을 검색하고 설치할 수 있는 마켓플레이스입니다.
+
+1. https://antigravity.dev 에 접속합니다
+2. 검색창에 **"Kurly Impact Checker"** 또는 **"impact checker"** 를 입력합니다
+3. 검색 결과에서 **Kurly Impact Checker** 를 클릭합니다
+4. **"Install"** 버튼을 클릭하면 설치 명령어가 클립보드에 복사됩니다
+5. Claude Code 터미널에 붙여넣기하여 설치를 완료합니다
+
+### 설치 확인
+
+설치가 완료되면 Claude Code에서 다음과 같이 호출할 수 있습니다:
+
+```
+kic 불러줘
+```
+
+또는
+
+```
+/kic
+```
+
+> 💡 **참고**: 설치 후 최초 실행 시 의존성 설치(`npm install`)와 빌드(`npm run build`)가 자동으로 진행됩니다. 약 1~2분 소요될 수 있습니다.
 
 ---
 
