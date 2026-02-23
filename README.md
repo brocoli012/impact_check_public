@@ -10,7 +10,7 @@
 
 ## 설치
 
-### Claude Code에서 스킬 설치
+### Claude Code에서 설치
 
 Claude Code 터미널에서 아래 명령어를 입력하세요:
 
@@ -22,9 +22,27 @@ claude install-skill https://github.com/brocoli012/impact_check_public
 
 > "https://github.com/brocoli012/impact_check_public 이 스킬 설치해줘"
 
+### Google Antigravity에서 설치
+
+[Antigravity](https://idx.google.com/antigravity)는 Google의 AI 코딩 IDE로, Claude Code의 SKILL.md 포맷과 호환됩니다.
+
+Antigravity 대화창에서 GitHub 링크를 주고 설치를 요청하세요:
+
+> "https://github.com/brocoli012/impact_check_public 이 스킬 설치해줘"
+
+또는 터미널에서 직접 clone할 수도 있습니다:
+
+```bash
+# Antigravity 프로젝트의 스킬 폴더에 clone
+git clone https://github.com/brocoli012/impact_check_public .agent/skills/impact-checker
+
+# 의존성 설치 및 빌드
+cd .agent/skills/impact-checker && npm install && npm run build
+```
+
 ### 설치 확인
 
-설치가 완료되면 Claude Code에서 다음과 같이 호출할 수 있습니다:
+설치가 완료되면 대화창에서 다음과 같이 호출할 수 있습니다:
 
 ```
 kic 불러줘
