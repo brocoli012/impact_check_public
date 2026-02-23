@@ -16,6 +16,13 @@ claude install-skill https://github.com/brocoli012/impact_check_public
 
 설치가 완료되면 Claude Code에서 바로 사용할 수 있습니다.
 
+### Antigravity 스킬 설치
+
+[Antigravity](https://antigravity.dev)에서 직접 설치할 수도 있습니다:
+
+1. [Antigravity](https://antigravity.dev)에서 "Kurly Impact Checker" 검색
+2. "Install" 클릭하여 자동 설치
+
 ---
 
 ## 사용 방법

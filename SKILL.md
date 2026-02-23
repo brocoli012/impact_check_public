@@ -177,7 +177,11 @@ node {skill_dir}/dist/index.js export-index [--project <id>]
      ✖ kurly-docs (매칭 8%) - 제외
    ```
 
-6. **확정된 프로젝트 목록으로 Step 3~4를 각 프로젝트별 반복 수행**:
+6. **보완 분석 안내** (신규 프로젝트 등록 시):
+   - 신규 프로젝트 등록(`init`) 시 기존 active 분석을 자동 스캔하여 보완 분석 후보를 안내합니다.
+   - `cross-analyze --supplement --project <id>` 명령어로 보완 분석을 실행할 수 있습니다.
+
+7. **확정된 프로젝트 목록으로 Step 3~4를 각 프로젝트별 반복 수행**:
    ```bash
    # 프로젝트 전환
    node {skill_dir}/dist/index.js projects --switch <projectId>
@@ -186,7 +190,7 @@ node {skill_dir}/dist/index.js export-index [--project <id>]
    # 다음 프로젝트로 전환 및 반복
    ```
 
-7. **모든 프로젝트 분석 완료 후 전체 요약 제시**:
+8. **모든 프로젝트 분석 완료 후 전체 요약 제시**:
    ```
    멀티프로젝트 분석 완료 (총 N개 프로젝트)
      프로젝트A: Medium (32점) - 영향 화면 3개
@@ -218,6 +222,19 @@ node {skill_dir}/dist/index.js save-result --file <temp-result.json> [--project 
 node {skill_dir}/dist/index.js view
 ```
 → http://localhost:3847 에서 결과 확인 가능
+
+### Step 4.5: 크로스 프로젝트 의존성 자동 갱신
+
+`save-result` 실행 후 등록 프로젝트가 2개 이상이면 자동으로 수행됩니다:
+
+1. `CrossProjectManager.detectAndSave()` 실행 → `cross-project.json` 갱신
+2. 경량 gap-check 실행 → 누락 항목 안내
+3. `--skip-cross-detect` 옵션으로 비활성화 가능
+
+관련 명령어:
+- `impact gap-check` - 영향도 누락 탐지 (4가지 유형)
+- `impact gap-check --fix` - 해결 가능한 항목 자동 수정
+- `impact gap-check --project <id>` - 특정 프로젝트만 검사
 
 ---
 
@@ -741,6 +758,11 @@ AI 어노테이션 보강 완료:
 | 정책 문서화 | 정책 문서화 프로토콜 | "정책 정리", "로직 문서화", "정책 md 생성" |
 | 어노테이션 보강 | AI 어노테이션 보강 프로토콜 | "어노테이션 보강", "정책 딥스캔", "AI 주석 생성", "심층 분석" |
 | 도움말 | `node {skill_dir}/dist/index.js help` | "도움말", "뭘 할 수 있어?" |
+| 갭 체크 | `node {skill_dir}/dist/index.js gap-check` | "갭 체크", "누락 확인", "건강 상태" |
+| 갭 수정 | `node {skill_dir}/dist/index.js gap-check --fix` | "갭 수정", "누락 수정" |
+| 보완 분석 | `node {skill_dir}/dist/index.js cross-analyze --supplement --project <id>` | "보완 분석", "추가 분석" |
+| 분석 상태 변경 | `node {skill_dir}/dist/index.js result-status <id> --set <status>` | "분석 상태 변경", "완료 처리", "보류" |
+| 분석 상태 조회 | `node {skill_dir}/dist/index.js result-status <id>` | "분석 상태 조회" |
 
 ### 분석 결과 응답 형식
 

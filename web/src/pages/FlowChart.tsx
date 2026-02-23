@@ -25,8 +25,9 @@ import { useResultStore } from '../stores/resultStore';
 import { useEnsureResult } from '../hooks/useEnsureResult';
 import DetailPanel from '../components/layout/DetailPanel';
 import ProjectSelector from '../components/common/ProjectSelector';
-import CrossProjectDiagram, { type ProjectLink } from '../components/cross-project/CrossProjectDiagram';
-import CrossProjectSummary, { type ProjectGroup } from '../components/cross-project/CrossProjectSummary';
+import { type ProjectLink } from '../components/cross-project/CrossProjectDiagram';
+import { type ProjectGroup } from '../components/cross-project/CrossProjectSummary';
+import CrossProjectTabs from '../components/cross-project/CrossProjectTabs';
 import type { Task } from '../types';
 
 /**
@@ -247,10 +248,10 @@ function FlowChart() {
     return nodes.find((n) => n.id === selectedNodeId) ?? null;
   }, [selectedNodeId, nodes]);
 
-  // "전체" 모드 + currentResult 있으면 CrossProjectDiagram 오버레이
+  // "전체" 모드 + currentResult 있으면 CrossProjectTabs 오버레이
   if (projectMode === 'all' && currentResult) {
     return (
-      <div className="p-6" data-testid="flowchart-all-mode">
+      <div className="p-6" data-testid="flowchart-all-mode" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
         <ProjectSelector
           includeAll
           onAllSelected={handleAllSelected}
@@ -258,16 +259,13 @@ function FlowChart() {
           onProjectSelected={handleProjectChange}
         />
 
-        <div className="mt-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+        <div className="mt-4 flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="px-4 pt-4 pb-2">
+            <h3 className="text-lg font-semibold text-gray-800">
               전체 프로젝트 영향도 - {currentResult.specTitle}
             </h3>
-            <CrossProjectDiagram links={links} onNodeClick={() => {}} />
-            <div className="mt-4">
-              <CrossProjectSummary links={links} groups={groups} />
-            </div>
           </div>
+          <CrossProjectTabs links={links} groups={groups} />
         </div>
       </div>
     );

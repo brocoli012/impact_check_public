@@ -1,14 +1,18 @@
 /**
  * @module web/stores/resultStore
  * @description Zustand 상태 관리 - 분석 결과 데이터 스토어
+ * TASK-069: statusFilter + updateResultStatus + updatingIds 추가
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AnalysisResult, ResultSummary } from '../types';
+import type { AnalysisResult, AnalysisStatus, ResultSummary } from '../types';
 
 /** 정렬 옵션 */
 export type SortOption = 'latest' | 'oldest' | 'grade-high' | 'grade-low';
+
+/** 상태 필터 옵션 */
+export type StatusFilterOption = 'active-only' | 'all' | 'active-and-on-hold';
 
 /** 결과 스토어 상태 */
 interface ResultState {
@@ -28,6 +32,11 @@ interface ResultState {
   /** 정렬 옵션 */
   sortBy: SortOption;
 
+  /** 상태 필터 (TASK-069) */
+  statusFilter: StatusFilterOption;
+  /** 상태 변경 진행 중인 항목 ID 집합 (TASK-069) */
+  updatingIds: Set<string>;
+
   /** 현재 결과 설정 */
   setCurrentResult: (result: AnalysisResult | null) => void;
   /** 결과 목록 설정 */
@@ -46,10 +55,15 @@ interface ResultState {
   /** 정렬 옵션 설정 */
   setSortBy: (sort: SortOption) => void;
 
+  /** 상태 필터 설정 (TASK-069) */
+  setStatusFilter: (filter: StatusFilterOption) => void;
+
   /** 전체 결과 목록 가져오기 */
   fetchAllResults: () => Promise<void>;
   /** 특정 결과로 전환 */
   switchResult: (resultId: string) => Promise<void>;
+  /** 분석 결과 상태 변경 (TASK-069) */
+  updateResultStatus: (resultId: string, newStatus: AnalysisStatus) => Promise<void>;
   /** 데이터 초기화 (프로젝트 전환 시) */
   reset: () => void;
 }
@@ -57,7 +71,7 @@ interface ResultState {
 /** 결과 스토어 */
 export const useResultStore = create<ResultState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       currentResult: null,
       resultList: [],
       isLoading: false,
@@ -66,6 +80,9 @@ export const useResultStore = create<ResultState>()(
       lnbCollapsed: false,
       searchQuery: '',
       sortBy: 'latest',
+
+      statusFilter: 'all',
+      updatingIds: new Set<string>(),
 
       setCurrentResult: (result) => set({ currentResult: result }),
       setResultList: (list) => set({ resultList: list }),
@@ -77,10 +94,20 @@ export const useResultStore = create<ResultState>()(
       setSearchQuery: (query) => set({ searchQuery: query }),
       setSortBy: (sort) => set({ sortBy: sort }),
 
+      setStatusFilter: (filter) => set({ statusFilter: filter }),
+
       fetchAllResults: async () => {
         set({ isLoading: true, error: null });
         try {
-          const response = await fetch('/api/results');
+          const statusFilter = get().statusFilter;
+          // R3-STATE-01: statusFilter를 쿼리 파라미터로 전달
+          let query = '';
+          if (statusFilter === 'active-only') {
+            query = '?status=active';
+          } else if (statusFilter === 'active-and-on-hold') {
+            query = '?status=active,on-hold';
+          }
+          const response = await fetch(`/api/results${query}`);
           const data = await response.json();
           set({ resultList: data.results || [], isLoading: false });
         } catch (error) {
@@ -109,12 +136,42 @@ export const useResultStore = create<ResultState>()(
         }
       },
 
+      // R3-E2E-06: 항목별 로딩 상태 updatingIds 패턴
+      updateResultStatus: async (resultId: string, newStatus: AnalysisStatus) => {
+        set((state) => ({
+          updatingIds: new Set([...state.updatingIds, resultId]),
+        }));
+        try {
+          const response = await fetch(`/api/results/${resultId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || '상태 변경 실패');
+
+          set((state) => ({
+            resultList: state.resultList.map((r) =>
+              r.id === resultId ? { ...r, status: newStatus, statusChangedAt: new Date().toISOString() } : r,
+            ),
+            updatingIds: new Set([...state.updatingIds].filter((id) => id !== resultId)),
+          }));
+        } catch (error) {
+          set((state) => ({
+            updatingIds: new Set([...state.updatingIds].filter((id) => id !== resultId)),
+          }));
+          throw error;
+        }
+      },
+
       reset: () => {
         set({
           currentResult: null,
           resultList: [],
           isLoading: false,
           error: null,
+          statusFilter: 'all',
+          updatingIds: new Set<string>(),
         });
       },
     }),
@@ -122,6 +179,7 @@ export const useResultStore = create<ResultState>()(
       name: 'result-store',
       partialize: (state) => ({
         sortBy: state.sortBy,
+        // R3-STATE-04: statusFilter는 persist하지 않음 (새로고침 시 'all'로 리셋)
       }),
     },
   ),

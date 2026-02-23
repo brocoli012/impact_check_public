@@ -236,6 +236,35 @@ const COMMAND_HELP: Record<
       '/impact cross-analyze --source backend-api --group commerce',
     ],
   },
+  'result-status': {
+    usage: '/impact result-status set <analysisId> <status>',
+    description: '분석 결과의 상태를 변경하거나 조회합니다.',
+    options: [
+      'set <analysisId> <status>                    상태 변경 (active, completed, on-hold, archived)',
+      '--list --project <id> [--status <s>]         상태별 분석 결과 목록 조회',
+    ],
+    examples: [
+      '/impact result-status set analysis-001 completed',
+      '/impact result-status set analysis-001 archived',
+      '/impact result-status --list --project my-app',
+      '/impact result-status --list --project my-app --status active',
+    ],
+  },
+  'gap-check': {
+    usage: '/impact gap-check [--project <id>] [--fix] [--json]',
+    description: '크로스 프로젝트 갭(미비 사항)을 점검합니다.',
+    options: [
+      '--project <id>  특정 프로젝트만 점검',
+      '--fix           해결 가능한 항목 자동 수정',
+      '--json          JSON 형식 출력',
+    ],
+    examples: [
+      '/impact gap-check',
+      '/impact gap-check --project my-app',
+      '/impact gap-check --fix',
+      '/impact gap-check --json',
+    ],
+  },
   help: {
     usage: '/impact help [command]',
     description: '도움말을 표시합니다.',

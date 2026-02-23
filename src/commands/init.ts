@@ -8,6 +8,7 @@ import * as path from 'path';
 import { Command, CommandResult, ResultCode } from '../types/common';
 import { ProjectsConfig, ProjectEntry } from '../types/index';
 import { Indexer } from '../core/indexing/indexer';
+import { SupplementScanner } from '../core/cross-project/supplement-scanner';
 import { ensureDir, readJsonFile, writeJsonFile, getImpactDir, toKebabCase } from '../utils/file';
 import { logger } from '../utils/logger';
 
@@ -111,6 +112,18 @@ export class InitCommand implements Command {
       logger.separator();
       logger.success('프로젝트 초기화가 완료되었습니다!');
 
+      // 크로스 프로젝트 탐지 제안: 등록 프로젝트가 2개 이상일 때
+      const projectsPath = path.join(getImpactDir(), 'projects.json');
+      const projectsConfig = readJsonFile<ProjectsConfig>(projectsPath) || { activeProject: '', projects: [] };
+      const projectCount = projectsConfig.projects.length;
+      if (projectCount >= 2) {
+        console.log(`\n${projectCount}개 프로젝트가 등록되어 있습니다.`);
+        console.log('   크로스 프로젝트 영향도를 분석하려면: /impact cross-analyze --auto');
+
+        // 보완 분석 스캔 hook
+        await this.runSupplementScan(projectId);
+      }
+
       return {
         code: ResultCode.SUCCESS,
         message: `Project initialized: ${projectId}`,
@@ -172,5 +185,47 @@ export class InitCommand implements Command {
 
     writeJsonFile(projectsPath, config);
     logger.debug(`Project registered: ${projectId}`);
+  }
+
+  /**
+   * 보완 분석 스캔 hook - init 성공 후 기존 분석 결과 매칭 스캔
+   */
+  private async runSupplementScan(newProjectId: string): Promise<void> {
+    try {
+      const scanner = new SupplementScanner();
+      const scanResult = await scanner.scan(newProjectId);
+
+      const autoCandidates = scanResult.candidates.filter(c => c.recommendation === 'auto');
+      const suggestCandidates = scanResult.candidates.filter(c => c.recommendation === 'suggest');
+
+      // 후보가 없으면 간단 메시지
+      if (autoCandidates.length === 0 && suggestCandidates.length === 0) {
+        console.log('\n✓ 보완 분석이 필요한 기존 분석이 없습니다.');
+      } else {
+        // auto 후보 출력
+        for (const candidate of autoCandidates) {
+          console.log(`\n🔄 보완 분석 자동 포함: ${candidate.title} (매칭도 ${candidate.matchRate}%)`);
+        }
+        // suggest 후보 출력
+        for (const candidate of suggestCandidates) {
+          console.log(`\n❓ 보완 분석 확인 필요: ${candidate.title} (매칭도 ${candidate.matchRate}%)`);
+        }
+
+        console.log(`\ncross-analyze --supplement --project ${newProjectId} 명령어로 보완 분석을 실행할 수 있습니다.`);
+      }
+
+      // excludedByStatus 표시
+      const { completed, onHold, archived } = scanResult.excludedByStatus;
+      if (completed > 0 || onHold > 0 || archived > 0) {
+        const parts: string[] = [];
+        if (completed > 0) parts.push(`completed ${completed}건`);
+        if (onHold > 0) parts.push(`on-hold ${onHold}건`);
+        if (archived > 0) parts.push(`archived ${archived}건`);
+        console.log(`ℹ 상태별 제외: ${parts.join(', ')}`);
+      }
+    } catch (err) {
+      // 보완 분석 스캔 실패는 init 전체를 실패시키지 않음
+      logger.debug(`보완 분석 스캔 실패: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }

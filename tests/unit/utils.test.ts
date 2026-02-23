@@ -16,6 +16,8 @@ import {
   getProjectDir,
   toKebabCase,
   formatFileSize,
+  withFileLock,
+  withFileLockSync,
 } from '../../src/utils/file';
 import { Logger } from '../../src/utils/logger';
 import { LogLevel } from '../../src/types/common';
@@ -98,6 +100,135 @@ describe('File Utils', () => {
       writeJsonFile(filePath, { a: 1 });
       const content = fs.readFileSync(filePath, 'utf-8');
       expect(content).toContain('  "a"');
+    });
+  });
+
+  describe('writeJsonFile() atomic write', () => {
+    it('should not leave .tmp file after successful write', () => {
+      const filePath = path.join(tempDir, 'atomic.json');
+      writeJsonFile(filePath, { atomic: true });
+      expect(fs.existsSync(filePath)).toBe(true);
+      expect(fs.existsSync(filePath + '.tmp')).toBe(false);
+    });
+
+    it('should produce valid JSON via atomic write-rename', () => {
+      const filePath = path.join(tempDir, 'atomic2.json');
+      const data = { nested: { key: 'value' }, arr: [1, 2, 3] };
+      writeJsonFile(filePath, data);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      expect(JSON.parse(content)).toEqual(data);
+    });
+
+    it('should overwrite existing file atomically', () => {
+      const filePath = path.join(tempDir, 'overwrite.json');
+      writeJsonFile(filePath, { version: 1 });
+      writeJsonFile(filePath, { version: 2 });
+      const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      expect(content.version).toBe(2);
+      expect(fs.existsSync(filePath + '.tmp')).toBe(false);
+    });
+  });
+
+  describe('withFileLock()', () => {
+    it('should execute callback and return result', async () => {
+      const filePath = path.join(tempDir, 'locktest.json');
+      const result = await withFileLock(filePath, () => 42);
+      expect(result).toBe(42);
+    });
+
+    it('should remove lock file after successful execution', async () => {
+      const filePath = path.join(tempDir, 'locktest2.json');
+      await withFileLock(filePath, () => 'done');
+      expect(fs.existsSync(filePath + '.lock')).toBe(false);
+    });
+
+    it('should remove lock file even if callback throws', async () => {
+      const filePath = path.join(tempDir, 'locktest3.json');
+      await expect(
+        withFileLock(filePath, () => { throw new Error('fail'); })
+      ).rejects.toThrow('fail');
+      expect(fs.existsSync(filePath + '.lock')).toBe(false);
+    });
+
+    it('should work with async callbacks', async () => {
+      const filePath = path.join(tempDir, 'locktest4.json');
+      const result = await withFileLock(filePath, async () => {
+        await new Promise(r => setTimeout(r, 10));
+        return 'async-result';
+      });
+      expect(result).toBe('async-result');
+      expect(fs.existsSync(filePath + '.lock')).toBe(false);
+    });
+
+    it('should retry when lock exists and eventually succeed', async () => {
+      const filePath = path.join(tempDir, 'locktest5.json');
+      const lockPath = filePath + '.lock';
+
+      // pre-create lock file
+      fs.writeFileSync(lockPath, 'other-pid', { flag: 'wx' });
+
+      // schedule lock removal after 150ms
+      setTimeout(() => {
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+      }, 150);
+
+      const result = await withFileLock(filePath, () => 'success', {
+        maxRetries: 10,
+        retryDelay: 50,
+      });
+      expect(result).toBe('success');
+      expect(fs.existsSync(lockPath)).toBe(false);
+    });
+
+    it('should handle stale lock by removing it after maxRetries', async () => {
+      const filePath = path.join(tempDir, 'locktest6.json');
+      const lockPath = filePath + '.lock';
+
+      // pre-create stale lock file
+      fs.writeFileSync(lockPath, 'stale-pid', { flag: 'wx' });
+
+      // low maxRetries + short retryDelay so it quickly considers lock stale
+      const result = await withFileLock(filePath, () => 'recovered', {
+        maxRetries: 2,
+        retryDelay: 10,
+      });
+      expect(result).toBe('recovered');
+    });
+  });
+
+  describe('withFileLockSync()', () => {
+    it('should execute callback and return result', () => {
+      const filePath = path.join(tempDir, 'synclocktest.json');
+      const result = withFileLockSync(filePath, () => 99);
+      expect(result).toBe(99);
+    });
+
+    it('should remove lock file after execution', () => {
+      const filePath = path.join(tempDir, 'synclocktest2.json');
+      withFileLockSync(filePath, () => 'done');
+      expect(fs.existsSync(filePath + '.lock')).toBe(false);
+    });
+
+    it('should remove lock file even if callback throws', () => {
+      const filePath = path.join(tempDir, 'synclocktest3.json');
+      expect(() =>
+        withFileLockSync(filePath, () => { throw new Error('sync-fail'); })
+      ).toThrow('sync-fail');
+      expect(fs.existsSync(filePath + '.lock')).toBe(false);
+    });
+
+    it('should handle stale lock after maxRetries', () => {
+      const filePath = path.join(tempDir, 'synclocktest4.json');
+      const lockPath = filePath + '.lock';
+
+      // pre-create stale lock
+      fs.writeFileSync(lockPath, 'stale', { flag: 'wx' });
+
+      const result = withFileLockSync(filePath, () => 'sync-recovered', {
+        maxRetries: 2,
+        retryDelay: 10,
+      });
+      expect(result).toBe('sync-recovered');
     });
   });
 

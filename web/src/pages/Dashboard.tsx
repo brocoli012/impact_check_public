@@ -8,6 +8,7 @@ import ScreenBarChart from '../components/dashboard/BarChart';
 import DonutChart from '../components/dashboard/DonutChart';
 import ActionGuide from '../components/dashboard/ActionGuide';
 import CriticalAlertBanner from '../components/dashboard/CriticalAlertBanner';
+import SupplementBanner from '../components/dashboard/SupplementBanner';
 import AnalysisSummaryCard from '../components/dashboard/AnalysisSummaryCard';
 import SpecSourcePanel from '../components/dashboard/SpecSourcePanel';
 import ProjectSelector from '../components/common/ProjectSelector';
@@ -31,7 +32,7 @@ function Dashboard() {
   useLatestResult();
   const navigate = useNavigate();
 
-  const { currentResult, isLoading, error } = useResultStore();
+  const { currentResult, isLoading, error, resultList, switchResult } = useResultStore();
 
   /** 신뢰도 경고 배너 - 시스템별 펼침/접힘 상태 */
   const [expandedSystems, setExpandedSystems] = useState<Set<string>>(new Set());
@@ -57,6 +58,17 @@ function Dashboard() {
     }
     fetchCrossProjectData();
   }, []);
+
+  /** 현재 결과의 보완 분석 정보 (ResultSummary에서 조회) */
+  const supplementInfo = useMemo(() => {
+    if (!currentResult) return null;
+    const summary = resultList.find((r) => r.id === currentResult.analysisId);
+    if (!summary?.isSupplement) return null;
+    return {
+      supplementOf: summary.supplementOf || '',
+      triggerProject: summary.triggerProject || '',
+    };
+  }, [currentResult, resultList]);
 
   /** 낮은 신뢰도 시스템 목록 */
   const lowConfSystems = useMemo(() => {
@@ -126,6 +138,15 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <ProjectSelector />
+
+      {/* 보완 분석 배너 (TASK-176) */}
+      {supplementInfo && (
+        <SupplementBanner
+          supplementOf={supplementInfo.supplementOf}
+          triggerProject={supplementInfo.triggerProject}
+          onOriginalClick={(analysisId) => switchResult(analysisId)}
+        />
+      )}
 
       {error && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">

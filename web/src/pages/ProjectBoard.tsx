@@ -4,7 +4,7 @@
  * 기획서 없이 프로젝트 종합 정보를 보여주는 핵심 페이지
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { useResultStore } from '../stores/resultStore';
@@ -12,6 +12,7 @@ import { usePolicyStore } from '../stores/policyStore';
 import { useSharedEntityStore } from '../stores/sharedEntityStore';
 import ProjectSelector from '../components/common/ProjectSelector';
 import ProjectStatusBanner from '../components/project-board/ProjectStatusBanner';
+import GapHealthWidget from '../components/projects/GapHealthWidget';
 import AnalysisHistoryTable from '../components/project-board/AnalysisHistoryTable';
 import ScoreTrendChart from '../components/project-board/ScoreTrendChart';
 import PolicySummaryCard from '../components/project-board/PolicySummaryCard';
@@ -20,6 +21,7 @@ import CrossProjectDiagram, { type ProjectLink } from '../components/cross-proje
 import CrossProjectSummary, { type ProjectGroup } from '../components/cross-project/CrossProjectSummary';
 import SharedEntityMap from '../components/cross-project/SharedEntityMap';
 import ReverseSearch from '../components/cross-project/ReverseSearch';
+import type { GapCheckResult } from '../types';
 
 /** 인덱스 메타 (API 응답) */
 interface IndexMeta {
@@ -56,6 +58,12 @@ export default function ProjectBoard() {
 
   // 비교 Drawer 상태 (TASK-142)
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+
+  // 갭 탐지 데이터 (TASK-171)
+  const [gapData, setGapData] = useState<GapCheckResult | null>(null);
+  const [gapLoading, setGapLoading] = useState(false);
+  /** 갭 캐시 타임스탬프 (5분 TTL) */
+  const gapCacheRef = useRef<{ data: GapCheckResult; fetchedAt: number; projectId?: string } | null>(null);
 
   // 크로스 프로젝트 데이터
   const [links, setLinks] = useState<ProjectLink[]>([]);
@@ -96,6 +104,47 @@ export default function ProjectBoard() {
     }
   }, []);
 
+  /** 갭 탐지 데이터 로드 (5분 캐시 TTL) */
+  const fetchGapData = useCallback(async (projectId?: string | null) => {
+    const GAP_CACHE_TTL = 5 * 60 * 1000; // 5분
+    const now = Date.now();
+
+    // 캐시 히트 확인
+    if (
+      gapCacheRef.current &&
+      gapCacheRef.current.projectId === (projectId || undefined) &&
+      now - gapCacheRef.current.fetchedAt < GAP_CACHE_TTL
+    ) {
+      setGapData(gapCacheRef.current.data);
+      return;
+    }
+
+    setGapLoading(true);
+    try {
+      const url = projectId
+        ? `/api/gap-check?project=${projectId}`
+        : '/api/gap-check';
+      const res = await fetch(url);
+      if (!res.ok) {
+        // API 404 등이면 위젯 숨김
+        setGapData(null);
+        return;
+      }
+      const result: GapCheckResult = await res.json();
+      setGapData(result);
+      gapCacheRef.current = {
+        data: result,
+        fetchedAt: now,
+        projectId: projectId || undefined,
+      };
+    } catch {
+      // API 에러 시 위젯 숨김
+      setGapData(null);
+    } finally {
+      setGapLoading(false);
+    }
+  }, []);
+
   /** 크로스 프로젝트 데이터 로드 */
   const fetchCrossProjectData = useCallback(async () => {
     try {
@@ -118,9 +167,10 @@ export default function ProjectBoard() {
     fetchProjectStatus();
     fetchAllResults();
     fetchPolicies();
+    fetchGapData();
     fetchCrossProjectData();
     fetchSharedEntities();
-  }, [fetchProjects, fetchProjectStatus, fetchAllResults, fetchPolicies, fetchCrossProjectData, fetchSharedEntities]);
+  }, [fetchProjects, fetchProjectStatus, fetchAllResults, fetchPolicies, fetchGapData, fetchCrossProjectData, fetchSharedEntities]);
 
   // 프로젝트 전환 시 데이터 재로드
   useEffect(() => {
@@ -128,10 +178,13 @@ export default function ProjectBoard() {
       fetchProjectStatus();
       fetchAllResults();
       fetchPolicies();
+      // 캐시 무효화 후 새 프로젝트 데이터 로드
+      gapCacheRef.current = null;
+      fetchGapData(activeProjectId);
       fetchCrossProjectData();
       fetchSharedEntities();
     }
-  }, [activeProjectId, fetchProjectStatus, fetchAllResults, fetchPolicies, fetchCrossProjectData, fetchSharedEntities]);
+  }, [activeProjectId, fetchProjectStatus, fetchAllResults, fetchPolicies, fetchGapData, fetchCrossProjectData, fetchSharedEntities]);
 
   // 현재 활성 프로젝트 객체
   const currentProject = projects.find((p) => p.id === activeProjectId);
@@ -209,6 +262,9 @@ export default function ProjectBoard() {
           lastAnalysisDate={lastAnalysisDate}
         />
       )}
+
+      {/* 갭 탐지 위젯 (TASK-171) */}
+      <GapHealthWidget data={gapData} loading={gapLoading} />
 
       {/* 빈 상태 2: 인덱스 없음 - 배너에서 경고 표시하고, 나머지는 미표시 */}
       {projectStatus && !projectStatus.hasIndex && currentProject && (

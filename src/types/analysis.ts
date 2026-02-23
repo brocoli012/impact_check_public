@@ -5,6 +5,7 @@
 
 import { UniqueId, FilePath, ISODateString } from './common';
 import { CrossProjectImpact } from '../core/cross-project/types';
+import { AnalysisStatus } from '../utils/analysis-status';
 
 // ============================================================
 // Step 1: 기획서 파싱 결과 타입
@@ -312,6 +313,14 @@ export interface ConfidenceEnrichedResult extends EnrichedResult {
   parsedSpec?: ParsedSpec;
   /** 분석 요약 (REQ-009) */
   analysisSummary?: AnalysisSummary;
+  /** 분석 상태 */
+  status?: AnalysisStatus;
+  /** 상태 변경 시각 */
+  statusChangedAt?: string;
+  /** 보완 분석 원본 분석 ID */
+  supplementOf?: string;
+  /** 보완 분석 트리거 프로젝트 ID */
+  triggerProject?: string;
 }
 
 /** 시스템별 신뢰도 */

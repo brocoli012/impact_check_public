@@ -626,4 +626,186 @@ describe('CrossProjectManager', () => {
       expect(link!.apis).toContain('/api/users/:id');
     });
   });
+
+  // ============================================================
+  // detectAndSave (TASK-052)
+  // ============================================================
+
+  describe('detectAndSave', () => {
+    /** 테스트용 ApiEndpoint 생성 헬퍼 */
+    function createTestApi(apiPath: string, method: string = 'GET'): ApiEndpoint {
+      return {
+        id: `api-${apiPath}`,
+        method: method as ApiEndpoint['method'],
+        path: apiPath,
+        filePath: 'src/api.ts',
+        handler: 'handler',
+        calledBy: [],
+        requestParams: [],
+        responseType: 'unknown',
+        relatedModels: [],
+      };
+    }
+
+    /** 테스트용 CodeIndex 생성 헬퍼 */
+    function createTestIndex(apis: ApiEndpoint[]): CodeIndex {
+      return {
+        meta: {
+          version: 1,
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+          gitCommit: 'abc123',
+          gitBranch: 'main',
+          project: {
+            name: 'test',
+            path: '/test',
+            techStack: [],
+            packageManager: 'npm',
+          },
+          stats: {
+            totalFiles: 0,
+            screens: 0,
+            components: 0,
+            apiEndpoints: apis.length,
+            models: 0,
+            modules: 0,
+          },
+        },
+        files: [],
+        screens: [],
+        components: [],
+        apis,
+        models: [],
+        events: [],
+        policies: [],
+        dependencies: { graph: { nodes: [], edges: [] } },
+      };
+    }
+
+    it('detectAndSave 기본 동작: 감지 + 저장', async () => {
+      const sharedApis = [createTestApi('/api/shared')];
+
+      const mockIndexer = {
+        loadIndex: jest.fn()
+          .mockResolvedValueOnce(createTestIndex(sharedApis))
+          .mockResolvedValueOnce(createTestIndex(sharedApis)),
+      } as unknown as Indexer;
+
+      const result = await manager.detectAndSave(mockIndexer, ['project-a', 'project-b']);
+
+      expect(result.detected).toBeGreaterThan(0);
+      expect(result.saved).toBeGreaterThan(0);
+      expect(result.total).toBeGreaterThan(0);
+
+      // cross-project.json에 실제 저장되었는지 확인
+      const config = await manager.loadConfig();
+      expect(config.links.length).toBeGreaterThan(0);
+
+      // 저장된 링크가 autoDetected: true인지 확인
+      for (const link of config.links) {
+        expect(link.autoDetected).toBe(true);
+        expect(link.confirmedAt).toBeDefined();
+      }
+    });
+
+    it('중복 링크 저장 방지: 수동 링크가 있으면 자동 링크 건너뜀', async () => {
+      // 수동 링크 먼저 등록
+      await manager.link('project-a', 'project-b', 'api-consumer');
+
+      const sharedApis = [createTestApi('/api/shared')];
+
+      const mockIndexer = {
+        loadIndex: jest.fn()
+          .mockResolvedValueOnce(createTestIndex(sharedApis))
+          .mockResolvedValueOnce(createTestIndex(sharedApis)),
+      } as unknown as Indexer;
+
+      const result = await manager.detectAndSave(mockIndexer, ['project-a', 'project-b']);
+
+      // 감지는 되지만, 수동 링크와 같은 source-target이면 저장되지 않음
+      expect(result.detected).toBeGreaterThan(0);
+
+      // 수동 링크가 보존되는지 확인
+      const config = await manager.loadConfig();
+      const manualLinks = config.links.filter(l => !l.autoDetected);
+      expect(manualLinks.length).toBe(1);
+      expect(manualLinks[0].source).toBe('project-a');
+      expect(manualLinks[0].target).toBe('project-b');
+    });
+
+    it('빈 결과 처리: 감지된 링크가 없으면 빈 결과 반환', async () => {
+      const providerApis = [createTestApi('/api/users')];
+      const consumerApis = [createTestApi('/api/products')]; // 매칭 없음
+
+      const mockIndexer = {
+        loadIndex: jest.fn()
+          .mockResolvedValueOnce(createTestIndex(providerApis))
+          .mockResolvedValueOnce(createTestIndex(consumerApis)),
+      } as unknown as Indexer;
+
+      const result = await manager.detectAndSave(mockIndexer, ['project-a', 'project-b']);
+
+      expect(result.detected).toBe(0);
+      expect(result.saved).toBe(0);
+      expect(result.total).toBe(0);
+      expect(Object.keys(result.byType)).toHaveLength(0);
+    });
+
+    it('프로젝트가 2개 미만이면 빈 결과', async () => {
+      const mockIndexer = {
+        loadIndex: jest.fn(),
+      } as unknown as Indexer;
+
+      const result = await manager.detectAndSave(mockIndexer, ['only-one']);
+
+      expect(result.detected).toBe(0);
+      expect(result.saved).toBe(0);
+      expect(result.total).toBe(0);
+    });
+
+    it('기존 자동 링크를 최신 결과로 교체', async () => {
+      // 첫 번째 detectAndSave 실행
+      const sharedApis1 = [createTestApi('/api/shared')];
+
+      const mockIndexer1 = {
+        loadIndex: jest.fn()
+          .mockResolvedValueOnce(createTestIndex(sharedApis1))
+          .mockResolvedValueOnce(createTestIndex(sharedApis1)),
+      } as unknown as Indexer;
+
+      const result1 = await manager.detectAndSave(mockIndexer1, ['project-a', 'project-b']);
+      const firstTotal = result1.total;
+
+      // 두 번째 detectAndSave 실행 (같은 API)
+      const mockIndexer2 = {
+        loadIndex: jest.fn()
+          .mockResolvedValueOnce(createTestIndex(sharedApis1))
+          .mockResolvedValueOnce(createTestIndex(sharedApis1)),
+      } as unknown as Indexer;
+
+      const result2 = await manager.detectAndSave(mockIndexer2, ['project-a', 'project-b']);
+
+      // 링크 수가 증가하지 않아야 함 (교체됨)
+      expect(result2.total).toBe(firstTotal);
+    });
+
+    it('DetectResult 타입의 byType 필드가 올바르게 집계됨', async () => {
+      const sharedApis = [createTestApi('/api/shared')];
+
+      const mockIndexer = {
+        loadIndex: jest.fn()
+          .mockResolvedValueOnce(createTestIndex(sharedApis))
+          .mockResolvedValueOnce(createTestIndex(sharedApis)),
+      } as unknown as Indexer;
+
+      const result = await manager.detectAndSave(mockIndexer, ['project-a', 'project-b']);
+
+      // byType에 적어도 하나의 타입이 있어야 함
+      expect(Object.keys(result.byType).length).toBeGreaterThan(0);
+      // 모든 값은 양의 정수
+      for (const count of Object.values(result.byType)) {
+        expect(count).toBeGreaterThan(0);
+      }
+    });
+  });
 });

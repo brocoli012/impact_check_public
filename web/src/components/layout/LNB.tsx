@@ -1,10 +1,11 @@
 /**
  * @module web/components/layout/LNB
  * @description Left Navigation Bar - 분석 결과 목록 네비게이션
+ * TASK-068: 상태 필터 드롭다운 추가
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useResultStore, type SortOption } from '../../stores/resultStore';
+import { useResultStore, type SortOption, type StatusFilterOption } from '../../stores/resultStore';
 import { useDebounce } from '../../hooks/useDebounce';
 import ResultCard from './ResultCard';
 import type { ResultSummary } from '../../types';
@@ -50,10 +51,12 @@ function LNB() {
     lnbCollapsed,
     searchQuery,
     sortBy,
+    statusFilter,
     isLoading,
     toggleLnb,
     setSearchQuery,
     setSortBy,
+    setStatusFilter,
     fetchAllResults,
     switchResult,
   } = useResultStore();
@@ -65,6 +68,12 @@ function LNB() {
   useEffect(() => {
     fetchAllResults();
   }, [fetchAllResults]);
+
+  // Re-fetch when statusFilter changes
+  useEffect(() => {
+    fetchAllResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
 
   // Update search query when debounced
   useEffect(() => {
@@ -186,7 +195,7 @@ function LNB() {
           </div>
         </div>
 
-        {/* Sort controls */}
+        {/* Sort + Status filter controls (TASK-068) */}
         <div className="px-3 pb-3 flex items-center gap-2">
           <select
             value={sortBy}
@@ -198,6 +207,19 @@ function LNB() {
             <option value="oldest">오래된순</option>
             <option value="grade-high">등급 높은 순</option>
             <option value="grade-low">등급 낮은 순</option>
+          </select>
+
+          {/* 상태 필터 드롭다운 (TASK-068) */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilterOption)}
+            aria-label="상태 필터"
+            data-testid="status-filter-select"
+            className="flex-1 text-xs px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">전체</option>
+            <option value="active-only">진행중만</option>
+            <option value="active-and-on-hold">진행중+보류</option>
           </select>
         </div>
 
@@ -215,7 +237,7 @@ function LNB() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    "{debouncedSearch}" 검색 결과 없음
+                    &quot;{debouncedSearch}&quot; 검색 결과 없음
                   </p>
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                     다른 키워드로 시도해보세요

@@ -195,6 +195,17 @@ function setupStores(options?: {
         json: () => Promise.resolve({ results }),
       } as Response);
     }
+    if (urlStr.includes('/api/gap-check')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            gaps: [],
+            summary: { total: 0, high: 0, medium: 0, low: 0, fixable: 0 },
+            checkedAt: new Date().toISOString(),
+          }),
+      } as Response);
+    }
     if (urlStr.includes('/api/policies')) {
       return Promise.resolve({
         ok: true,

@@ -23,6 +23,8 @@ import { PolicyCheckCommand } from './commands/policy-check';
 import { SummaryCommand } from './commands/summary';
 import { CrossAnalyzeCommand } from './commands/cross-analyze';
 import { ReverseCommand } from './commands/reverse';
+import { ResultStatusCommand } from './commands/result-status';
+import { GapCheckCommand } from './commands/gap-check';
 
 /** 알 수 없는 명령어 에러 */
 export class UnknownCommandError extends Error {
@@ -69,6 +71,8 @@ const COMMANDS: Record<string, CommandConstructor> = {
   'summary': SummaryCommand,
   'cross-analyze': CrossAnalyzeCommand,
   'reverse': ReverseCommand,
+  'result-status': ResultStatusCommand,
+  'gap-check': GapCheckCommand,
 } as const;
 
 /**

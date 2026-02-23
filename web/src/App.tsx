@@ -13,6 +13,7 @@ import Policies from './pages/Policies';
 import { useResultStore } from './stores/resultStore';
 import { useProjectStore } from './stores/projectStore';
 import { useSSE } from './hooks/useSSE';
+import { ToastContainer } from './components/common/Toast';
 
 /** LNB를 자동으로 숨길 라우트 */
 const LNB_HIDDEN_ROUTES = ['/', '/policies'];
@@ -72,6 +73,9 @@ function AppContent() {
           </ErrorBoundary>
         </main>
       </div>
+
+      {/* Toast 알림 (TASK-095) */}
+      <ToastContainer />
     </div>
   );
 }

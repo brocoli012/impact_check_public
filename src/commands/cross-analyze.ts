@@ -8,12 +8,18 @@
  *   - --group <group-name>: 특정 그룹 대상으로 분석
  */
 
+import * as path from 'path';
 import { Command, CommandResult, ResultCode } from '../types/common';
+import { ConfidenceEnrichedResult } from '../types/analysis';
+import { ProjectsConfig } from '../types/index';
 import { CrossProjectManager } from '../core/cross-project/cross-project-manager';
 import { ApiContractChecker } from '../core/cross-project/api-contract-checker';
 import { CrossAnalyzer } from '../core/cross-project/cross-analyzer';
+import { SupplementScanner } from '../core/cross-project/supplement-scanner';
+import { ResultManager } from '../core/analysis/result-manager';
 import { Indexer } from '../core/indexing/indexer';
 import { ConfigManager } from '../config/config-manager';
+import { readJsonFile, getImpactDir } from '../utils/file';
 import { logger } from '../utils/logger';
 
 /** ANSI 색상 코드 */
@@ -61,6 +67,16 @@ export class CrossAnalyzeCommand implements Command {
 
   async execute(): Promise<CommandResult> {
     try {
+      // --auto 옵션 처리: 모든 등록 프로젝트에 대해 자동 탐지 수행
+      if (this.args.includes('--auto')) {
+        return await this.handleAutoDetect();
+      }
+
+      // --supplement 옵션 처리: 보완 분석 스캔 및 저장
+      if (this.args.includes('--supplement')) {
+        return await this.handleSupplement();
+      }
+
       // 1. 옵션 파싱
       const sourceIdx = this.args.indexOf('--source');
       const groupIdx = this.args.indexOf('--group');
@@ -230,6 +246,174 @@ export class CrossAnalyzeCommand implements Command {
       default:
         return `[${changeType}]`;
     }
+  }
+
+  /**
+   * --auto 옵션: 등록된 모든 프로젝트에 대해 자동 탐지 수행
+   */
+  private async handleAutoDetect(): Promise<CommandResult> {
+    const projectsPath = path.join(getImpactDir(), 'projects.json');
+    const projectsConfig = readJsonFile<ProjectsConfig>(projectsPath);
+    const projectIds = projectsConfig?.projects?.map(p => p.id) || [];
+
+    if (projectIds.length < 2) {
+      logger.header('크로스 프로젝트 자동 탐지');
+      console.log('\n  등록된 프로젝트가 2개 미만입니다.');
+      console.log('  프로젝트 등록: /impact init <project_path>');
+      console.log('');
+      return {
+        code: ResultCode.SUCCESS,
+        message: 'Not enough projects for auto-detect (minimum 2 required).',
+        data: { detected: 0, saved: 0, total: 0, byType: {} },
+      };
+    }
+
+    const indexer = new Indexer();
+    const manager = new CrossProjectManager();
+    const result = await manager.detectAndSave(indexer, projectIds);
+
+    logger.header('크로스 프로젝트 자동 탐지 결과');
+    console.log('');
+    console.log(`  대상 프로젝트: ${projectIds.join(', ')}`);
+    console.log(`  감지된 의존성: ${result.detected}건`);
+    console.log(`  신규 저장:     ${result.saved}건`);
+    console.log(`  총 의존성:     ${result.total}건`);
+
+    if (Object.keys(result.byType).length > 0) {
+      console.log('');
+      console.log('  [타입별 통계]');
+      for (const [type, count] of Object.entries(result.byType)) {
+        console.log(`    ${type}: ${count}건`);
+      }
+    }
+    console.log('');
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: `Auto-detect complete: ${result.detected} detected, ${result.saved} new saved.`,
+      data: result,
+    };
+  }
+
+  /**
+   * --supplement 옵션: 보완 분석 스캔 및 결과 저장
+   */
+  private async handleSupplement(): Promise<CommandResult> {
+    // --project 옵션으로 대상 프로젝트 ID 파싱
+    const projectIdx = this.args.indexOf('--project');
+    let projectId: string | undefined;
+
+    if (projectIdx !== -1 && this.args[projectIdx + 1]) {
+      projectId = this.args[projectIdx + 1];
+    }
+
+    if (!projectId) {
+      projectId = (await this.getActiveProjectId()) || undefined;
+    }
+
+    if (!projectId) {
+      logger.error('프로젝트를 지정해주세요. --project <id> 또는 /impact init을 먼저 실행하세요.');
+      return {
+        code: ResultCode.NEEDS_CONFIG,
+        message: '프로젝트를 지정해주세요.',
+      };
+    }
+
+    logger.header('보완 분석 스캔');
+    console.log(`\n  대상 프로젝트: ${projectId}`);
+
+    // 1. SupplementScanner.scan() 실행
+    const scanner = new SupplementScanner();
+    const scanResult = await scanner.scan(projectId);
+
+    // auto + suggest 후보 필터
+    const targetCandidates = scanResult.candidates.filter(
+      c => c.recommendation === 'auto' || c.recommendation === 'suggest',
+    );
+
+    if (targetCandidates.length === 0) {
+      console.log('\n  보완 분석이 필요한 기존 분석이 없습니다.');
+      console.log('');
+      return {
+        code: ResultCode.SUCCESS,
+        message: '보완 분석 대상 없음.',
+        data: scanResult,
+      };
+    }
+
+    // 2. 보완 분석 결과 저장
+    const resultManager = new ResultManager();
+    const savedPaths: string[] = [];
+
+    for (const candidate of targetCandidates) {
+      // 원본 분석 결과 로드
+      const originalResult = await resultManager.getById(candidate.projectId, candidate.resultId);
+      if (!originalResult) {
+        logger.debug(`원본 분석 로드 실패: ${candidate.projectId}/${candidate.resultId}`);
+        continue;
+      }
+
+      // 보완 분석 결과 생성 (메타데이터 기반, 실제 재분석 없음)
+      const supplementResult: ConfidenceEnrichedResult = {
+        ...originalResult,
+        analysisId: `supplement-${originalResult.analysisId}`,
+        supplementOf: originalResult.analysisId,
+        triggerProject: projectId,
+        specTitle: `[보완] ${originalResult.specTitle}`,
+        analyzedAt: new Date().toISOString(),
+      };
+
+      const filePath = await resultManager.saveSupplementResult(
+        candidate.projectId,
+        candidate.resultId,
+        supplementResult,
+      );
+      savedPaths.push(filePath);
+    }
+
+    // 3. cross-project.json 갱신을 위해 detectAndSave 재실행
+    if (savedPaths.length > 0) {
+      try {
+        const projectsPath = path.join(getImpactDir(), 'projects.json');
+        const projectsConfig = readJsonFile<ProjectsConfig>(projectsPath);
+        const projectIds = projectsConfig?.projects?.map(p => p.id) || [];
+
+        if (projectIds.length >= 2) {
+          const indexer = new Indexer();
+          const manager = new CrossProjectManager();
+          await manager.detectAndSave(indexer, projectIds);
+        }
+      } catch (err) {
+        logger.debug(`cross-project.json 갱신 실패: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // 4. 결과 출력
+    console.log(`\n  ✓ 보완 분석 ${savedPaths.length}건 저장 완료`);
+    for (const filePath of savedPaths) {
+      console.log(`    → ${filePath}`);
+    }
+
+    // excludedByStatus 출력
+    const { completed, onHold, archived } = scanResult.excludedByStatus;
+    if (completed > 0 || onHold > 0 || archived > 0) {
+      const parts: string[] = [];
+      if (completed > 0) parts.push(`completed ${completed}건`);
+      if (onHold > 0) parts.push(`on-hold ${onHold}건`);
+      if (archived > 0) parts.push(`archived ${archived}건`);
+      console.log(`\n  ℹ 상태별 제외: ${parts.join(', ')}`);
+    }
+    console.log('');
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: `보완 분석 ${savedPaths.length}건 저장 완료.`,
+      data: {
+        scanResult,
+        savedCount: savedPaths.length,
+        savedPaths,
+      },
+    };
   }
 
   /**

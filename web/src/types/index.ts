@@ -3,6 +3,9 @@
  * @description Web SPA 공유 타입 정의
  */
 
+/** 분석 결과 상태 타입 (REQ-015-S) */
+export type AnalysisStatus = 'active' | 'completed' | 'on-hold' | 'archived';
+
 /** 등급 타입 */
 export type Grade = 'Low' | 'Medium' | 'High' | 'Critical';
 
@@ -172,6 +175,16 @@ export interface ResultSummary {
   taskCount: number;
   /** 데모/목업 데이터 여부 */
   isDemo?: boolean;
+  /** 분석 상태 (없으면 'active'로 간주 - Lazy Migration) */
+  status?: AnalysisStatus;
+  /** 상태 변경 시각 */
+  statusChangedAt?: string;
+  /** 보완 분석 여부 */
+  isSupplement?: boolean;
+  /** 보완 분석 원본 분석 ID */
+  supplementOf?: string;
+  /** 보완 분석 트리거 프로젝트 */
+  triggerProject?: string;
 }
 
 /** 체크리스트 항목 */
@@ -381,6 +394,45 @@ export interface AnalysisSummary {
 // ============================================================
 // REQ-012: 멀티 프로젝트 타입
 // ============================================================
+
+// ============================================================
+// REQ-015: Gap Detection 타입
+// ============================================================
+
+/** 갭 심각도 */
+export type GapSeverity = 'high' | 'medium' | 'low';
+
+/** 갭 유형 */
+export type GapType = 'stale-link' | 'unanalyzed-project' | 'low-confidence' | 'stale-index';
+
+/** 갭 항목 */
+export interface GapItem {
+  type: GapType;
+  severity: GapSeverity;
+  projectId: string;
+  description: string;
+  detail: Record<string, unknown>;
+  fixable: boolean;
+  fixCommand?: string;
+}
+
+/** 갭 탐지 결과 */
+export interface GapCheckResult {
+  gaps: GapItem[];
+  summary: {
+    total: number;
+    high: number;
+    medium: number;
+    low: number;
+    fixable: number;
+  };
+  excludedCounts?: {
+    completed: number;
+    onHold: number;
+    archived: number;
+  };
+  checkedAt: string;
+}
 
 /** 프로젝트 정보 (GET /api/projects 응답 항목) */
 export interface ProjectInfo {

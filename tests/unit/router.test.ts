@@ -18,6 +18,7 @@ import { OwnersCommand } from '../../src/commands/owners';
 import { AnnotationsCommand } from '../../src/commands/annotations';
 import { ExportIndexCommand } from '../../src/commands/export-index';
 import { SaveResultCommand } from '../../src/commands/save-result';
+import { ResultStatusCommand } from '../../src/commands/result-status';
 
 describe('Router', () => {
   describe('route()', () => {
@@ -111,6 +112,12 @@ describe('Router', () => {
       expect(command.name).toBe('save-result');
     });
 
+    it('should route "result-status" to ResultStatusCommand', () => {
+      const command = route(['result-status', 'set', 'analysis-001', 'completed']);
+      expect(command).toBeInstanceOf(ResultStatusCommand);
+      expect(command.name).toBe('result-status');
+    });
+
     it('should default to HelpCommand when no command is provided', () => {
       const command = route([]);
       expect(command).toBeInstanceOf(HelpCommand);
@@ -162,6 +169,7 @@ describe('Router', () => {
       expect(commands).toContain('annotations');
       expect(commands).toContain('export-index');
       expect(commands).toContain('save-result');
+      expect(commands).toContain('result-status');
     });
 
     it('should return at least 15 commands', () => {

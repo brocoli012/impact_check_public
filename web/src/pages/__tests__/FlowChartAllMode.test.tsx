@@ -224,9 +224,13 @@ describe('FlowChart - Alert Banner (currentResult 없을 때)', () => {
 describe('FlowChart - "전체" 모드 (CrossProjectDiagram)', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockReset();
-    vi.mocked(fetch).mockResolvedValue({
-      json: async () => ({ links: [], groups: [] }),
-    } as Response);
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/shared-entities')) {
+        return { json: async () => ({ tables: [], events: [], stats: null }) } as Response;
+      }
+      return { json: async () => ({ links: [], groups: [] }) } as Response;
+    });
   });
 
   it('should render CrossProjectDiagram when projectMode is "all" and currentResult exists', async () => {
@@ -245,9 +249,18 @@ describe('FlowChart - "전체" 모드 (CrossProjectDiagram)', () => {
     expect(screen.getByText(/전체 프로젝트 영향도/)).toBeInTheDocument();
   });
 
-  it('should render CrossProjectSummary in "all" mode', async () => {
+  it('should render CrossProjectSummary in "all" mode when summary tab is clicked', async () => {
     setupAllModeWithResult();
     renderWithRouter(<FlowChart />);
+
+    // CrossProjectTabs가 렌더링되면 기본 탭은 "의존성"
+    await waitFor(() => {
+      expect(screen.getByTestId('cross-project-tabs')).toBeInTheDocument();
+    });
+
+    // "요약" 탭 클릭
+    const summaryTab = screen.getByTestId('tab-summary');
+    fireEvent.click(summaryTab);
 
     await waitFor(() => {
       expect(screen.getByTestId('cross-project-summary-empty')).toBeInTheDocument();
