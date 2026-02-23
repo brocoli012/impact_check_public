@@ -11,7 +11,7 @@
 ## 설치
 
 ```bash
-claude install-skill https://github.com/brocoli012/impact_checker
+claude install-skill https://github.com/brocoli012/impact_check_public
 ```
 
 설치가 완료되면 Claude Code에서 바로 사용할 수 있습니다.
