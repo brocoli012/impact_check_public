@@ -23,6 +23,13 @@ export declare class SaveResultCommand implements Command {
      */
     private resolveProjectId;
     /**
+     * 크로스 프로젝트 자동 감지 후처리 hook
+     * - 등록 프로젝트가 2개 이상일 때만 실행
+     * - 실패해도 save-result 전체에 영향 없음 (호출자에서 catch)
+     * @returns DetectResult 또는 null (프로젝트 부족 시)
+     */
+    private runCrossProjectHook;
+    /**
      * 인자에서 옵션 값을 추출
      */
     private getOption;

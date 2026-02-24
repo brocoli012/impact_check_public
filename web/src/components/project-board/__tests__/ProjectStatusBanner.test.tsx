@@ -125,4 +125,98 @@ describe('ProjectStatusBanner', () => {
     // No tech tags rendered
     expect(screen.queryByText('React')).not.toBeInTheDocument();
   });
+
+  // --------------------------------------------------------
+  // TASK-113: 도메인 태그 및 기능 요약 렌더링 테스트
+  // --------------------------------------------------------
+  describe('domain tags and feature summary (TASK-113)', () => {
+    it('should render domain tags when domains are provided', () => {
+      const projectWithDomains: ProjectInfo = {
+        ...mockProject,
+        domains: ['주문', '결제', '상품'],
+      };
+      render(
+        <ProjectStatusBanner project={projectWithDomains} indexMeta={mockIndexMeta} />,
+      );
+
+      expect(screen.getByText('주문')).toBeInTheDocument();
+      expect(screen.getByText('결제')).toBeInTheDocument();
+      expect(screen.getByText('상품')).toBeInTheDocument();
+    });
+
+    it('should not render domain tags when domains is empty', () => {
+      const projectNoDomains: ProjectInfo = {
+        ...mockProject,
+        domains: [],
+      };
+      render(
+        <ProjectStatusBanner project={projectNoDomains} indexMeta={mockIndexMeta} />,
+      );
+
+      // 도메인 키워드가 표시되지 않아야 함
+      expect(screen.queryByText('주문')).not.toBeInTheDocument();
+    });
+
+    it('should not render domain tags when domains is undefined', () => {
+      const projectUndefinedDomains: ProjectInfo = {
+        ...mockProject,
+        domains: undefined,
+      };
+      render(
+        <ProjectStatusBanner project={projectUndefinedDomains} indexMeta={mockIndexMeta} />,
+      );
+
+      // 에러 없이 렌더링되어야 함
+      expect(screen.getByText('Test Project')).toBeInTheDocument();
+    });
+
+    it('should render feature summary when featureSummary is provided', () => {
+      const projectWithFeatures: ProjectInfo = {
+        ...mockProject,
+        featureSummary: [
+          '주문 OrderList/OrderDetail (화면 2개, API 3개)',
+          '결제 PaymentPage (화면 1개, API 2개)',
+        ],
+      };
+      render(
+        <ProjectStatusBanner project={projectWithFeatures} indexMeta={mockIndexMeta} />,
+      );
+
+      // "주요 기능" 헤더가 표시되어야 함
+      expect(screen.getByText('주요 기능')).toBeInTheDocument();
+    });
+
+    it('should not render feature summary section when featureSummary is empty', () => {
+      const projectNoFeatures: ProjectInfo = {
+        ...mockProject,
+        featureSummary: [],
+      };
+      render(
+        <ProjectStatusBanner project={projectNoFeatures} indexMeta={mockIndexMeta} />,
+      );
+
+      // "주요 기능" 섹션이 표시되지 않아야 함
+      expect(screen.queryByText('주요 기능')).not.toBeInTheDocument();
+    });
+
+    it('should limit feature summary display to 4 items with overflow', () => {
+      const projectManyFeatures: ProjectInfo = {
+        ...mockProject,
+        featureSummary: [
+          '주문 기능 1',
+          '결제 기능 2',
+          '배송 기능 3',
+          '상품 기능 4',
+          '회원 기능 5',
+          '검색 기능 6',
+        ],
+      };
+      render(
+        <ProjectStatusBanner project={projectManyFeatures} indexMeta={mockIndexMeta} />,
+      );
+
+      // 최대 4개까지 표시, +2개 기능 오버플로우 표시
+      expect(screen.getByText('+2개 기능')).toBeInTheDocument();
+    });
+  });
 });

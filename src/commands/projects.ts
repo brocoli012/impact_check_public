@@ -148,7 +148,10 @@ export class ProjectsCommand implements Command {
       for (const project of config.projects) {
         const activeMarker = project.id === config.activeProject ? ' (활성)' : '';
         const statusLabel = project.status === 'archived' ? ' [아카이브]' : '';
-        console.log(`  ${project.id.padEnd(24)} ${project.name}${activeMarker}${statusLabel}`);
+        const domainTags = project.domains && project.domains.length > 0
+          ? ' ' + project.domains.map(d => `[${d}]`).join(' ')
+          : '';
+        console.log(`  ${project.id.padEnd(24)} ${project.name}${activeMarker}${statusLabel}${domainTags}`);
       }
       console.log(`\n총 ${config.projects.length}개의 프로젝트가 등록되어 있습니다.`);
       console.log(`활성 프로젝트: ${config.activeProject || '(없음)'}`);
@@ -285,6 +288,11 @@ export class ProjectsCommand implements Command {
     console.log(`  경로:       ${project.path}`);
     console.log(`  상태:       ${project.status}${isActive ? ' (활성)' : ''}`);
     console.log(`  기술 스택:  ${project.techStack.length > 0 ? project.techStack.join(', ') : '(미감지)'}`);
+
+    if (project.domains && project.domains.length > 0) {
+      console.log(`  도메인:     ${project.domains.map(d => `[${d}]`).join(' ')}`);
+    }
+
     console.log(`  인덱스 파일: ${indexedFileCount}개`);
     console.log(`  분석 결과:  ${results.length}건`);
 
@@ -292,7 +300,14 @@ export class ProjectsCommand implements Command {
       console.log(`  최근 분석:  ${latestAnalysis.specTitle} (${latestAnalysis.analyzedAt})`);
     }
 
-    console.log(`  생성:       ${project.createdAt}`);
+    if (project.featureSummary && project.featureSummary.length > 0) {
+      console.log('\n  주요 기능:');
+      for (const summary of project.featureSummary) {
+        console.log(`    - ${summary}`);
+      }
+    }
+
+    console.log(`\n  생성:       ${project.createdAt}`);
     console.log(`  마지막 사용: ${project.lastUsedAt}`);
     console.log('');
 

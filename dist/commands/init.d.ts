@@ -32,5 +32,9 @@ export declare class InitCommand implements Command {
      * 프로젝트를 .impact/projects.json에 등록
      */
     private registerProject;
+    /**
+     * 보완 분석 스캔 hook - init 성공 후 기존 분석 결과 매칭 스캔
+     */
+    private runSupplementScan;
 }
 //# sourceMappingURL=init.d.ts.map

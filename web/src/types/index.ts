@@ -449,4 +449,10 @@ export interface ProjectInfo {
   latestAnalyzedAt: string | null;
   taskCount: number;
   policyWarningCount: number;
+  /** 비즈니스 도메인 키워드 목록 */
+  domains?: string[];
+  /** 주요 기능 요약 목록 */
+  featureSummary?: string[];
+  /** 요약 데이터 출처 */
+  summarySource?: 'auto' | 'manual' | 'mixed';
 }

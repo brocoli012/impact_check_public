@@ -93,4 +93,63 @@ describe('ProjectCard', () => {
     render(<ProjectCard project={archivedProject} isActive={false} onClick={() => {}} />);
     expect(screen.getByText('보관됨')).toBeTruthy();
   });
+
+  // --------------------------------------------------------
+  // TASK-113: 도메인 태그 렌더링 테스트
+  // --------------------------------------------------------
+  describe('domain tags (TASK-113)', () => {
+    it('should render domain tags when domains are provided', () => {
+      const projectWithDomains: ProjectInfo = {
+        ...mockProject,
+        domains: ['주문', '결제', '배송'],
+      };
+      render(<ProjectCard project={projectWithDomains} isActive={false} onClick={() => {}} />);
+
+      expect(screen.getByText('주문')).toBeTruthy();
+      expect(screen.getByText('결제')).toBeTruthy();
+      expect(screen.getByText('배송')).toBeTruthy();
+    });
+
+    it('should limit domain tags to 3 and show overflow count', () => {
+      const projectWithManyDomains: ProjectInfo = {
+        ...mockProject,
+        domains: ['주문', '결제', '배송', '상품', '회원'],
+      };
+      render(<ProjectCard project={projectWithManyDomains} isActive={false} onClick={() => {}} />);
+
+      // 처음 3개만 표시
+      expect(screen.getByText('주문')).toBeTruthy();
+      expect(screen.getByText('결제')).toBeTruthy();
+      expect(screen.getByText('배송')).toBeTruthy();
+      // 나머지 +2 표시
+      expect(screen.getByText('+2')).toBeTruthy();
+      // 4번째, 5번째는 태그로 표시되지 않음
+      expect(screen.queryByText('상품')).toBeNull();
+      expect(screen.queryByText('회원')).toBeNull();
+    });
+
+    it('should not render domain section when domains is empty', () => {
+      const projectNoDomains: ProjectInfo = {
+        ...mockProject,
+        domains: [],
+      };
+      const { container } = render(<ProjectCard project={projectNoDomains} isActive={false} onClick={() => {}} />);
+
+      // 도메인 태그 섹션이 렌더링되지 않아야 함
+      // 도메인 태그는 rounded-full 클래스를 가짐
+      const domainTags = container.querySelectorAll('.rounded-full');
+      expect(domainTags.length).toBe(0);
+    });
+
+    it('should not render domain section when domains is undefined', () => {
+      const projectUndefinedDomains: ProjectInfo = {
+        ...mockProject,
+        domains: undefined,
+      };
+      render(<ProjectCard project={projectUndefinedDomains} isActive={false} onClick={() => {}} />);
+
+      // domains가 undefined일 때도 에러 없이 렌더링
+      expect(screen.getByText('Test Project')).toBeTruthy();
+    });
+  });
 });

@@ -6,6 +6,7 @@
 import type { ProjectInfo, Grade } from '../../types';
 import { GRADE_COLORS } from '../../utils/colors';
 import { formatDate } from '../../utils/gradeUtils';
+import { DOMAIN_COLORS, getDomainColorIndex } from '../../utils/domainColors';
 
 interface ProjectCardProps {
   project: ProjectInfo;
@@ -71,6 +72,28 @@ function ProjectCard({ project, isActive, onClick }: ProjectCardProps) {
           </span>
         )}
       </div>
+
+      {/* 도메인 태그 */}
+      {project.domains && project.domains.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {project.domains.slice(0, 3).map((domain) => {
+            const colorIdx = getDomainColorIndex(domain);
+            const color = DOMAIN_COLORS[colorIdx];
+            return (
+              <span
+                key={domain}
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                style={{ backgroundColor: color.bg, color: color.text }}
+              >
+                {domain}
+              </span>
+            );
+          })}
+          {project.domains.length > 3 && (
+            <span className="text-[10px] text-gray-400">+{project.domains.length - 3}</span>
+          )}
+        </div>
+      )}
 
       {/* 통계 */}
       <div className="grid grid-cols-3 gap-2 mb-3">

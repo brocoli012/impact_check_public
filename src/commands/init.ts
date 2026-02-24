@@ -8,6 +8,7 @@ import * as path from 'path';
 import { Command, CommandResult, ResultCode } from '../types/common';
 import { ProjectsConfig, ProjectEntry } from '../types/index';
 import { Indexer } from '../core/indexing/indexer';
+import { DomainExtractor } from '../core/indexing/domain-extractor';
 import { SupplementScanner } from '../core/cross-project/supplement-scanner';
 import { ensureDir, readJsonFile, writeJsonFile, getImpactDir, toKebabCase } from '../utils/file';
 import { logger } from '../utils/logger';
@@ -91,8 +92,12 @@ export class InitCommand implements Command {
       // 인덱스 저장
       await indexer.saveIndex(codeIndex, projectId);
 
+      // 도메인 추출
+      const domainExtractor = new DomainExtractor();
+      const { domains, featureSummary } = domainExtractor.extract(codeIndex);
+
       // 프로젝트 등록
-      this.registerProject(projectId, projectName, resolvedPath, codeIndex.meta.project.techStack);
+      this.registerProject(projectId, projectName, resolvedPath, codeIndex.meta.project.techStack, domains, featureSummary);
 
       // 결과 요약 출력
       logger.separator();
@@ -106,6 +111,17 @@ export class InitCommand implements Command {
 
       if (codeIndex.meta.project.techStack.length > 0) {
         console.log(`\n기술 스택: ${codeIndex.meta.project.techStack.join(', ')}`);
+      }
+
+      if (domains.length > 0) {
+        console.log(`\n도메인:  ${domains.map(d => `[${d}]`).join(' ')}`);
+      }
+
+      if (featureSummary.length > 0) {
+        console.log('\n주요 기능:');
+        for (const summary of featureSummary) {
+          console.log(`  - ${summary}`);
+        }
       }
 
       console.log(`\nGit: ${codeIndex.meta.gitBranch} (${codeIndex.meta.gitCommit.substring(0, 7)})`);
@@ -151,6 +167,8 @@ export class InitCommand implements Command {
     name: string,
     projectPath: string,
     techStack: string[],
+    domains?: string[],
+    featureSummary?: string[],
   ): void {
     const impactDir = getImpactDir();
     ensureDir(impactDir);
@@ -173,6 +191,9 @@ export class InitCommand implements Command {
       createdAt: existingIdx >= 0 ? config.projects[existingIdx].createdAt : now,
       lastUsedAt: now,
       techStack,
+      domains: domains && domains.length > 0 ? domains : undefined,
+      featureSummary: featureSummary && featureSummary.length > 0 ? featureSummary : undefined,
+      summarySource: (domains && domains.length > 0) || (featureSummary && featureSummary.length > 0) ? 'auto' : undefined,
     };
 
     if (existingIdx >= 0) {

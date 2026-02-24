@@ -2,7 +2,7 @@
  * @module core/cross-project/cross-project-manager
  * @description 크로스 프로젝트 매니저 - 프로젝트 간 의존성 관리
  */
-import { CrossProjectConfig, ProjectLink, ProjectGroup, LinkType } from './types';
+import { CrossProjectConfig, ProjectLink, ProjectGroup, LinkType, DetectResult } from './types';
 import { Indexer } from '../indexing/indexer';
 /**
  * CrossProjectManager - 프로젝트 간 의존성 관리
@@ -28,7 +28,7 @@ export declare class CrossProjectManager {
      */
     saveConfig(config: CrossProjectConfig): Promise<void>;
     /**
-     * 프로젝트 간 의존성 등록
+     * 프로젝트 간 의존성 등록 (파일 잠금으로 동시 접근 보호)
      * @param source - 소스 프로젝트 ID
      * @param target - 대상 프로젝트 ID
      * @param type - 의존성 유형
@@ -37,7 +37,7 @@ export declare class CrossProjectManager {
      */
     link(source: string, target: string, type: LinkType, apis?: string[]): Promise<ProjectLink>;
     /**
-     * 프로젝트 간 의존성 해제
+     * 프로젝트 간 의존성 해제 (파일 잠금으로 동시 접근 보호)
      * 양방향 삭제: A->B, B->A 모두 확인하여 삭제
      * @param source - 소스 프로젝트 ID
      * @param target - 대상 프로젝트 ID
@@ -58,7 +58,7 @@ export declare class CrossProjectManager {
      */
     getLink(source: string, target: string): Promise<ProjectLink | null>;
     /**
-     * 그룹 추가
+     * 그룹 추가 (파일 잠금으로 동시 접근 보호)
      * @param name - 그룹 이름
      * @param projectIds - 포함할 프로젝트 ID 목록
      * @returns 생성된 프로젝트 그룹
@@ -76,7 +76,7 @@ export declare class CrossProjectManager {
      */
     getGroups(): Promise<ProjectGroup[]>;
     /**
-     * 그룹 삭제
+     * 그룹 삭제 (파일 잠금으로 동시 접근 보호)
      * @param name - 삭제할 그룹 이름
      * @returns 삭제 성공 여부
      */
@@ -92,6 +92,19 @@ export declare class CrossProjectManager {
      * @returns 감지된 ProjectLink 배열 (autoDetected: true, 저장하지 않음)
      */
     detectLinks(indexer: Indexer, projectIds: string[]): Promise<ProjectLink[]>;
+    /**
+     * API 경로 매칭 기반 자동 의존성 감지 + 저장 (원자적)
+     *
+     * detectLinks()를 호출한 후, 결과를 cross-project.json에 저장합니다.
+     * - 기존 수동 링크(autoDetected: false)는 보존
+     * - 기존 자동 링크(autoDetected: true)는 최신 결과로 교체
+     * - 수동 링크와 동일 source-target 조합이면 건너뜀
+     *
+     * @param indexer - 인덱서 인스턴스
+     * @param projectIds - 감지 대상 프로젝트 ID 목록
+     * @returns DetectResult (감지/저장 통계)
+     */
+    detectAndSave(indexer: Indexer, projectIds: string[]): Promise<DetectResult>;
     /**
      * 두 프로젝트의 API 경로 매칭
      * - 정확 매칭 (exact match) 우선

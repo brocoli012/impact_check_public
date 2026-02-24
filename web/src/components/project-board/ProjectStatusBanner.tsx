@@ -4,6 +4,7 @@
  */
 
 import type { ProjectInfo } from '../../types';
+import { DOMAIN_COLORS, getDomainColorIndex } from '../../utils/domainColors';
 
 interface IndexMeta {
   totalFiles: number;
@@ -30,6 +31,25 @@ function ProjectStatusBanner({ project, indexMeta, lastAnalysisDate }: ProjectSt
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-bold text-gray-800">{project.name}</h2>
           <p className="text-xs text-gray-400 font-mono truncate mt-1">{project.path}</p>
+
+          {/* 도메인 태그 */}
+          {project.domains && project.domains.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {project.domains.map((domain) => {
+                const colorIdx = getDomainColorIndex(domain);
+                const color = DOMAIN_COLORS[colorIdx];
+                return (
+                  <span
+                    key={domain}
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{ backgroundColor: color.bg, color: color.text }}
+                  >
+                    {domain}
+                  </span>
+                );
+              })}
+            </div>
+          )}
 
           {/* 기술 스택 태그 */}
           {project.techStack.length > 0 && (
@@ -70,6 +90,27 @@ function ProjectStatusBanner({ project, indexMeta, lastAnalysisDate }: ProjectSt
               <span className="text-xs" data-testid="index-warning">
                 인덱싱이 필요합니다. CLI에서 <code className="font-mono bg-gray-100 px-1 rounded">impact index</code>를 실행하세요.
               </span>
+            </div>
+          )}
+
+          {/* 기능 요약 */}
+          {project.featureSummary && project.featureSummary.length > 0 && (
+            <div className="bg-gray-50 rounded-lg p-3 mt-3">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                주요 기능
+              </div>
+              <div className="space-y-1">
+                {project.featureSummary.slice(0, 4).map((feature, idx) => (
+                  <div key={idx} className="text-xs text-gray-700">
+                    • {feature}
+                  </div>
+                ))}
+                {project.featureSummary.length > 4 && (
+                  <div className="text-[10px] text-gray-400 mt-1">
+                    +{project.featureSummary.length - 4}개 기능
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

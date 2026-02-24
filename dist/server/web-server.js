@@ -56,8 +56,10 @@ const annotation_manager_1 = require("../core/annotations/annotation-manager");
 const policy_converter_1 = require("../core/annotations/policy-converter");
 const cross_project_manager_1 = require("../core/cross-project/cross-project-manager");
 const shared_entity_indexer_1 = require("../core/cross-project/shared-entity-indexer");
+const gap_detector_1 = require("../core/cross-project/gap-detector");
 const logger_1 = require("../utils/logger");
 const file_1 = require("../utils/file");
+const analysis_status_1 = require("../utils/analysis-status");
 /** Express 라우트 파라미터에서 안전하게 문자열을 추출 */
 function getParam(params, key) {
     const value = params[key];
@@ -188,6 +190,7 @@ function createApp(basePath) {
     // ============================================================
     /**
      * GET /api/results - 분석 결과 목록 조회
+     * 쿼리 파라미터: ?status=active (상태 필터), ?projectId=<id>
      */
     app.get('/api/results', async (req, res) => {
         try {
@@ -196,7 +199,12 @@ function createApp(basePath) {
                 res.json({ results: [], message: 'No active project' });
                 return;
             }
-            const results = await resultManager.list(projectId);
+            let results = await resultManager.list(projectId);
+            // status 필터 적용
+            const statusFilter = req.query.status;
+            if (statusFilter && statusFilter !== 'all') {
+                results = results.filter(r => (0, analysis_status_1.getEffectiveStatus)(r.status) === statusFilter);
+            }
             res.json({ results });
         }
         catch (error) {
@@ -251,6 +259,53 @@ function createApp(basePath) {
         catch (error) {
             logger_1.logger.error(`Failed to get result ${getParam(req.params, 'id')}:`, error);
             res.status(500).json({ error: 'Failed to get result' });
+        }
+    });
+    /**
+     * PATCH /api/results/:id/status - 분석 결과 상태 변경
+     */
+    app.patch('/api/results/:id/status', async (req, res) => {
+        try {
+            const resultId = getParam(req.params, 'id');
+            if (!isValidId(resultId)) {
+                res.status(400).json({ error: 'Invalid result ID' });
+                return;
+            }
+            // [R3-API-05] req.body undefined 방어 (Content-Type 미설정 대비)
+            if (!req.body || typeof req.body.status !== 'string') {
+                res.status(400).json({ error: 'Request body must contain a valid "status" string field' });
+                return;
+            }
+            const { status: newStatus } = req.body;
+            // [R4-05] isAnalysisStatus() 런타임 가드로 검증
+            if (!(0, analysis_status_1.isAnalysisStatus)(newStatus)) {
+                const validStatuses = ['active', 'completed', 'on-hold', 'archived'];
+                res.status(400).json({ error: `Invalid status. Valid: ${validStatuses.join(', ')}` });
+                return;
+            }
+            // findByAnalysisId로 프로젝트 ID 역매핑
+            const found = await resultManager.findByAnalysisId(resultId);
+            if (!found) {
+                res.status(404).json({ error: 'Analysis result not found' });
+                return;
+            }
+            try {
+                const updated = await resultManager.updateStatus(found.projectId, resultId, newStatus);
+                // [R3-API-03] 기존 API 패턴과 통일
+                res.json({ result: updated });
+            }
+            catch (err) {
+                // [R4-03] transition 에러 vs I/O 에러 구분
+                const errMsg = err instanceof Error ? err.message : 'Invalid transition';
+                const isTransitionError = errMsg.includes('전환') ||
+                    errMsg.includes('폐기') ||
+                    errMsg.includes('찾을 수 없습니다');
+                res.status(isTransitionError ? 400 : 500).json({ error: errMsg });
+            }
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to update result status:', error);
+            res.status(500).json({ error: 'Failed to update result status' });
         }
     });
     /**
@@ -759,6 +814,9 @@ function createApp(basePath) {
                     createdAt: entry.createdAt,
                     lastUsedAt: entry.lastUsedAt,
                     techStack: entry.techStack || [],
+                    domains: entry.domains || [],
+                    featureSummary: entry.featureSummary || [],
+                    summarySource: entry.summarySource || null,
                     resultCount: summaries.length,
                     latestGrade: latestResult?.grade || null,
                     latestScore: latestResult?.totalScore ?? null,
@@ -1022,6 +1080,25 @@ function createApp(basePath) {
         catch (error) {
             logger_1.logger.error('Failed to get shared entities:', error);
             res.status(500).json({ error: 'Failed to get shared entities' });
+        }
+    });
+    // ============================================================
+    // 갭 탐지 (Gap Check) API 엔드포인트
+    // ============================================================
+    /**
+     * GET /api/gap-check - 갭 탐지 실행
+     * 쿼리 파라미터: ?project=<id> (프로젝트 필터)
+     */
+    app.get('/api/gap-check', async (req, res) => {
+        try {
+            const projectId = req.query.project;
+            const detector = new gap_detector_1.GapDetector(basePath);
+            const result = await detector.detect({ projectId });
+            res.json(result);
+        }
+        catch (err) {
+            logger_1.logger.error('Failed to run gap check:', err);
+            res.status(500).json({ error: String(err) });
         }
     });
     // ============================================================

@@ -81,7 +81,7 @@ class CrossProjectManager {
         (0, file_1.writeJsonFile)(this.configPath, config);
     }
     /**
-     * 프로젝트 간 의존성 등록
+     * 프로젝트 간 의존성 등록 (파일 잠금으로 동시 접근 보호)
      * @param source - 소스 프로젝트 ID
      * @param target - 대상 프로젝트 ID
      * @param type - 의존성 유형
@@ -89,49 +89,53 @@ class CrossProjectManager {
      * @returns 생성된 프로젝트 링크
      */
     async link(source, target, type, apis) {
-        const config = await this.loadConfig();
-        // 중복 체크: 동일 source-target 링크가 이미 존재하면 기존 링크 반환
-        const existing = config.links.find(l => l.source === source && l.target === target);
-        if (existing) {
-            logger_1.logger.info(`이미 존재하는 링크입니다: ${source} -> ${target}`);
-            return existing;
-        }
-        const link = {
-            id: `${source}-${target}`,
-            source,
-            target,
-            type,
-            autoDetected: false,
-            confirmedAt: new Date().toISOString(),
-        };
-        if (apis && apis.length > 0) {
-            link.apis = apis;
-        }
-        config.links.push(link);
-        await this.saveConfig(config);
-        logger_1.logger.info(`의존성 등록 완료: ${source} -> ${target} (${type})`);
-        return link;
+        return (0, file_1.withFileLock)(this.configPath, async () => {
+            const config = await this.loadConfig();
+            // 중복 체크: 동일 source-target 링크가 이미 존재하면 기존 링크 반환
+            const existing = config.links.find(l => l.source === source && l.target === target);
+            if (existing) {
+                logger_1.logger.info(`이미 존재하는 링크입니다: ${source} -> ${target}`);
+                return existing;
+            }
+            const link = {
+                id: `${source}-${target}`,
+                source,
+                target,
+                type,
+                autoDetected: false,
+                confirmedAt: new Date().toISOString(),
+            };
+            if (apis && apis.length > 0) {
+                link.apis = apis;
+            }
+            config.links.push(link);
+            await this.saveConfig(config);
+            logger_1.logger.info(`의존성 등록 완료: ${source} -> ${target} (${type})`);
+            return link;
+        });
     }
     /**
-     * 프로젝트 간 의존성 해제
+     * 프로젝트 간 의존성 해제 (파일 잠금으로 동시 접근 보호)
      * 양방향 삭제: A->B, B->A 모두 확인하여 삭제
      * @param source - 소스 프로젝트 ID
      * @param target - 대상 프로젝트 ID
      * @returns 삭제 성공 여부
      */
     async unlink(source, target) {
-        const config = await this.loadConfig();
-        const initialLength = config.links.length;
-        // 양방향 삭제: source->target 또는 target->source 모두 삭제
-        config.links = config.links.filter(l => !((l.source === source && l.target === target) ||
-            (l.source === target && l.target === source)));
-        if (config.links.length === initialLength) {
-            logger_1.logger.warn(`해제할 링크가 없습니다: ${source} <-> ${target}`);
-            return false;
-        }
-        await this.saveConfig(config);
-        logger_1.logger.info(`의존성 해제 완료: ${source} <-> ${target}`);
-        return true;
+        return (0, file_1.withFileLock)(this.configPath, async () => {
+            const config = await this.loadConfig();
+            const initialLength = config.links.length;
+            // 양방향 삭제: source->target 또는 target->source 모두 삭제
+            config.links = config.links.filter(l => !((l.source === source && l.target === target) ||
+                (l.source === target && l.target === source)));
+            if (config.links.length === initialLength) {
+                logger_1.logger.warn(`해제할 링크가 없습니다: ${source} <-> ${target}`);
+                return false;
+            }
+            await this.saveConfig(config);
+            logger_1.logger.info(`의존성 해제 완료: ${source} <-> ${target}`);
+            return true;
+        });
     }
     /**
      * 의존성 조회 (특정 프로젝트 또는 전체)
@@ -157,26 +161,28 @@ class CrossProjectManager {
         return link || null;
     }
     /**
-     * 그룹 추가
+     * 그룹 추가 (파일 잠금으로 동시 접근 보호)
      * @param name - 그룹 이름
      * @param projectIds - 포함할 프로젝트 ID 목록
      * @returns 생성된 프로젝트 그룹
      */
     async addGroup(name, projectIds) {
-        const config = await this.loadConfig();
-        // 동일 이름의 그룹이 있으면 덮어쓰기
-        const existingIdx = config.groups.findIndex(g => g.name === name);
-        const group = { name, projects: projectIds };
-        if (existingIdx !== -1) {
-            config.groups[existingIdx] = group;
-            logger_1.logger.info(`그룹 업데이트 완료: ${name}`);
-        }
-        else {
-            config.groups.push(group);
-            logger_1.logger.info(`그룹 추가 완료: ${name}`);
-        }
-        await this.saveConfig(config);
-        return group;
+        return (0, file_1.withFileLock)(this.configPath, async () => {
+            const config = await this.loadConfig();
+            // 동일 이름의 그룹이 있으면 덮어쓰기
+            const existingIdx = config.groups.findIndex(g => g.name === name);
+            const group = { name, projects: projectIds };
+            if (existingIdx !== -1) {
+                config.groups[existingIdx] = group;
+                logger_1.logger.info(`그룹 업데이트 완료: ${name}`);
+            }
+            else {
+                config.groups.push(group);
+                logger_1.logger.info(`그룹 추가 완료: ${name}`);
+            }
+            await this.saveConfig(config);
+            return group;
+        });
     }
     /**
      * 그룹 조회
@@ -197,21 +203,23 @@ class CrossProjectManager {
         return config.groups;
     }
     /**
-     * 그룹 삭제
+     * 그룹 삭제 (파일 잠금으로 동시 접근 보호)
      * @param name - 삭제할 그룹 이름
      * @returns 삭제 성공 여부
      */
     async removeGroup(name) {
-        const config = await this.loadConfig();
-        const initialLength = config.groups.length;
-        config.groups = config.groups.filter(g => g.name !== name);
-        if (config.groups.length === initialLength) {
-            logger_1.logger.warn(`삭제할 그룹이 없습니다: ${name}`);
-            return false;
-        }
-        await this.saveConfig(config);
-        logger_1.logger.info(`그룹 삭제 완료: ${name}`);
-        return true;
+        return (0, file_1.withFileLock)(this.configPath, async () => {
+            const config = await this.loadConfig();
+            const initialLength = config.groups.length;
+            config.groups = config.groups.filter(g => g.name !== name);
+            if (config.groups.length === initialLength) {
+                logger_1.logger.warn(`삭제할 그룹이 없습니다: ${name}`);
+                return false;
+            }
+            await this.saveConfig(config);
+            logger_1.logger.info(`그룹 삭제 완료: ${name}`);
+            return true;
+        });
     }
     /**
      * API 경로 매칭 기반 자동 의존성 감지
@@ -331,6 +339,58 @@ class CrossProjectManager {
         }
         logger_1.logger.info(`자동 감지된 의존성: ${detectedLinks.length}건`);
         return detectedLinks;
+    }
+    /**
+     * API 경로 매칭 기반 자동 의존성 감지 + 저장 (원자적)
+     *
+     * detectLinks()를 호출한 후, 결과를 cross-project.json에 저장합니다.
+     * - 기존 수동 링크(autoDetected: false)는 보존
+     * - 기존 자동 링크(autoDetected: true)는 최신 결과로 교체
+     * - 수동 링크와 동일 source-target 조합이면 건너뜀
+     *
+     * @param indexer - 인덱서 인스턴스
+     * @param projectIds - 감지 대상 프로젝트 ID 목록
+     * @returns DetectResult (감지/저장 통계)
+     */
+    async detectAndSave(indexer, projectIds) {
+        // 1. detectLinks() 호출
+        const detected = await this.detectLinks(indexer, projectIds);
+        if (detected.length === 0) {
+            return { detected: 0, saved: 0, total: 0, byType: {} };
+        }
+        // 2. withFileLock으로 감싸서 cross-project.json에 저장
+        return (0, file_1.withFileLock)(this.configPath, async () => {
+            const config = await this.loadConfig();
+            // 3. 수동 링크 보존, 기존 자동 링크 제거
+            const manualLinks = config.links.filter(l => !l.autoDetected);
+            // 4. 신규 자동 링크 추가 (중복 방지: 수동 링크와 동일 source-target이면 건너뜀)
+            let savedCount = 0;
+            const autoLinks = [];
+            for (const link of detected) {
+                const existsManual = manualLinks.find(m => m.source === link.source && m.target === link.target);
+                if (!existsManual) {
+                    // R3-CODE-02: spread로 새 객체 생성 (detectLinks 반환 객체 직접 mutate 방지)
+                    const linkWithTimestamp = { ...link, confirmedAt: new Date().toISOString() };
+                    autoLinks.push(linkWithTimestamp);
+                    savedCount++;
+                }
+            }
+            // 5. 병합 및 저장
+            config.links = [...manualLinks, ...autoLinks];
+            await this.saveConfig(config);
+            // 6. 통계 반환
+            const byType = {};
+            for (const link of autoLinks) {
+                byType[link.type] = (byType[link.type] || 0) + 1;
+            }
+            logger_1.logger.info(`detectAndSave 완료: 감지 ${detected.length}건, 신규 저장 ${savedCount}건, 총 ${config.links.length}건`);
+            return {
+                detected: detected.length,
+                saved: savedCount,
+                total: config.links.length,
+                byType,
+            };
+        });
     }
     /**
      * 두 프로젝트의 API 경로 매칭

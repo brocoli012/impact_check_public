@@ -28,7 +28,10 @@ import ProjectSelector from '../components/common/ProjectSelector';
 import { type ProjectLink } from '../components/cross-project/CrossProjectDiagram';
 import { type ProjectGroup } from '../components/cross-project/CrossProjectSummary';
 import CrossProjectTabs from '../components/cross-project/CrossProjectTabs';
-import type { Task } from '../types';
+import CrossProjectFlowDiagram from '../components/cross-project/CrossProjectFlowDiagram';
+import FlowFilterBar from '../components/cross-project/FlowFilterBar';
+import ProjectDetailSidePanel from '../components/cross-project/ProjectDetailSidePanel';
+import type { Task, ProjectInfo } from '../types';
 
 /**
  * 요구사항 필터에 해당하는 태스크 ID와 화면 ID를 계산
@@ -144,20 +147,38 @@ function FlowChart() {
   // 크로스 프로젝트 데이터
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const [groups, setGroups] = useState<ProjectGroup[]>([]);
+  const [allProjects, setAllProjects] = useState<ProjectInfo[]>([]);
+
+  // 크로스 프로젝트 뷰 전환 상태 (탭 뷰 / 플로우 뷰)
+  const [crossProjectView, setCrossProjectView] = useState<'tabs' | 'flow'>('tabs');
+
+  // 플로우 뷰 필터 상태
+  const [flowSelectedGroup, setFlowSelectedGroup] = useState<string | null>(null);
+  const [flowSearchQuery, setFlowSearchQuery] = useState('');
+  const [flowSelectedProjectId, setFlowSelectedProjectId] = useState<string | null>(null);
+
+  // 선택된 프로젝트 정보 (사이드 패널용)
+  const flowSelectedProject = useMemo(
+    () => allProjects.find((p) => p.id === flowSelectedProjectId) ?? null,
+    [allProjects, flowSelectedProjectId],
+  );
 
   // 크로스 프로젝트 데이터 로드 (전체 모드 진입 시)
   useEffect(() => {
     if (projectMode === 'all') {
       (async () => {
         try {
-          const [linksRes, groupsRes] = await Promise.all([
+          const [linksRes, groupsRes, projectsRes] = await Promise.all([
             fetch('/api/cross-project/links'),
             fetch('/api/cross-project/groups'),
+            fetch('/api/projects'),
           ]);
           const linksData = await linksRes.json();
           const groupsData = await groupsRes.json();
+          const projectsData = await projectsRes.json();
           setLinks(linksData.links || []);
           setGroups(groupsData.groups || []);
+          setAllProjects(projectsData.projects || []);
         } catch {
           // 크로스 프로젝트 데이터 로드 실패는 무시
         }
@@ -259,13 +280,88 @@ function FlowChart() {
           onProjectSelected={handleProjectChange}
         />
 
-        <div className="mt-4 flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 pt-4 pb-2">
+        <div className="mt-4 flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="px-4 pt-4 pb-2" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 className="text-lg font-semibold text-gray-800">
               전체 프로젝트 영향도 - {currentResult.specTitle}
             </h3>
+            {/* 뷰 전환 버튼 */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                data-testid="view-toggle-tabs"
+                onClick={() => setCrossProjectView('tabs')}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px solid',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  ...(crossProjectView === 'tabs'
+                    ? { background: '#3B82F6', color: 'white', borderColor: '#3B82F6' }
+                    : { background: 'white', color: '#64748B', borderColor: '#CBD5E1' }),
+                }}
+              >
+                탭 뷰
+              </button>
+              <button
+                data-testid="view-toggle-flow"
+                onClick={() => setCrossProjectView('flow')}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px solid',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  ...(crossProjectView === 'flow'
+                    ? { background: '#3B82F6', color: 'white', borderColor: '#3B82F6' }
+                    : { background: 'white', color: '#64748B', borderColor: '#CBD5E1' }),
+                }}
+              >
+                플로우 뷰
+              </button>
+            </div>
           </div>
-          <CrossProjectTabs links={links} groups={groups} />
+
+          {crossProjectView === 'tabs' ? (
+            <CrossProjectTabs links={links} groups={groups} />
+          ) : (
+            <div style={{ flex: 1, display: 'flex', gap: 16, padding: '0 16px 16px 16px', overflow: 'hidden' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+                <FlowFilterBar
+                  groups={groups}
+                  selectedGroup={flowSelectedGroup}
+                  onGroupChange={setFlowSelectedGroup}
+                  searchQuery={flowSearchQuery}
+                  onSearchChange={setFlowSearchQuery}
+                />
+                <div style={{ flex: 1, borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden', background: '#FAFBFC' }}>
+                  <CrossProjectFlowDiagram
+                    links={links}
+                    groups={groups}
+                    projects={allProjects}
+                    selectedGroup={flowSelectedGroup}
+                    searchQuery={flowSearchQuery}
+                    onNodeClick={(projectId) => setFlowSelectedProjectId(
+                      flowSelectedProjectId === projectId ? null : projectId,
+                    )}
+                  />
+                </div>
+              </div>
+              {flowSelectedProject && (
+                <div style={{ width: 320, flexShrink: 0 }}>
+                  <ProjectDetailSidePanel
+                    project={flowSelectedProject}
+                    links={links}
+                    onClose={() => setFlowSelectedProjectId(null)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

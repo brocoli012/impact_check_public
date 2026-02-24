@@ -21,6 +21,7 @@ import { Indexer } from '../core/indexing/indexer';
 import { ConfigManager } from '../config/config-manager';
 import { readJsonFile, getImpactDir } from '../utils/file';
 import { logger } from '../utils/logger';
+import { renderMermaid } from '../utils/mermaid-renderer';
 
 /** ANSI 색상 코드 */
 const COLORS = {
@@ -75,6 +76,11 @@ export class CrossAnalyzeCommand implements Command {
       // --supplement 옵션 처리: 보완 분석 스캔 및 저장
       if (this.args.includes('--supplement')) {
         return await this.handleSupplement();
+      }
+
+      // --mermaid 옵션 처리: Mermaid 다이어그램 출력
+      if (this.args.includes('--mermaid')) {
+        return await this.handleMermaid();
       }
 
       // 1. 옵션 파싱
@@ -413,6 +419,34 @@ export class CrossAnalyzeCommand implements Command {
         savedCount: savedPaths.length,
         savedPaths,
       },
+    };
+  }
+
+  /**
+   * --mermaid 옵션: 크로스 프로젝트 의존성을 Mermaid 다이어그램으로 출력
+   */
+  private async handleMermaid(): Promise<CommandResult> {
+    const manager = new CrossProjectManager();
+    const config = await manager.loadConfig();
+
+    const direction = this.args.includes('--tb') ? 'TB' as const : 'LR' as const;
+    const output = renderMermaid(config.links, config.groups, { direction });
+
+    // --output <path> 옵션이 있으면 파일로 저장
+    const outputIdx = this.args.indexOf('--output');
+    if (outputIdx !== -1 && this.args[outputIdx + 1]) {
+      const fs = await import('fs');
+      const outputPath = this.args[outputIdx + 1];
+      fs.writeFileSync(outputPath, output, 'utf-8');
+      console.log(`Mermaid 다이어그램이 ${outputPath}에 저장되었습니다.`);
+    } else {
+      console.log(output);
+    }
+
+    return {
+      code: ResultCode.SUCCESS,
+      message: 'Mermaid 다이어그램 출력 완료.',
+      data: { output },
     };
   }
 

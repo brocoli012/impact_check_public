@@ -33,6 +33,12 @@ export interface ProjectEntry {
   lastUsedAt: ISODateString;
   /** 기술 스택 */
   techStack: string[];
+  /** 비즈니스 도메인 키워드 목록 (예: ["커머스", "결제", "회원"]) */
+  domains?: string[];
+  /** 주요 기능 요약 (자동 생성) */
+  featureSummary?: string[];
+  /** 요약 데이터 출처 */
+  summarySource?: 'auto' | 'manual' | 'mixed';
 }
 
 // ============================================================

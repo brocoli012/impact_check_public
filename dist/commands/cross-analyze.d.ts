@@ -31,6 +31,18 @@ export declare class CrossAnalyzeCommand implements Command {
      */
     private getChangeLabel;
     /**
+     * --auto 옵션: 등록된 모든 프로젝트에 대해 자동 탐지 수행
+     */
+    private handleAutoDetect;
+    /**
+     * --supplement 옵션: 보완 분석 스캔 및 결과 저장
+     */
+    private handleSupplement;
+    /**
+     * --mermaid 옵션: 크로스 프로젝트 의존성을 Mermaid 다이어그램으로 출력
+     */
+    private handleMermaid;
+    /**
      * 활성 프로젝트 ID 가져오기
      */
     private getActiveProjectId;

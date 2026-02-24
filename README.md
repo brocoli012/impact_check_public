@@ -15,12 +15,12 @@
 Claude Code 터미널에서 아래 명령어를 입력하세요:
 
 ```bash
-claude install-skill https://github.com/brocoli012/impact_check_public
+claude install-skill https://github.com/brocoli012/impact_checker
 ```
 
 또는 Claude Code 대화창에서 직접 요청해도 됩니다:
 
-> "https://github.com/brocoli012/impact_check_public 이 스킬 설치해줘"
+> "https://github.com/brocoli012/impact_checker 이 스킬 설치해줘"
 
 ### Google Antigravity에서 설치
 

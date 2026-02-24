@@ -39,10 +39,14 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SaveResultCommand = void 0;
 const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 const common_1 = require("../types/common");
 const config_manager_1 = require("../config/config-manager");
 const result_manager_1 = require("../core/analysis/result-manager");
+const cross_project_manager_1 = require("../core/cross-project/cross-project-manager");
+const indexer_1 = require("../core/indexing/indexer");
 const validators_1 = require("../utils/validators");
+const file_1 = require("../utils/file");
 const logger_1 = require("../utils/logger");
 /**
  * SaveResultCommand - 분석 결과 저장 명령어
@@ -121,6 +125,26 @@ class SaveResultCommand {
             const resultManager = new result_manager_1.ResultManager();
             const savedId = await resultManager.save(result, resolvedProjectId);
             logger_1.logger.success(`분석 결과가 저장되었습니다: ${savedId}`);
+            // === 후처리 hook: 크로스 프로젝트 자동 감지 ===
+            const skipCrossDetect = this.args.includes('--skip-cross-detect');
+            if (!skipCrossDetect) {
+                try {
+                    const detectResult = await this.runCrossProjectHook(resolvedProjectId);
+                    // TASK-056: 탐지 결과를 분석 결과 요약에 기록
+                    if (detectResult) {
+                        await resultManager.updateCrossProjectDetection(resolvedProjectId, savedId, {
+                            detectedAt: new Date().toISOString(),
+                            linksDetected: detectResult.detected,
+                            linksNew: detectResult.saved,
+                            linksTotal: detectResult.total,
+                        });
+                    }
+                }
+                catch (hookErr) {
+                    const hookMsg = hookErr instanceof Error ? hookErr.message : String(hookErr);
+                    logger_1.logger.warn(`크로스 프로젝트 갱신 실패 (분석 결과는 저장됨): ${hookMsg}`);
+                }
+            }
             return {
                 code: common_1.ResultCode.SUCCESS,
                 message: `Result saved: ${savedId}`,
@@ -146,6 +170,39 @@ class SaveResultCommand {
         const configManager = new config_manager_1.ConfigManager();
         await configManager.load();
         return configManager.getActiveProject();
+    }
+    /**
+     * 크로스 프로젝트 자동 감지 후처리 hook
+     * - 등록 프로젝트가 2개 이상일 때만 실행
+     * - 실패해도 save-result 전체에 영향 없음 (호출자에서 catch)
+     * @returns DetectResult 또는 null (프로젝트 부족 시)
+     */
+    async runCrossProjectHook(_projectId) {
+        // projects.json에서 프로젝트 목록 로드
+        const projectsPath = path.join((0, file_1.getImpactDir)(), 'projects.json');
+        const projectsConfig = (0, file_1.readJsonFile)(projectsPath);
+        const projectIds = projectsConfig?.projects?.map(p => p.id) || [];
+        if (projectIds.length < 2) {
+            logger_1.logger.debug('등록 프로젝트 1개 이하: 크로스 프로젝트 감지 건너뜀');
+            return null;
+        }
+        logger_1.logger.info(`등록 프로젝트 ${projectIds.length}개 감지, detectAndSave 실행...`);
+        const indexer = new indexer_1.Indexer();
+        const manager = new cross_project_manager_1.CrossProjectManager();
+        const result = await manager.detectAndSave(indexer, projectIds);
+        if (result.saved > 0) {
+            const typeStats = Object.entries(result.byType)
+                .map(([type, count]) => `${type} ${count}건`)
+                .join(', ');
+            logger_1.logger.success(`크로스 프로젝트 자동 탐지: ${result.detected}건 발견, ${result.saved}건 신규 저장 (${typeStats})`);
+        }
+        else if (result.detected > 0) {
+            logger_1.logger.info(`크로스 프로젝트 자동 탐지: ${result.detected}건 발견 (신규 없음)`);
+        }
+        else {
+            logger_1.logger.info('신규 크로스 프로젝트 의존성 없음');
+        }
+        return result;
     }
     /**
      * 인자에서 옵션 값을 추출

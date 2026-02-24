@@ -14,6 +14,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+import { LINK_TYPE_COLORS, LINK_TYPE_LABELS } from '../../utils/linkTypeConstants';
+
 /** 프로젝트 링크 타입 (서버 API와 동일) */
 export interface ProjectLink {
   id: string;
@@ -31,26 +33,6 @@ interface CrossProjectDiagramProps {
   /** 노드 클릭 핸들러 (프로젝트 ID 전달) */
   onNodeClick?: (projectId: string) => void;
 }
-
-/** 링크 타입별 색상 매핑 */
-const LINK_TYPE_COLORS: Record<string, string> = {
-  'api-consumer': '#3B82F6',    // blue
-  'api-provider': '#10B981',    // green
-  'shared-library': '#8B5CF6',  // purple
-  'shared-types': '#F59E0B',    // amber
-  'event-publisher': '#EF4444', // red
-  'event-subscriber': '#EC4899', // pink
-};
-
-/** 링크 타입 라벨 */
-const LINK_TYPE_LABELS: Record<string, string> = {
-  'api-consumer': 'API Consumer',
-  'api-provider': 'API Provider',
-  'shared-library': 'Shared Lib',
-  'shared-types': 'Shared Types',
-  'event-publisher': 'Event Pub',
-  'event-subscriber': 'Event Sub',
-};
 
 function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
