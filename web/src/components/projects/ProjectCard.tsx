@@ -7,6 +7,7 @@ import type { ProjectInfo, Grade } from '../../types';
 import { GRADE_COLORS } from '../../utils/colors';
 import { formatDate } from '../../utils/gradeUtils';
 import { DOMAIN_COLORS, getDomainColorIndex } from '../../utils/domainColors';
+import { safeString } from '../../utils/safeString';
 
 interface ProjectCardProps {
   project: ProjectInfo;
@@ -76,16 +77,17 @@ function ProjectCard({ project, isActive, onClick }: ProjectCardProps) {
       {/* 도메인 태그 */}
       {project.domains && project.domains.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {project.domains.slice(0, 3).map((domain) => {
-            const colorIdx = getDomainColorIndex(domain);
+          {project.domains.slice(0, 3).map((domain, idx) => {
+            const domainStr = safeString(domain);
+            const colorIdx = getDomainColorIndex(domainStr);
             const color = DOMAIN_COLORS[colorIdx];
             return (
               <span
-                key={domain}
+                key={domainStr || idx}
                 className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
                 style={{ backgroundColor: color.bg, color: color.text }}
               >
-                {domain}
+                {domainStr}
               </span>
             );
           })}
@@ -114,14 +116,17 @@ function ProjectCard({ project, isActive, onClick }: ProjectCardProps) {
       {/* 기술 스택 태그 */}
       {project.techStack.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {project.techStack.slice(0, 4).map((tech) => (
-            <span
-              key={tech}
-              className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded"
-            >
-              {tech}
-            </span>
-          ))}
+          {project.techStack.slice(0, 4).map((tech, idx) => {
+            const techStr = safeString(tech);
+            return (
+              <span
+                key={techStr || idx}
+                className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded"
+              >
+                {techStr}
+              </span>
+            );
+          })}
           {project.techStack.length > 4 && (
             <span className="text-[10px] text-gray-400">
               +{project.techStack.length - 4}

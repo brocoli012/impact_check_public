@@ -11,6 +11,7 @@ import type { ProjectLink } from './CrossProjectDiagram';
 import { LINK_TYPE_COLORS, LINK_TYPE_LABELS } from '../../utils/linkTypeConstants';
 import { GRADE_COLORS } from '../../utils/colors';
 import type { Grade } from '../../types';
+import { safeString } from '../../utils/safeString';
 
 export interface ProjectDetailSidePanelProps {
   project: ProjectInfo | null;
@@ -108,21 +109,24 @@ function ProjectDetailSidePanel({ project, links, onClose }: ProjectDetailSidePa
         {project.domains && project.domains.length > 0 && (
           <SectionBlock title="도메인">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {project.domains.map((domain) => (
-                <span
-                  key={domain}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 500,
-                    padding: '2px 8px',
-                    borderRadius: 4,
-                    background: '#EFF6FF',
-                    color: '#3B82F6',
-                  }}
-                >
-                  {domain}
-                </span>
-              ))}
+              {project.domains.map((domain, idx) => {
+                const domainStr = safeString(domain);
+                return (
+                  <span
+                    key={domainStr || idx}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      background: '#EFF6FF',
+                      color: '#3B82F6',
+                    }}
+                  >
+                    {domainStr}
+                  </span>
+                );
+              })}
             </div>
           </SectionBlock>
         )}
@@ -131,21 +135,24 @@ function ProjectDetailSidePanel({ project, links, onClose }: ProjectDetailSidePa
         {project.techStack.length > 0 && (
           <SectionBlock title="기술 스택">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {project.techStack.map((tech) => (
-                <span
-                  key={tech}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 500,
-                    padding: '2px 8px',
-                    borderRadius: 4,
-                    background: '#F1F5F9',
-                    color: '#475569',
-                  }}
-                >
-                  {tech}
-                </span>
-              ))}
+              {project.techStack.map((tech, idx) => {
+                const techStr = safeString(tech);
+                return (
+                  <span
+                    key={techStr || idx}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      background: '#F1F5F9',
+                      color: '#475569',
+                    }}
+                  >
+                    {techStr}
+                  </span>
+                );
+              })}
             </div>
           </SectionBlock>
         )}

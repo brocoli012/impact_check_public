@@ -63,7 +63,7 @@ function AppContent() {
               <Routes>
                 <Route path="/" element={<ProjectBoard />} />
                 <Route path="/analysis" element={<Dashboard />} />
-                <Route path="/flow" element={<FlowChart />} />
+                <Route path="/flow" element={<ErrorBoundary><FlowChart /></ErrorBoundary>} />
                 <Route path="/checklist" element={<Checklist />} />
                 <Route path="/owners" element={<Owners />} />
                 <Route path="/tickets" element={<Tickets />} />

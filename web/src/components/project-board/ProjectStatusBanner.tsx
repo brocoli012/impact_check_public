@@ -5,6 +5,7 @@
 
 import type { ProjectInfo } from '../../types';
 import { DOMAIN_COLORS, getDomainColorIndex } from '../../utils/domainColors';
+import { safeString } from '../../utils/safeString';
 
 interface IndexMeta {
   totalFiles: number;
@@ -35,16 +36,17 @@ function ProjectStatusBanner({ project, indexMeta, lastAnalysisDate }: ProjectSt
           {/* 도메인 태그 */}
           {project.domains && project.domains.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
-              {project.domains.map((domain) => {
-                const colorIdx = getDomainColorIndex(domain);
+              {project.domains.map((domain, idx) => {
+                const domainStr = safeString(domain);
+                const colorIdx = getDomainColorIndex(domainStr);
                 const color = DOMAIN_COLORS[colorIdx];
                 return (
                   <span
-                    key={domain}
+                    key={domainStr || idx}
                     className="text-xs font-semibold px-2 py-0.5 rounded-full"
                     style={{ backgroundColor: color.bg, color: color.text }}
                   >
-                    {domain}
+                    {domainStr}
                   </span>
                 );
               })}
@@ -54,14 +56,17 @@ function ProjectStatusBanner({ project, indexMeta, lastAnalysisDate }: ProjectSt
           {/* 기술 스택 태그 */}
           {project.techStack.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
-              {project.techStack.map((tech) => (
-                <span
-                  key={tech}
-                  className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full"
-                >
-                  {tech}
-                </span>
-              ))}
+              {project.techStack.map((tech, idx) => {
+                const techStr = safeString(tech);
+                return (
+                  <span
+                    key={techStr || idx}
+                    className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full"
+                  >
+                    {techStr}
+                  </span>
+                );
+              })}
             </div>
           )}
 
@@ -102,7 +107,7 @@ function ProjectStatusBanner({ project, indexMeta, lastAnalysisDate }: ProjectSt
               <div className="space-y-1">
                 {project.featureSummary.slice(0, 4).map((feature, idx) => (
                   <div key={idx} className="text-xs text-gray-700">
-                    • {feature}
+                    • {safeString(feature)}
                   </div>
                 ))}
                 {project.featureSummary.length > 4 && (

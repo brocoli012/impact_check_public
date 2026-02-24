@@ -21,6 +21,7 @@ import type {
 } from '../components/flowchart/types';
 import { getGradeFromScore } from './gradeUtils';
 import type { FlowFilterState } from '../stores/flowStore';
+import { safeString } from './safeString';
 
 /** 변환 결과 */
 export interface FlowTransformResult {
@@ -287,7 +288,8 @@ export function transformToFlow(
 
           // ── Check 노드 (planningChecks) ──
           for (let i = 0; i < task.planningChecks.length; i++) {
-            const checkText = task.planningChecks[i];
+            const rawCheckText = task.planningChecks[i];
+            const checkText = safeString(rawCheckText);
             // planningChecks에서 관련 Check 객체 찾기
             const relatedCheck = result.planningChecks.find(
               (c) => c.content === checkText || c.content.includes(checkText?.substring(0, 10) ?? ''),

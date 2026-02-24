@@ -6,6 +6,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { safeString } from '../../utils/safeString';
 
 export interface ProjectFlowNodeData {
   [key: string]: unknown;
@@ -80,9 +81,10 @@ function ProjectFlowNodeComponent({ data, selected }: Props) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
           {domains.slice(0, 3).map((domain, idx) => {
             const color = DOMAIN_COLORS_DARK[idx % DOMAIN_COLORS_DARK.length];
+            const domainStr = safeString(domain);
             return (
               <span
-                key={domain}
+                key={domainStr || idx}
                 style={{
                   fontSize: 9,
                   fontWeight: 600,
@@ -93,7 +95,7 @@ function ProjectFlowNodeComponent({ data, selected }: Props) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {domain}
+                {domainStr}
               </span>
             );
           })}
@@ -160,21 +162,24 @@ function ProjectFlowNodeComponent({ data, selected }: Props) {
       {/* 기술 스택 태그 */}
       {techStack.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-          {techStack.slice(0, 4).map((tech) => (
-            <span
-              key={tech}
-              style={{
-                fontSize: 9,
-                fontWeight: 500,
-                padding: '1px 5px',
-                borderRadius: 3,
-                background: 'rgba(255,255,255,0.08)',
-                color: '#94A3B8',
-              }}
-            >
-              {tech}
-            </span>
-          ))}
+          {techStack.slice(0, 4).map((tech, idx) => {
+            const techStr = safeString(tech);
+            return (
+              <span
+                key={techStr || idx}
+                style={{
+                  fontSize: 9,
+                  fontWeight: 500,
+                  padding: '1px 5px',
+                  borderRadius: 3,
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#94A3B8',
+                }}
+              >
+                {techStr}
+              </span>
+            );
+          })}
           {techStack.length > 4 && (
             <span style={{ fontSize: 9, color: '#64748B' }}>
               +{techStack.length - 4}
