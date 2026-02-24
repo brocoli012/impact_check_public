@@ -45,7 +45,7 @@ function findMatchingInferredPolicy(
   const korCategory = CATEGORY_MAP[policy.category] || policy.category;
 
   for (const ann of policy.annotation.annotations) {
-    for (const p of ann.policies) {
+    for (const p of (ann.policies ?? [])) {
       // 이름 정확 매칭
       if (p.name === policy.name) return p;
       // 카테고리 매칭 (한국어 변환 후)
@@ -62,7 +62,7 @@ function findMatchingInferredPolicy(
 
   // 최종 fallback: 첫 번째 annotation의 첫 번째 policy 반환
   for (const ann of policy.annotation.annotations) {
-    if (ann.policies.length > 0) {
+    if ((ann.policies?.length ?? 0) > 0) {
       return ann.policies[0];
     }
   }

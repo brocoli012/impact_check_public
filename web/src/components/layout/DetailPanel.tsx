@@ -60,7 +60,7 @@ function DetailPanel({ node, onClose }: DetailPanelProps) {
       const screenScore = result.screenScores.find((s) => s.screenId === screenId);
       const relatedChecks = result.planningChecks.filter((c) =>
         screenImpact?.tasks.some(
-          (t) => t.planningChecks.some((pc) => c.content.includes(pc.substring(0, 10))),
+          (t) => t.planningChecks?.some((pc) => c.content.includes(pc?.substring(0, 10) ?? '')),
         ),
       );
 
@@ -82,7 +82,7 @@ function DetailPanel({ node, onClose }: DetailPanelProps) {
       );
       const taskScore = screenScore?.taskScores.find((ts) => ts.taskId === taskId);
       const relatedChecks = result.planningChecks.filter(
-        (c) => task?.planningChecks.some((pc) => c.content.includes(pc.substring(0, 10))),
+        (c) => task?.planningChecks?.some((pc) => c.content.includes(pc?.substring(0, 10) ?? '')),
       );
 
       return {

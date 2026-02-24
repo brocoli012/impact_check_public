@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { useResultStore } from '../stores/resultStore';
 import { getMockResult } from '../utils/mockData';
 import type { AnalysisResult, ResultSummary, ApiResponse } from '../types';
+import { sanitizeAnalysisResult } from '../utils/dataValidator';
 
 /**
  * 최신 분석 결과를 API에서 가져오기
@@ -28,7 +29,7 @@ export function useLatestResult(): void {
         if (cancelled) return;
 
         if (data.result) {
-          setCurrentResult(data.result);
+          setCurrentResult(sanitizeAnalysisResult(data.result));
         } else {
           // API에서 결과가 없으면 mock 데이터 사용
           setCurrentResult(getMockResult());

@@ -100,11 +100,11 @@ function KpiCards({ result }: KpiCardsProps) {
   const beTasks = result.tasks.filter((t) => t.type === 'BE').length;
 
   // detailLine 생성
-  const maxGrade = result.screenScores.length > 0
+  const maxGrade = (result.screenScores?.length ?? 0) > 0
     ? result.screenScores.reduce((max, s) => {
         const order = ['Low', 'Medium', 'High', 'Critical'];
         return order.indexOf(s.grade) > order.indexOf(max) ? s.grade : max;
-      }, result.screenScores[0].grade)
+      }, result.screenScores?.[0]?.grade ?? 'Low')
     : undefined;
 
   const highCheckCount = result.planningChecks.filter((c) => c.priority === 'high').length;

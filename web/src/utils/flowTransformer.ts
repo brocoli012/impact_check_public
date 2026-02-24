@@ -290,7 +290,7 @@ export function transformToFlow(
             const checkText = task.planningChecks[i];
             // planningChecks에서 관련 Check 객체 찾기
             const relatedCheck = result.planningChecks.find(
-              (c) => c.content === checkText || c.content.includes(checkText.substring(0, 10)),
+              (c) => c.content === checkText || c.content.includes(checkText?.substring(0, 10) ?? ''),
             );
             const urgency = relatedCheck?.priority || 'medium';
 
@@ -337,7 +337,7 @@ export function transformToFlow(
   for (const pw of result.policyWarnings) {
     const pwNodeId = `pw-${pw.id}`;
     // 관련 시스템 이름 찾기
-    const relatedTaskId = pw.relatedTaskIds[0];
+    const relatedTaskId = pw.relatedTaskIds?.[0];
     const relatedScreenId = relatedTaskId ? taskToScreenMap.get(relatedTaskId) : undefined;
     const relatedSysId = relatedScreenId ? screenToSystemMap.get(relatedScreenId) : undefined;
     const relatedSys = relatedSysId ? systemMap.get(relatedSysId) : undefined;

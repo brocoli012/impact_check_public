@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AnalysisResult, AnalysisStatus, ResultSummary } from '../types';
+import { sanitizeAnalysisResult } from '../utils/dataValidator';
 
 /** 정렬 옵션 */
 export type SortOption = 'latest' | 'oldest' | 'grade-high' | 'grade-low';
@@ -84,7 +85,7 @@ export const useResultStore = create<ResultState>()(
       statusFilter: 'all',
       updatingIds: new Set<string>(),
 
-      setCurrentResult: (result) => set({ currentResult: result }),
+      setCurrentResult: (result) => set({ currentResult: result ? sanitizeAnalysisResult(result) : null }),
       setResultList: (list) => set({ resultList: list }),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
@@ -124,7 +125,7 @@ export const useResultStore = create<ResultState>()(
           const response = await fetch(`/api/results/${resultId}`);
           const data = await response.json();
           if (data.result) {
-            set({ currentResult: data.result, isLoading: false });
+            set({ currentResult: sanitizeAnalysisResult(data.result), isLoading: false });
           } else {
             throw new Error(data.error || 'Result not found');
           }
