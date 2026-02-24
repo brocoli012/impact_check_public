@@ -3,6 +3,7 @@
  * @description 크로스 프로젝트 의존성 다이어그램 - @xyflow/react 기반
  * 프로젝트 간 의존성을 노드와 엣지로 시각화
  * TASK-175: hover 하이라이트 + 노드 클릭 네비게이션
+ * TASK-211~214: Pin Click - 싱글 클릭 핀 토글, 더블 클릭 네비게이션
  */
 
 import { useMemo, useCallback, useState } from 'react';
@@ -36,6 +37,10 @@ interface CrossProjectDiagramProps {
 
 function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [pinnedNodeId, setPinnedNodeId] = useState<string | null>(null);
+
+  // Pin > Hover 우선순위: pinnedNodeId가 있으면 그것을 사용
+  const activeNodeId = pinnedNodeId ?? hoveredNodeId;
 
   if (!links || links.length === 0) {
     return (
@@ -45,14 +50,14 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
     );
   }
 
-  // 호버된 노드에 연결된 엣지/노드 ID 계산
+  // 활성 노드(Pin 또는 Hover)에 연결된 엣지/노드 ID 계산
   const connectedIds = useMemo(() => {
-    if (!hoveredNodeId) return null;
-    const connectedNodeIds = new Set<string>([hoveredNodeId]);
+    if (!activeNodeId) return null;
+    const connectedNodeIds = new Set<string>([activeNodeId]);
     const connectedEdgeIds = new Set<string>();
 
     links.forEach((link, idx) => {
-      if (link.source === hoveredNodeId || link.target === hoveredNodeId) {
+      if (link.source === activeNodeId || link.target === activeNodeId) {
         connectedNodeIds.add(link.source);
         connectedNodeIds.add(link.target);
         connectedEdgeIds.add(`edge-${idx}`);
@@ -60,7 +65,7 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
     });
 
     return { nodeIds: connectedNodeIds, edgeIds: connectedEdgeIds };
-  }, [hoveredNodeId, links]);
+  }, [activeNodeId, links]);
 
   const { nodes, edges } = useMemo(() => {
     // 고유 프로젝트 ID 추출
@@ -89,9 +94,24 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
       const y = centerY + radius * Math.sin(angle) - 20;
       const count = linkCounts.get(projectId) || 0;
 
-      // hover 하이라이트: 관련 노드 = 정상, 비관련 노드 = 반투명
+      // hover/pin 하이라이트: 관련 노드 = 정상, 비관련 노드 = 반투명
       const isHighlighted = !connectedIds || connectedIds.nodeIds.has(projectId);
+      const isPinned = pinnedNodeId === projectId;
       const isHovered = hoveredNodeId === projectId;
+
+      // Pin 스타일 > Hover 스타일 > 기본 스타일
+      let background = '#F3F4F6';
+      let border = '2px solid #6B7280';
+      let boxShadow: string | undefined;
+
+      if (isPinned) {
+        background = '#BFDBFE';
+        border = '2px solid #2563EB';
+        boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.2)';
+      } else if (isHovered) {
+        background = '#DBEAFE';
+        border = '2px solid #3B82F6';
+      }
 
       return {
         id: projectId,
@@ -99,8 +119,8 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
         position: { x, y },
         data: { label: `${projectId} (${count})` },
         style: {
-          background: isHovered ? '#DBEAFE' : '#F3F4F6',
-          border: isHovered ? '2px solid #3B82F6' : '2px solid #6B7280',
+          background,
+          border,
           borderRadius: 8,
           fontSize: 11,
           fontWeight: 600,
@@ -108,8 +128,9 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
           width: 140,
           textAlign: 'center' as const,
           opacity: isHighlighted ? 1 : 0.3,
-          transition: 'opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease',
+          transition: 'opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
           cursor: onNodeClick ? 'pointer' : 'default',
+          boxShadow,
         },
       };
     });
@@ -146,10 +167,15 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
       nodes: projectNodes,
       edges: linkEdges,
     };
-  }, [links, connectedIds, hoveredNodeId, onNodeClick]);
+  }, [links, connectedIds, hoveredNodeId, pinnedNodeId, onNodeClick]);
 
-  /** 노드 클릭 핸들러 */
+  /** 노드 싱글 클릭 핸들러 - Pin 토글 */
   const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
+    setPinnedNodeId(prev => prev === node.id ? null : node.id);
+  }, []);
+
+  /** 노드 더블 클릭 핸들러 - 네비게이션 */
+  const handleNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
     if (onNodeClick) {
       onNodeClick(node.id);
     }
@@ -165,10 +191,39 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
     setHoveredNodeId(null);
   }, []);
 
-  /** 캔버스(pane) 클릭 시 hover 해제 */
+  /** 캔버스(pane) 클릭 시 hover + pin 해제 */
   const handlePaneClick = useCallback(() => {
     setHoveredNodeId(null);
+    setPinnedNodeId(null);
   }, []);
+
+  /** Pin 정보 바에 표시할 데이터 */
+  const pinInfo = useMemo(() => {
+    if (!pinnedNodeId) return null;
+
+    const connectedProjects = new Set<string>();
+    const linkTypes = new Set<string>();
+    const apis: string[] = [];
+
+    links.forEach(link => {
+      if (link.source === pinnedNodeId || link.target === pinnedNodeId) {
+        const otherProject = link.source === pinnedNodeId ? link.target : link.source;
+        connectedProjects.add(otherProject);
+        linkTypes.add(LINK_TYPE_LABELS[link.type] || link.type);
+        if (link.apis) {
+          apis.push(...link.apis);
+        }
+      }
+    });
+
+    return {
+      projectId: pinnedNodeId,
+      connectedCount: connectedProjects.size,
+      linkCount: links.filter(l => l.source === pinnedNodeId || l.target === pinnedNodeId).length,
+      linkTypes: Array.from(linkTypes),
+      apis: [...new Set(apis)],
+    };
+  }, [pinnedNodeId, links]);
 
   return (
     <div data-testid="cross-project-diagram">
@@ -177,6 +232,7 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
           nodes={nodes}
           edges={edges}
           onNodeClick={handleNodeClick}
+          onNodeDoubleClick={handleNodeDoubleClick}
           onNodeMouseEnter={handleNodeMouseEnter}
           onNodeMouseLeave={handleNodeMouseLeave}
           onPaneClick={handlePaneClick}
@@ -193,6 +249,34 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
           proOptions={{ hideAttribution: true }}
         />
       </div>
+      {pinInfo && (
+        <div
+          data-testid="pin-info-bar"
+          className="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md text-xs"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-blue-800">
+              📌 {pinInfo.projectId}
+            </span>
+            <span className="text-blue-600">
+              연결 프로젝트: {pinInfo.connectedCount}개
+            </span>
+            <span className="text-blue-600">
+              링크: {pinInfo.linkCount}개
+            </span>
+            {pinInfo.linkTypes.length > 0 && (
+              <span className="text-blue-500">
+                ({pinInfo.linkTypes.join(', ')})
+              </span>
+            )}
+            {pinInfo.apis.length > 0 && (
+              <span className="text-blue-500">
+                API: {pinInfo.apis.join(', ')}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

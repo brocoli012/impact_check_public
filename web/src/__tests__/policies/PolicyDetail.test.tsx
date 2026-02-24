@@ -312,7 +312,7 @@ describe('PolicyDetail', () => {
     expect(screen.getByTestId('policy-graph-empty')).toBeInTheDocument();
   });
 
-  it('should render ConditionFlow empty message when annotation has no conditions', () => {
+  it('should NOT render condition flow section when annotation has no conditions', () => {
     render(
       <PolicyDetailComponent
         policy={mockPolicyWithEmptyAnnotation}
@@ -320,8 +320,27 @@ describe('PolicyDetail', () => {
       />,
     );
 
-    expect(screen.getByTestId('condition-flow-empty')).toBeInTheDocument();
-    expect(screen.getByText('조건 분기 정보가 없습니다')).toBeInTheDocument();
+    // 조건 분기 섹션 자체가 렌더링되지 않아야 함
+    expect(screen.queryByText('조건 분기')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('condition-flow')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('condition-flow-empty')).not.toBeInTheDocument();
+    expect(screen.queryByText('조건 분기 정보가 없습니다')).not.toBeInTheDocument();
+  });
+
+  it('should NOT render empty sections when annotation exists but data arrays are empty', () => {
+    render(
+      <PolicyDetailComponent
+        policy={mockPolicyWithEmptyAnnotation}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // 보강 주석이 있지만 데이터가 비어있으면 해당 섹션 모두 숨김
+    expect(screen.queryByText('조건 분기')).not.toBeInTheDocument();
+    expect(screen.queryByText('입력 변수')).not.toBeInTheDocument();
+    expect(screen.queryByText('상수')).not.toBeInTheDocument();
+    expect(screen.queryByText('제약사항')).not.toBeInTheDocument();
+    expect(screen.queryByText('리뷰 항목')).not.toBeInTheDocument();
   });
 
   it('should have policy-detail data-testid', () => {

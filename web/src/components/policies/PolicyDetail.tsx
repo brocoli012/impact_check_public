@@ -190,10 +190,12 @@ function PolicyDetailComponent({ policy, onClose }: PolicyDetailProps) {
           {hasAnnotation ? (
             <>
               {/* 조건 분기 시각화 */}
-              <div>
-                <SectionTitle>조건 분기</SectionTitle>
-                <ConditionFlow conditions={conditions} />
-              </div>
+              {conditions.length > 0 && (
+                <div>
+                  <SectionTitle>조건 분기</SectionTitle>
+                  <ConditionFlow conditions={conditions} />
+                </div>
+              )}
 
               {/* 입력 변수 */}
               {inputVariables.length > 0 && (
