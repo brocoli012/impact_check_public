@@ -25,6 +25,8 @@ import { CrossAnalyzeCommand } from './commands/cross-analyze';
 import { ReverseCommand } from './commands/reverse';
 import { ResultStatusCommand } from './commands/result-status';
 import { GapCheckCommand } from './commands/gap-check';
+import { UpdateCommand } from './commands/update';
+import { StatusCommand } from './commands/status';
 
 /** 알 수 없는 명령어 에러 */
 export class UnknownCommandError extends Error {
@@ -73,6 +75,8 @@ const COMMANDS: Record<string, CommandConstructor> = {
   'reverse': ReverseCommand,
   'result-status': ResultStatusCommand,
   'gap-check': GapCheckCommand,
+  'update': UpdateCommand,
+  'status': StatusCommand,
 } as const;
 
 /**

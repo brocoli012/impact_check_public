@@ -43,7 +43,11 @@ export class ConfigManager {
       const loaded = readJsonFile<AppConfig>(this.configPath);
       if (loaded) {
         const defaults = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as AppConfig;
-        this.config = { ...defaults, ...loaded };
+        this.config = {
+          ...defaults,
+          ...loaded,
+          general: { ...defaults.general, ...loaded.general },
+        };
         logger.debug('Configuration loaded successfully.');
       } else {
         logger.warn('Failed to parse config file. Using defaults.');

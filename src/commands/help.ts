@@ -265,6 +265,27 @@ const COMMAND_HELP: Record<
       '/impact gap-check --json',
     ],
   },
+  update: {
+    usage: '/impact update [--check] [--force]',
+    description: 'KIC 도구를 최신 버전으로 업데이트합니다.',
+    options: [
+      '--check   업데이트 존재 여부만 확인',
+      '--force   확인 없이 즉시 업데이트 수행',
+    ],
+    examples: [
+      '/impact update',
+      '/impact update --check',
+      '/impact update --force',
+    ],
+  },
+  status: {
+    usage: '/impact status',
+    description: '등록된 프로젝트 상태 요약을 표시합니다.',
+    options: [],
+    examples: [
+      '/impact status',
+    ],
+  },
   help: {
     usage: '/impact help [command]',
     description: '도움말을 표시합니다.',

@@ -19,6 +19,12 @@ export interface AppConfig {
     webPort: number;
     /** 로그 레벨 */
     logLevel: string;
+    /** 자동 업데이트 활성화 여부 */
+    autoUpdate: boolean;
+    /** 업데이트 확인 간격 (초 단위, 기본: 86400 = 24시간) */
+    updateCheckInterval: number;
+    /** 마지막 업데이트 확인 시각 (ISO 8601) */
+    lastUpdateCheck?: string;
   };
 }
 
@@ -68,5 +74,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     autoReindex: true,
     webPort: 3847,
     logLevel: 'info',
+    autoUpdate: true,
+    updateCheckInterval: 86400,
   },
 };

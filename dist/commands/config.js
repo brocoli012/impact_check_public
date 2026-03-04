@@ -31,6 +31,8 @@ class ConfigCommand {
             console.log(`\n  Web Port: ${config.general.webPort}`);
             console.log(`  Auto Reindex: ${config.general.autoReindex}`);
             console.log(`  Log Level: ${config.general.logLevel}`);
+            console.log(`  Auto Update: ${config.general.autoUpdate}`);
+            console.log(`  Update Check Interval: ${config.general.updateCheckInterval}s`);
             console.log('');
         }
         catch {

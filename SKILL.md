@@ -25,6 +25,8 @@ commands:
   - /impact cross-analyze
   - /impact demo
   - /impact help
+  - /impact update
+  - /impact status
 ---
 
 # Kurly Impact Checker
@@ -110,6 +112,16 @@ commands:
 ### /impact demo
 샘플 데이터 기반으로 도구를 체험합니다.
 실행: node {skill_dir}/dist/index.js demo
+
+### /impact update [--check] [--force]
+KIC 도구를 최신 버전으로 업데이트합니다.
+- `--check`: 업데이트 존재 여부만 확인
+- `--force`: 확인 없이 즉시 업데이트 수행
+실행: node {skill_dir}/dist/index.js update [--check] [--force]
+
+### /impact status
+등록된 프로젝트 상태 요약을 표시합니다. 등록 프로젝트 목록, 최근 분석 내역 등을 한눈에 확인할 수 있습니다.
+실행: node {skill_dir}/dist/index.js status
 
 ### /impact help [command] / /impact faq
 도움말을 표시하거나 자주 묻는 질문(FAQ)을 조회합니다.
@@ -671,6 +683,12 @@ AI 어노테이션 보강 완료:
 
 ### 활성화 시 동작 프로토콜
 
+0. **업데이트 체크** (Phase 0 - autoUpdate=true일 때만):
+   - `node {skill_dir}/dist/index.js update --check` 실행
+   - 업데이트 있으면: 사용자에게 "KIC 업데이트가 있습니다. 업데이트하시겠습니까? [Y/n]" 안내
+   - 승인 시: `node {skill_dir}/dist/index.js update --force` 실행
+   - 네트워크 오류 또는 autoUpdate=false: 조용히 스킵
+
 1. **상태 감지**: 먼저 Bash로 다음을 확인합니다.
    ```
    node {skill_dir}/dist/index.js config
@@ -711,11 +729,20 @@ AI 어노테이션 보강 완료:
    ```
 
    **프로젝트 등록됨 + 분석 결과 있음:**
+
+   먼저 `node {skill_dir}/dist/index.js status` 실행하여 프로젝트 상태 요약을 수집합니다.
+   결과를 인사 메시지 본문에 포함합니다:
+   - 등록 프로젝트 목록 (1개: 간단히, 여러개: 테이블)
+   - 최근 분석 내역 (최대 5건)
+
    ```
    KIC | {프로젝트명}
 
    등록된 프로젝트: {경로}
    마지막 분석: {날짜} | {등급} ({점수}점) | 영향 화면 {N}개
+
+   [프로젝트 상태 요약]
+   {status 명령어 결과 - 등록 프로젝트 목록 및 최근 분석 내역}
 
    무엇을 하시겠습니까?
 
@@ -763,6 +790,9 @@ AI 어노테이션 보강 완료:
 | 보완 분석 | `node {skill_dir}/dist/index.js cross-analyze --supplement --project <id>` | "보완 분석", "추가 분석" |
 | 분석 상태 변경 | `node {skill_dir}/dist/index.js result-status <id> --set <status>` | "분석 상태 변경", "완료 처리", "보류" |
 | 분석 상태 조회 | `node {skill_dir}/dist/index.js result-status <id>` | "분석 상태 조회" |
+| 업데이트 확인 | `node {skill_dir}/dist/index.js update --check` | "업데이트", "최신 버전" |
+| 업데이트 적용 | `node {skill_dir}/dist/index.js update --force` | "업데이트 해줘" |
+| 상태 요약 | `node {skill_dir}/dist/index.js status` | "상태", "현황", "status" |
 
 ### 분석 결과 응답 형식
 

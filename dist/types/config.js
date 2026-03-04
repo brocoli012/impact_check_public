@@ -15,6 +15,8 @@ exports.DEFAULT_CONFIG = {
         autoReindex: true,
         webPort: 3847,
         logLevel: 'info',
+        autoUpdate: true,
+        updateCheckInterval: 86400,
     },
 };
 //# sourceMappingURL=config.js.map

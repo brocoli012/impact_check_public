@@ -28,6 +28,8 @@ const cross_analyze_1 = require("./commands/cross-analyze");
 const reverse_1 = require("./commands/reverse");
 const result_status_1 = require("./commands/result-status");
 const gap_check_1 = require("./commands/gap-check");
+const update_1 = require("./commands/update");
+const status_1 = require("./commands/status");
 /** 알 수 없는 명령어 에러 */
 class UnknownCommandError extends Error {
     /**
@@ -67,6 +69,8 @@ const COMMANDS = {
     'reverse': reverse_1.ReverseCommand,
     'result-status': result_status_1.ResultStatusCommand,
     'gap-check': gap_check_1.GapCheckCommand,
+    'update': update_1.UpdateCommand,
+    'status': status_1.StatusCommand,
 };
 /**
  * 명령어를 라우팅하여 적절한 Command 인스턴스를 반환

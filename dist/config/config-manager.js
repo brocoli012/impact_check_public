@@ -71,7 +71,11 @@ class ConfigManager {
             const loaded = (0, file_1.readJsonFile)(this.configPath);
             if (loaded) {
                 const defaults = JSON.parse(JSON.stringify(config_1.DEFAULT_CONFIG));
-                this.config = { ...defaults, ...loaded };
+                this.config = {
+                    ...defaults,
+                    ...loaded,
+                    general: { ...defaults.general, ...loaded.general },
+                };
                 logger_1.logger.debug('Configuration loaded successfully.');
             }
             else {
