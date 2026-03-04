@@ -95,9 +95,18 @@ export const useSharedEntityStore = create<SharedEntityState>((set) => ({
     try {
       const response = await fetch('/api/shared-entities');
       const data = await response.json();
+      const sanitizedTables = (data.tables || []).map((t: any) => ({
+        ...t,
+        projects: Array.isArray(t.projects) ? t.projects.map(String) : [],
+      }));
+      const sanitizedEvents = (data.events || []).map((e: any) => ({
+        ...e,
+        publishers: Array.isArray(e.publishers) ? e.publishers.map(String) : [],
+        subscribers: Array.isArray(e.subscribers) ? e.subscribers.map(String) : [],
+      }));
       set({
-        tables: data.tables || [],
-        events: data.events || [],
+        tables: sanitizedTables,
+        events: sanitizedEvents,
         stats: data.stats || null,
         isLoading: false,
       });

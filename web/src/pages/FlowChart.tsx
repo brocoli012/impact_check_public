@@ -178,7 +178,13 @@ function FlowChart() {
           const projectsData = await projectsRes.json();
           setLinks(linksData.links || []);
           setGroups(groupsData.groups || []);
-          setAllProjects(projectsData.projects || []);
+          const sanitizedProjects = (projectsData.projects || []).map((p: any) => ({
+            ...p,
+            techStack: Array.isArray(p.techStack) ? p.techStack.map(String) : [],
+            domains: Array.isArray(p.domains) ? p.domains.map(String) : [],
+            featureSummary: Array.isArray(p.featureSummary) ? p.featureSummary.map(String) : [],
+          }));
+          setAllProjects(sanitizedProjects);
         } catch {
           // 크로스 프로젝트 데이터 로드 실패는 무시
         }

@@ -19,6 +19,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import EntityNode from '../flowchart/EntityNode';
 import EventNode from '../flowchart/EventNode';
+import { safeString } from '../../utils/safeString';
 import type { SharedTableSummary, SharedEventSummary } from '../../stores/sharedEntityStore';
 
 interface SharedEntityMapProps {
@@ -42,15 +43,11 @@ function SharedEntityMap({ tables, events }: SharedEntityMapProps) {
   // State must be before early return (React hooks rule)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  if (tables.length === 0 && events.length === 0) {
-    return (
-      <div data-testid="shared-entity-map-empty" className="text-sm text-gray-400 py-8 text-center">
-        공유 엔티티/이벤트가 없습니다
-      </div>
-    );
-  }
+  // 빈 데이터 여부 (early return은 모든 hooks 이후에 처리 - Rules of Hooks)
+  const isEmpty = tables.length === 0 && events.length === 0;
 
   const { nodes: rawNodes, edges: rawEdges } = useMemo(() => {
+    if (isEmpty) return { nodes: [], edges: [] };
     const allNodes: Node[] = [];
     const allEdges: Edge[] = [];
 
@@ -161,7 +158,7 @@ function SharedEntityMap({ tables, events }: SharedEntityMapProps) {
 
   /** connectedIds: selectedNodeId 기반으로 연결된 노드/엣지 ID 계산 */
   const connectedIds = useMemo<ConnectedIds | null>(() => {
-    if (!selectedNodeId) return null;
+    if (!selectedNodeId || isEmpty) return null;
 
     const nodeIds = new Set<string>();
     const edgeIds = new Set<string>();
@@ -280,7 +277,7 @@ function SharedEntityMap({ tables, events }: SharedEntityMapProps) {
 
   /** Build selection info bar content */
   const selectionInfo = useMemo(() => {
-    if (!selectedNodeId) return null;
+    if (!selectedNodeId || isEmpty) return null;
 
     if (selectedNodeId.startsWith('table-')) {
       const tableName = selectedNodeId.replace('table-', '');
@@ -323,6 +320,14 @@ function SharedEntityMap({ tables, events }: SharedEntityMapProps) {
     return null;
   }, [selectedNodeId, tables, events]);
 
+  if (isEmpty) {
+    return (
+      <div data-testid="shared-entity-map-empty" className="text-sm text-gray-400 py-8 text-center">
+        공유 엔티티/이벤트가 없습니다
+      </div>
+    );
+  }
+
   return (
     <div data-testid="shared-entity-map">
       <div style={{ height: 350, width: '100%' }}>
@@ -353,7 +358,7 @@ function SharedEntityMap({ tables, events }: SharedEntityMapProps) {
             <div>
               <span className="font-semibold text-blue-700">테이블: {selectionInfo.name}</span>
               <span className="ml-3 text-gray-600">
-                프로젝트: {selectionInfo.projects.join(', ')}
+                프로젝트: {selectionInfo.projects.map(p => safeString(p)).join(', ')}
               </span>
               <span className="ml-3 text-gray-500">
                 참조 횟수: {selectionInfo.referenceCount}
@@ -364,10 +369,10 @@ function SharedEntityMap({ tables, events }: SharedEntityMapProps) {
             <div>
               <span className="font-semibold text-red-600">이벤트: {selectionInfo.name}</span>
               <span className="ml-3 text-gray-600">
-                Publisher: {selectionInfo.publishers.join(', ')}
+                Publisher: {selectionInfo.publishers.map(p => safeString(p)).join(', ')}
               </span>
               <span className="ml-3 text-gray-600">
-                Subscriber: {selectionInfo.subscribers.join(', ')}
+                Subscriber: {selectionInfo.subscribers.map(s => safeString(s)).join(', ')}
               </span>
             </div>
           )}
@@ -376,12 +381,12 @@ function SharedEntityMap({ tables, events }: SharedEntityMapProps) {
               <span className="font-semibold text-gray-700">프로젝트: {selectionInfo.name}</span>
               {selectionInfo.tables.length > 0 && (
                 <span className="ml-3 text-gray-600">
-                  테이블: {selectionInfo.tables.join(', ')}
+                  테이블: {selectionInfo.tables.map(t => safeString(t)).join(', ')}
                 </span>
               )}
               {selectionInfo.events.length > 0 && (
                 <span className="ml-3 text-gray-600">
-                  이벤트: {selectionInfo.events.join(', ')}
+                  이벤트: {selectionInfo.events.map(e => safeString(e)).join(', ')}
                 </span>
               )}
             </div>

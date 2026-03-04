@@ -61,7 +61,7 @@ export function transformToFlow(
     type: 'requirement',
     position: { x: 0, y: 0 },
     data: {
-      label: result.specTitle,
+      label: safeString(result.specTitle),
       affectedSystemCount: result.affectedScreens.length,
       totalScore: result.totalScore,
       grade: result.grade,
@@ -168,7 +168,7 @@ export function transformToFlow(
       type: 'system',
       position: { x: 0, y: 0 },
       data: {
-        label: sysInfo.systemName,
+        label: safeString(sysInfo.systemName),
         totalScore: sysTotalScore,
         grade: sysGrade,
         confidence: 'medium', // 기본값
@@ -220,7 +220,7 @@ export function transformToFlow(
         type: 'screen',
         position: { x: 0, y: 0 },
         data: {
-          label: screenImpact.screenName,
+          label: safeString(screenImpact.screenName),
           score: screenScore.screenScore,
           grade: screenScore.grade,
           feCount: feTasks.length,
@@ -249,7 +249,7 @@ export function transformToFlow(
             type: 'feature',
             position: { x: 0, y: 0 },
             data: {
-              label: task.title,
+              label: safeString(task.title),
               workType: task.actionType,
               score: taskScore ? taskScore.totalScore : 0,
               grade: tGrade,
@@ -263,7 +263,8 @@ export function transformToFlow(
 
           // ── 5. Module 노드 (affectedFiles) ──
           for (let i = 0; i < task.affectedFiles.length; i++) {
-            const filePath = task.affectedFiles[i];
+            const rawFilePath = task.affectedFiles[i];
+            const filePath = safeString(rawFilePath);
             const fileName = filePath.split('/').pop() || filePath;
 
             if (!matchesSearch(filePath) && !matchesSearch(task.title)) continue;
@@ -274,7 +275,7 @@ export function transformToFlow(
               type: 'module',
               position: { x: 0, y: 0 },
               data: {
-                label: fileName,
+                label: safeString(fileName),
                 taskType: task.type,
                 score: taskScore ? Math.round(taskScore.totalScore / task.affectedFiles.length) : 0,
                 filePath,
@@ -324,8 +325,8 @@ export function transformToFlow(
       type: 'policy',
       position: { x: 0, y: 0 },
       data: {
-        label: policy.policyName,
-        description: policy.description,
+        label: safeString(policy.policyName),
+        description: safeString(policy.description),
         requiresReview: policy.requiresReview,
       } satisfies PolicyNodeData,
     };
@@ -349,10 +350,10 @@ export function transformToFlow(
       type: 'policyWarning',
       position: { x: 0, y: 0 },
       data: {
-        label: pw.message,
-        policyName: pw.policyName,
+        label: safeString(pw.message),
+        policyName: safeString(pw.policyName),
         severity: pw.severity,
-        relatedSystem: relatedSys?.systemName || '알 수 없음',
+        relatedSystem: safeString(relatedSys?.systemName) || '알 수 없음',
       } satisfies PolicyWarningNodeData,
     };
     nodes.push(pwNode);

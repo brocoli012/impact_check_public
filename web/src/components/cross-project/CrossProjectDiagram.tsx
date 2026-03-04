@@ -16,6 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { LINK_TYPE_COLORS, LINK_TYPE_LABELS } from '../../utils/linkTypeConstants';
+import { safeString } from '../../utils/safeString';
 
 /** 프로젝트 링크 타입 (서버 API와 동일) */
 export interface ProjectLink {
@@ -42,17 +43,12 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
   // Pin > Hover 우선순위: pinnedNodeId가 있으면 그것을 사용
   const activeNodeId = pinnedNodeId ?? hoveredNodeId;
 
-  if (!links || links.length === 0) {
-    return (
-      <div data-testid="cross-project-diagram-empty" className="text-sm text-gray-400 py-8 text-center">
-        등록된 프로젝트 의존성이 없습니다
-      </div>
-    );
-  }
+  // 빈 링크 여부 (early return은 모든 hooks 이후에 처리)
+  const isEmpty = !links || links.length === 0;
 
   // 활성 노드(Pin 또는 Hover)에 연결된 엣지/노드 ID 계산
   const connectedIds = useMemo(() => {
-    if (!activeNodeId) return null;
+    if (!activeNodeId || isEmpty) return null;
     const connectedNodeIds = new Set<string>([activeNodeId]);
     const connectedEdgeIds = new Set<string>();
 
@@ -65,9 +61,10 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
     });
 
     return { nodeIds: connectedNodeIds, edgeIds: connectedEdgeIds };
-  }, [activeNodeId, links]);
+  }, [activeNodeId, links, isEmpty]);
 
   const { nodes, edges } = useMemo(() => {
+    if (isEmpty) return { nodes: [], edges: [] };
     // 고유 프로젝트 ID 추출
     const projectIds = new Set<string>();
     for (const link of links) {
@@ -167,7 +164,7 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
       nodes: projectNodes,
       edges: linkEdges,
     };
-  }, [links, connectedIds, hoveredNodeId, pinnedNodeId, onNodeClick]);
+  }, [links, connectedIds, hoveredNodeId, pinnedNodeId, onNodeClick, isEmpty]);
 
   /** 노드 싱글 클릭 핸들러 - Pin 토글 */
   const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
@@ -199,7 +196,7 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
 
   /** Pin 정보 바에 표시할 데이터 */
   const pinInfo = useMemo(() => {
-    if (!pinnedNodeId) return null;
+    if (!pinnedNodeId || isEmpty) return null;
 
     const connectedProjects = new Set<string>();
     const linkTypes = new Set<string>();
@@ -223,7 +220,15 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
       linkTypes: Array.from(linkTypes),
       apis: [...new Set(apis)],
     };
-  }, [pinnedNodeId, links]);
+  }, [pinnedNodeId, links, isEmpty]);
+
+  if (isEmpty) {
+    return (
+      <div data-testid="cross-project-diagram-empty" className="text-sm text-gray-400 py-8 text-center">
+        등록된 프로젝트 의존성이 없습니다
+      </div>
+    );
+  }
 
   return (
     <div data-testid="cross-project-diagram">
@@ -266,12 +271,12 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
             </span>
             {pinInfo.linkTypes.length > 0 && (
               <span className="text-blue-500">
-                ({pinInfo.linkTypes.join(', ')})
+                ({pinInfo.linkTypes.map(t => safeString(t)).join(', ')})
               </span>
             )}
             {pinInfo.apis.length > 0 && (
               <span className="text-blue-500">
-                API: {pinInfo.apis.join(', ')}
+                API: {pinInfo.apis.map(a => safeString(a)).join(', ')}
               </span>
             )}
           </div>
