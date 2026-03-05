@@ -186,8 +186,6 @@ function CrossProjectFlowDiagram({
       const dagreNode = g.node(projectId);
       const project = projectMap.get(projectId);
 
-      const isHighlighted = !connectedIds || connectedIds.nodeIds.has(projectId);
-
       const nodeData: ProjectFlowNodeData = {
         label: project?.name ?? projectId,
         projectId,
@@ -196,7 +194,7 @@ function CrossProjectFlowDiagram({
         screenCount: project?.resultCount ?? 0,
         apiCount: project?.taskCount ?? 0,
         latestGrade: project?.latestGrade ?? null,
-        dimmed: !isHighlighted,
+        dimmed: false, // hover 하이라이트는 CSS로 처리 (BUG-009)
       };
 
       return {
@@ -210,12 +208,10 @@ function CrossProjectFlowDiagram({
       };
     });
 
-    // 엣지 생성
+    // 엣지 생성 - hover 하이라이트는 CSS로 처리 (BUG-009)
     const flowEdges: Edge[] = filteredLinks.map((link) => {
       const color = LINK_TYPE_COLORS[link.type] || '#94A3B8';
       const typeLabel = LINK_TYPE_LABELS[link.type] || link.type;
-
-      const isHighlighted = !connectedIds || connectedIds.edgeIds.has(link.id);
 
       return {
         id: link.id,
@@ -226,20 +222,18 @@ function CrossProjectFlowDiagram({
           fontSize: 10,
           fill: color,
           fontWeight: 600,
-          opacity: isHighlighted ? 1 : 0.2,
         },
         style: {
           stroke: color,
-          strokeWidth: isHighlighted ? 2.5 : 1.5,
-          opacity: isHighlighted ? 1 : 0.15,
-          transition: 'opacity 0.2s ease, stroke-width 0.2s ease',
+          strokeWidth: 2,
+          transition: 'opacity 0.2s ease',
         },
-        animated: link.autoDetected && isHighlighted,
+        animated: link.autoDetected,
       };
     });
 
     return { nodes: flowNodes, edges: flowEdges };
-  }, [filteredLinks, filteredProjectIds, projectMap, connectedIds]);
+  }, [filteredLinks, filteredProjectIds, projectMap]);
 
   // 노드 클릭 핸들러
   const handleNodeClick: NodeMouseHandler = useCallback(
@@ -307,8 +301,29 @@ function CrossProjectFlowDiagram({
     );
   }
 
+  // Hover 하이라이트를 CSS로 처리 - 노드 객체 재생성 방지 (BUG-009)
+  const hoverCss = useMemo(() => {
+    if (!connectedIds) return null;
+    const scope = '[data-testid="cross-project-flow-diagram"]';
+    const nodeSel = Array.from(connectedIds.nodeIds)
+      .map(id => `${scope} .react-flow__node[data-id="${id}"]`)
+      .join(',');
+    const edgeSel = connectedIds.edgeIds.size > 0
+      ? Array.from(connectedIds.edgeIds)
+          .map(id => `${scope} [data-testid="rf__edge-${id}"]`)
+          .join(',')
+      : null;
+    return `
+      ${scope} .react-flow__node { opacity: 0.3 !important; transition: opacity 0.2s ease !important; }
+      ${nodeSel} { opacity: 1 !important; }
+      ${scope} .react-flow__edge { opacity: 0.15 !important; transition: opacity 0.2s ease !important; }
+      ${edgeSel ? `${edgeSel} { opacity: 1 !important; }` : ''}
+    `;
+  }, [connectedIds]);
+
   return (
     <div data-testid="cross-project-flow-diagram" style={{ height: '100%', width: '100%', position: 'relative' }}>
+      {hoverCss && <style>{hoverCss}</style>}
       <ReactFlow
         nodes={nodes}
         edges={edges}

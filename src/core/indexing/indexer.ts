@@ -14,6 +14,7 @@ import { JavaParser } from './parsers/java-parser';
 import { KotlinParser } from './parsers/kotlin-parser';
 import { JavaAstParser } from './parsers/java-ast-parser';
 import { KotlinAstParser } from './parsers/kotlin-ast-parser';
+import { VueParser } from './parsers/vue-parser';
 import { isTreeSitterAvailable } from './parsers/tree-sitter-loader';
 import { BaseParser } from './parsers/base-parser';
 import { DependencyGraphBuilder } from './graph-builder';
@@ -171,10 +172,12 @@ export class Indexer {
 
     const regexParsers = [new JavaParser(), new KotlinParser()];
 
+    const vueParser = new VueParser();
+
     if (effectiveMode === 'regex') {
       logger.info('Parser mode: regex (Phase 1)');
       return {
-        primary: [new TypeScriptParser(), new JavaParser(), new KotlinParser()],
+        primary: [new TypeScriptParser(), vueParser, new JavaParser(), new KotlinParser()],
         regexFallback: [],
       };
     }
@@ -182,7 +185,7 @@ export class Indexer {
     if (effectiveMode === 'ast') {
       logger.info('Parser mode: ast (Phase 2 - tree-sitter)');
       return {
-        primary: [new TypeScriptParser(), new JavaAstParser(), new KotlinAstParser()],
+        primary: [new TypeScriptParser(), vueParser, new JavaAstParser(), new KotlinAstParser()],
         regexFallback: regexParsers,
       };
     }
@@ -192,14 +195,14 @@ export class Indexer {
     if (treeSitterOk) {
       logger.info('Parser mode: auto → AST parsers selected (tree-sitter available)');
       return {
-        primary: [new TypeScriptParser(), new JavaAstParser(), new KotlinAstParser()],
+        primary: [new TypeScriptParser(), vueParser, new JavaAstParser(), new KotlinAstParser()],
         regexFallback: regexParsers,
       };
     }
 
     logger.info('Parser mode: auto → Regex parsers selected (tree-sitter unavailable, fallback)');
     return {
-      primary: [new TypeScriptParser(), new JavaParser(), new KotlinParser()],
+      primary: [new TypeScriptParser(), vueParser, new JavaParser(), new KotlinParser()],
       regexFallback: [],
     };
   }

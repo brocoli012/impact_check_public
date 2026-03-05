@@ -341,7 +341,7 @@ export class DependencyGraphBuilder {
 
     // TASK-062: 확장자 자동 추가 시도 - nodeMap이 있으면 매칭되는 후보 반환
     if (!resolvedPath.match(/\.\w+$/)) {
-      const extensions = ['.ts', '.tsx', '.js', '.jsx', '.java', '.kt', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+      const extensions = ['.ts', '.tsx', '.js', '.jsx', '.vue', '.java', '.kt', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
 
       if (nodeMap) {
         // nodeMap에 존재하는 첫 번째 후보를 반환

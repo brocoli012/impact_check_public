@@ -47,6 +47,7 @@ const java_parser_1 = require("./parsers/java-parser");
 const kotlin_parser_1 = require("./parsers/kotlin-parser");
 const java_ast_parser_1 = require("./parsers/java-ast-parser");
 const kotlin_ast_parser_1 = require("./parsers/kotlin-ast-parser");
+const vue_parser_1 = require("./parsers/vue-parser");
 const tree_sitter_loader_1 = require("./parsers/tree-sitter-loader");
 const graph_builder_1 = require("./graph-builder");
 const policy_extractor_1 = require("./policy-extractor");
@@ -173,17 +174,18 @@ class Indexer {
     initParsers(mode) {
         const effectiveMode = mode !== 'auto' ? mode : process.env.PARSER_MODE || 'auto';
         const regexParsers = [new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()];
+        const vueParser = new vue_parser_1.VueParser();
         if (effectiveMode === 'regex') {
             logger_1.logger.info('Parser mode: regex (Phase 1)');
             return {
-                primary: [new typescript_parser_1.TypeScriptParser(), new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()],
+                primary: [new typescript_parser_1.TypeScriptParser(), vueParser, new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()],
                 regexFallback: [],
             };
         }
         if (effectiveMode === 'ast') {
             logger_1.logger.info('Parser mode: ast (Phase 2 - tree-sitter)');
             return {
-                primary: [new typescript_parser_1.TypeScriptParser(), new java_ast_parser_1.JavaAstParser(), new kotlin_ast_parser_1.KotlinAstParser()],
+                primary: [new typescript_parser_1.TypeScriptParser(), vueParser, new java_ast_parser_1.JavaAstParser(), new kotlin_ast_parser_1.KotlinAstParser()],
                 regexFallback: regexParsers,
             };
         }
@@ -192,13 +194,13 @@ class Indexer {
         if (treeSitterOk) {
             logger_1.logger.info('Parser mode: auto → AST parsers selected (tree-sitter available)');
             return {
-                primary: [new typescript_parser_1.TypeScriptParser(), new java_ast_parser_1.JavaAstParser(), new kotlin_ast_parser_1.KotlinAstParser()],
+                primary: [new typescript_parser_1.TypeScriptParser(), vueParser, new java_ast_parser_1.JavaAstParser(), new kotlin_ast_parser_1.KotlinAstParser()],
                 regexFallback: regexParsers,
             };
         }
         logger_1.logger.info('Parser mode: auto → Regex parsers selected (tree-sitter unavailable, fallback)');
         return {
-            primary: [new typescript_parser_1.TypeScriptParser(), new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()],
+            primary: [new typescript_parser_1.TypeScriptParser(), vueParser, new java_parser_1.JavaParser(), new kotlin_parser_1.KotlinParser()],
             regexFallback: [],
         };
     }

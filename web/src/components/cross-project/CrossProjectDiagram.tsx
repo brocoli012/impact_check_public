@@ -46,14 +46,14 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
   // 빈 링크 여부 (early return은 모든 hooks 이후에 처리)
   const isEmpty = !links || links.length === 0;
 
-  // 활성 노드(Pin 또는 Hover)에 연결된 엣지/노드 ID 계산
+  // Pin된 노드에 연결된 엣지/노드 ID 계산 (hover는 CSS로 처리 - BUG-009)
   const connectedIds = useMemo(() => {
     if (!activeNodeId || isEmpty) return null;
     const connectedNodeIds = new Set<string>([activeNodeId]);
     const connectedEdgeIds = new Set<string>();
 
     links.forEach((link, idx) => {
-      if (link.source === activeNodeId || link.target === activeNodeId) {
+      if (link.source === pinnedNodeId || link.target === pinnedNodeId) {
         connectedNodeIds.add(link.source);
         connectedNodeIds.add(link.target);
         connectedEdgeIds.add(`edge-${idx}`);
@@ -91,12 +91,11 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
       const y = centerY + radius * Math.sin(angle) - 20;
       const count = linkCounts.get(projectId) || 0;
 
-      // hover/pin 하이라이트: 관련 노드 = 정상, 비관련 노드 = 반투명
+      // pin 하이라이트: 관련 노드 = 정상, 비관련 노드 = 반투명 (hover는 CSS로 처리 - BUG-009)
       const isHighlighted = !connectedIds || connectedIds.nodeIds.has(projectId);
       const isPinned = pinnedNodeId === projectId;
-      const isHovered = hoveredNodeId === projectId;
 
-      // Pin 스타일 > Hover 스타일 > 기본 스타일
+      // Pin 스타일 > 기본 스타일 (hover 스타일은 CSS로 처리)
       let background = '#F3F4F6';
       let border = '2px solid #6B7280';
       let boxShadow: string | undefined;
@@ -105,9 +104,6 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
         background = '#BFDBFE';
         border = '2px solid #2563EB';
         boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.2)';
-      } else if (isHovered) {
-        background = '#DBEAFE';
-        border = '2px solid #3B82F6';
       }
 
       return {
@@ -230,8 +226,38 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
     );
   }
 
+  // Hover 하이라이트를 CSS로 처리 - 노드 객체 재생성 방지 (BUG-009)
+  const hoverCss = useMemo(() => {
+    if (pinnedNodeId || !hoveredNodeId) return null;
+    const nodeIds = new Set<string>([hoveredNodeId]);
+    const edgeIds = new Set<string>();
+    links.forEach((link, idx) => {
+      if (link.source === hoveredNodeId || link.target === hoveredNodeId) {
+        nodeIds.add(link.source);
+        nodeIds.add(link.target);
+        edgeIds.add(`edge-${idx}`);
+      }
+    });
+    const scope = '[data-testid="cross-project-diagram"]';
+    const nodeSel = Array.from(nodeIds)
+      .map(id => `${scope} .react-flow__node[data-id="${id}"]`)
+      .join(',');
+    const edgeSel = edgeIds.size > 0
+      ? Array.from(edgeIds)
+          .map(id => `${scope} [data-testid="rf__edge-${id}"]`)
+          .join(',')
+      : null;
+    return `
+      ${scope} .react-flow__node { opacity: 0.3 !important; transition: opacity 0.2s ease !important; }
+      ${nodeSel} { opacity: 1 !important; }
+      ${scope} .react-flow__edge { opacity: 0.15 !important; transition: opacity 0.2s ease !important; }
+      ${edgeSel ? `${edgeSel} { opacity: 1 !important; }` : ''}
+    `;
+  }, [hoveredNodeId, pinnedNodeId, links]);
+
   return (
     <div data-testid="cross-project-diagram">
+      {hoverCss && <style>{hoverCss}</style>}
       <div style={{ height: 400, width: '100%' }}>
         <ReactFlow
           nodes={nodes}

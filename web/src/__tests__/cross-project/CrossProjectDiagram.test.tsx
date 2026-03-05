@@ -270,3 +270,92 @@ describe('CrossProjectDiagram - Pin Click (TASK-211~215)', () => {
     expect(typeof capturedProps.onNodeDoubleClick).toBe('function');
   });
 });
+
+describe('CrossProjectDiagram - BUG-009: Hover via CSS (no node recreation)', () => {
+  it('should not recreate node objects on hover (nodes remain stable)', () => {
+    render(<CrossProjectDiagram links={mockLinks} />);
+
+    // 초기 노드 참조 캡처
+    const initialNodes = capturedProps.nodes;
+    expect(initialNodes).toBeDefined();
+    expect(initialNodes.length).toBe(3);
+
+    // hover 진입 시뮬레이션
+    act(() => {
+      capturedProps.onNodeMouseEnter?.({} as any, { id: 'frontend' } as any);
+    });
+
+    // hover 후에도 노드 객체가 동일 참조 (재생성되지 않음)
+    const nodesAfterHover = capturedProps.nodes;
+    expect(nodesAfterHover).toBe(initialNodes);
+  });
+
+  it('should render CSS style tag for hover dimming instead of changing node styles', () => {
+    const { container } = render(<CrossProjectDiagram links={mockLinks} />);
+
+    // 초기 상태: hover CSS 없음
+    expect(container.querySelector('style')).toBeNull();
+
+    // hover 진입
+    act(() => {
+      capturedProps.onNodeMouseEnter?.({} as any, { id: 'frontend' } as any);
+    });
+
+    // CSS style 태그가 삽입됨
+    const styleTag = container.querySelector('style');
+    expect(styleTag).not.toBeNull();
+    expect(styleTag?.textContent).toContain('opacity');
+    expect(styleTag?.textContent).toContain('frontend');
+  });
+
+  it('should remove CSS style tag on hover leave', () => {
+    const { container } = render(<CrossProjectDiagram links={mockLinks} />);
+
+    // hover 진입
+    act(() => {
+      capturedProps.onNodeMouseEnter?.({} as any, { id: 'frontend' } as any);
+    });
+    expect(container.querySelector('style')).not.toBeNull();
+
+    // hover 이탈
+    act(() => {
+      capturedProps.onNodeMouseLeave?.({} as any, {} as any);
+    });
+    expect(container.querySelector('style')).toBeNull();
+  });
+
+  it('should not show hover CSS when a node is pinned (pin takes precedence)', () => {
+    const { container } = render(<CrossProjectDiagram links={mockLinks} />);
+
+    // 노드 핀
+    act(() => {
+      screen.getByTestId('node-backend').click();
+    });
+
+    // 다른 노드 hover
+    act(() => {
+      capturedProps.onNodeMouseEnter?.({} as any, { id: 'frontend' } as any);
+    });
+
+    // hover CSS 없음 (pin이 우선)
+    expect(container.querySelector('style')).toBeNull();
+  });
+
+  it('should allow click events during hover (no DOM replacement)', () => {
+    const onNodeClick = vi.fn();
+    render(<CrossProjectDiagram links={mockLinks} onNodeClick={onNodeClick} />);
+
+    // hover 상태에서 클릭
+    act(() => {
+      capturedProps.onNodeMouseEnter?.({} as any, { id: 'frontend' } as any);
+    });
+
+    // 클릭 이벤트가 정상 동작해야 함
+    act(() => {
+      screen.getByTestId('node-frontend').click();
+    });
+
+    // pin이 되어야 함 (click handler 정상 동작)
+    expect(screen.getByTestId('pin-info-bar')).toBeInTheDocument();
+  });
+});
