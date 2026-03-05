@@ -5,6 +5,7 @@
  */
 
 import type { ProjectGroup } from './CrossProjectSummary';
+import { safeString } from '../../utils/safeString';
 
 export interface FlowFilterBarProps {
   groups: ProjectGroup[];
@@ -64,35 +65,38 @@ function FlowFilterBar({
         >
           전체
         </button>
-        {groups.map((group) => (
-          <button
-            key={group.name}
-            onClick={() => onGroupChange(group.name === selectedGroup ? null : group.name)}
-            aria-pressed={selectedGroup === group.name}
-            style={{
-              padding: '4px 10px',
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: 12,
-              border: '1px solid',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              ...(selectedGroup === group.name
-                ? {
-                    background: '#3B82F6',
-                    color: 'white',
-                    borderColor: '#3B82F6',
-                  }
-                : {
-                    background: 'white',
-                    color: '#64748B',
-                    borderColor: '#CBD5E1',
-                  }),
-            }}
-          >
-            {group.name}
-          </button>
-        ))}
+        {groups.map((group) => {
+          const groupName = safeString(group.name);
+          return (
+            <button
+              key={groupName}
+              onClick={() => onGroupChange(groupName === selectedGroup ? null : groupName)}
+              aria-pressed={selectedGroup === groupName}
+              style={{
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 12,
+                border: '1px solid',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                ...(selectedGroup === groupName
+                  ? {
+                      background: '#3B82F6',
+                      color: 'white',
+                      borderColor: '#3B82F6',
+                    }
+                  : {
+                      background: 'white',
+                      color: '#64748B',
+                      borderColor: '#CBD5E1',
+                    }),
+              }}
+            >
+              {groupName}
+            </button>
+          );
+        })}
       </div>
 
       {/* 구분선 */}

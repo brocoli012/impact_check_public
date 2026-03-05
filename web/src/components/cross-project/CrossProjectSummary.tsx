@@ -6,6 +6,7 @@
 
 import { useMemo } from 'react';
 import type { ProjectLink } from './CrossProjectDiagram';
+import { safeString } from '../../utils/safeString';
 
 /** 프로젝트 그룹 */
 export interface ProjectGroup {
@@ -87,15 +88,16 @@ function CrossProjectSummary({ links, groups }: CrossProjectSummaryProps) {
           <h4 className="text-xs font-semibold text-gray-700 mb-2">링크 타입별 통계</h4>
           <div className="space-y-1.5">
             {stats.typeCounts.map(([type, count]) => {
-              const color = TYPE_COLORS[type] || '#94A3B8';
+              const typeStr = safeString(type);
+              const color = TYPE_COLORS[typeStr] || '#94A3B8';
               return (
-                <div key={type} className="flex items-center justify-between">
+                <div key={typeStr} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: color }}
                     />
-                    <span className="text-xs text-gray-600">{type}</span>
+                    <span className="text-xs text-gray-600">{typeStr}</span>
                   </div>
                   <span className="text-xs font-semibold text-gray-700">{count}</span>
                 </div>

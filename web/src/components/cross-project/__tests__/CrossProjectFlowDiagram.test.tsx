@@ -233,4 +233,29 @@ describe('CrossProjectFlowDiagram', () => {
     // 에러 없이 렌더링됨
     expect(screen.getByTestId('cross-project-flow-diagram')).toBeInTheDocument();
   });
+
+  it('should handle link.type as object without React #310 (BUG-011)', () => {
+    const linksWithObjectType = [
+      {
+        id: 'frontend-backend',
+        source: 'frontend',
+        target: 'backend',
+        type: { name: 'api-consumer' } as unknown as string,
+        autoDetected: false,
+      },
+    ];
+
+    // Should not throw React error #310 (Objects are not valid as React child)
+    expect(() => {
+      render(
+        <CrossProjectFlowDiagram
+          links={linksWithObjectType}
+          groups={[]}
+          projects={mockProjects}
+        />,
+      );
+    }).not.toThrow();
+
+    expect(screen.getByTestId('cross-project-flow-diagram')).toBeInTheDocument();
+  });
 });

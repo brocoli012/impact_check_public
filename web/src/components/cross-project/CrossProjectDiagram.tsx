@@ -130,7 +130,7 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
 
     const linkEdges: Edge[] = links.map((link, idx) => {
       const color = LINK_TYPE_COLORS[link.type] || '#94A3B8';
-      const typeLabel = LINK_TYPE_LABELS[link.type] || link.type;
+      const typeLabel = LINK_TYPE_LABELS[link.type] || safeString(link.type);
 
       // hover 하이라이트: 관련 엣지만 정상 표시
       const isHighlighted = !connectedIds || connectedIds.edgeIds.has(`edge-${idx}`);
@@ -202,7 +202,7 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
       if (link.source === pinnedNodeId || link.target === pinnedNodeId) {
         const otherProject = link.source === pinnedNodeId ? link.target : link.source;
         connectedProjects.add(otherProject);
-        linkTypes.add(LINK_TYPE_LABELS[link.type] || link.type);
+        linkTypes.add(LINK_TYPE_LABELS[link.type] || safeString(link.type));
         if (link.apis) {
           apis.push(...link.apis);
         }

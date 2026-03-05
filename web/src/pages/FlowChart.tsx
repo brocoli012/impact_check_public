@@ -176,8 +176,21 @@ function FlowChart() {
           const linksData = await linksRes.json();
           const groupsData = await groupsRes.json();
           const projectsData = await projectsRes.json();
-          setLinks(linksData.links || []);
-          setGroups(groupsData.groups || []);
+          const sanitizedLinks = (linksData.links || []).map((l: any) => ({
+            ...l,
+            id: typeof l.id === 'string' ? l.id : String(l.id ?? ''),
+            source: typeof l.source === 'string' ? l.source : String(l.source ?? ''),
+            target: typeof l.target === 'string' ? l.target : String(l.target ?? ''),
+            type: typeof l.type === 'string' ? l.type : String(l.type ?? ''),
+            apis: Array.isArray(l.apis) ? l.apis.map(String) : [],
+          }));
+          const sanitizedGroups = (groupsData.groups || []).map((g: any) => ({
+            ...g,
+            name: typeof g.name === 'string' ? g.name : String(g.name ?? ''),
+            projects: Array.isArray(g.projects) ? g.projects.map(String) : [],
+          }));
+          setLinks(sanitizedLinks);
+          setGroups(sanitizedGroups);
           const sanitizedProjects = (projectsData.projects || []).map((p: any) => ({
             ...p,
             techStack: Array.isArray(p.techStack) ? p.techStack.map(String) : [],

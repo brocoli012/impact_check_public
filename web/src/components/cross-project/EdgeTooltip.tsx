@@ -5,6 +5,7 @@
  */
 
 import { LINK_TYPE_COLORS, LINK_TYPE_LABELS } from '../../utils/linkTypeConstants';
+import { safeString } from '../../utils/safeString';
 
 export interface EdgeTooltipProps {
   linkType: string;
@@ -26,7 +27,7 @@ function EdgeTooltip({
   if (!visible) return null;
 
   const color = LINK_TYPE_COLORS[linkType] || '#94A3B8';
-  const label = LINK_TYPE_LABELS[linkType] || linkType;
+  const label = LINK_TYPE_LABELS[linkType] || safeString(linkType);
 
   return (
     <div

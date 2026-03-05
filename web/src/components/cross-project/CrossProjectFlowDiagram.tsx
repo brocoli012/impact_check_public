@@ -20,6 +20,7 @@ import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
 
 import { LINK_TYPE_COLORS, LINK_TYPE_LABELS } from '../../utils/linkTypeConstants';
+import { safeString } from '../../utils/safeString';
 import { ProjectFlowNode, type ProjectFlowNodeData } from './ProjectFlowNode';
 import EdgeTooltip from './EdgeTooltip';
 import type { ProjectLink } from './CrossProjectDiagram';
@@ -211,7 +212,7 @@ function CrossProjectFlowDiagram({
     // 엣지 생성 - hover 하이라이트는 CSS로 처리 (BUG-009)
     const flowEdges: Edge[] = filteredLinks.map((link) => {
       const color = LINK_TYPE_COLORS[link.type] || '#94A3B8';
-      const typeLabel = LINK_TYPE_LABELS[link.type] || link.type;
+      const typeLabel = LINK_TYPE_LABELS[link.type] || safeString(link.type);
 
       return {
         id: link.id,

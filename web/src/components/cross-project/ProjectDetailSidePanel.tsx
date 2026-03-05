@@ -238,7 +238,7 @@ function StatItem({ label, value }: { label: string; value: number }) {
 /** 링크 아이템 */
 function LinkItem({ link, direction }: { link: ProjectLink; direction: 'incoming' | 'outgoing' }) {
   const color = LINK_TYPE_COLORS[link.type] || '#94A3B8';
-  const label = LINK_TYPE_LABELS[link.type] || link.type;
+  const label = LINK_TYPE_LABELS[link.type] || safeString(link.type);
   const peer = direction === 'incoming' ? link.source : link.target;
 
   return (
