@@ -95,6 +95,8 @@ function setupWithResult() {
     expandedNodeIds: new Set(),
     selectedNodeId: null,
     projectMode: 'individual',
+    crossProjectSpecApis: [],
+    crossProjectFilterEnabled: true,
   });
 }
 
@@ -122,6 +124,8 @@ function setupWithoutResult() {
     expandedNodeIds: new Set(),
     selectedNodeId: null,
     projectMode: 'individual',
+    crossProjectSpecApis: [],
+    crossProjectFilterEnabled: true,
   });
 }
 
@@ -149,6 +153,8 @@ function setupAllModeWithResult() {
     expandedNodeIds: new Set(),
     selectedNodeId: null,
     projectMode: 'all',
+    crossProjectSpecApis: [],
+    crossProjectFilterEnabled: true,
   });
 }
 

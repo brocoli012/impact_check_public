@@ -12,6 +12,10 @@ export interface FlowFilterBarProps {
   onGroupChange: (groupId: string | null) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  specFilterEnabled?: boolean;
+  onSpecFilterToggle?: () => void;
+  filteredCount?: number;
+  totalCount?: number;
 }
 
 function FlowFilterBar({
@@ -20,6 +24,10 @@ function FlowFilterBar({
   onGroupChange,
   searchQuery,
   onSearchChange,
+  specFilterEnabled,
+  onSpecFilterToggle,
+  filteredCount,
+  totalCount,
 }: FlowFilterBarProps) {
   return (
     <div
@@ -94,6 +102,42 @@ function FlowFilterBar({
           </button>
         ))}
       </div>
+
+      {/* 기획서 필터 토글 */}
+      {onSpecFilterToggle && (
+        <>
+          <div style={{ width: 1, height: 24, background: '#E2E8F0' }} />
+          <button
+            data-testid="spec-filter-toggle"
+            onClick={onSpecFilterToggle}
+            aria-pressed={specFilterEnabled}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              borderRadius: 12,
+              border: '1px solid',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              ...(specFilterEnabled
+                ? {
+                    background: '#10B981',
+                    color: 'white',
+                    borderColor: '#10B981',
+                  }
+                : {
+                    background: 'white',
+                    color: '#64748B',
+                    borderColor: '#CBD5E1',
+                  }),
+            }}
+          >
+            {specFilterEnabled
+              ? `관련 ${filteredCount ?? 0}개`
+              : `전체 ${totalCount ?? 0}개`}
+          </button>
+        </>
+      )}
 
       {/* 구분선 */}
       <div style={{ width: 1, height: 24, background: '#E2E8F0' }} />

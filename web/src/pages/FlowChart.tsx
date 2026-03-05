@@ -140,6 +140,10 @@ function FlowChart() {
   const toggleExpand = useFlowStore((s) => s.toggleExpand);
   const projectMode = useFlowStore((s) => s.projectMode);
   const setProjectMode = useFlowStore((s) => s.setProjectMode);
+  const crossProjectSpecApis = useFlowStore((s) => s.crossProjectSpecApis);
+  const setCrossProjectSpecApis = useFlowStore((s) => s.setCrossProjectSpecApis);
+  const crossProjectFilterEnabled = useFlowStore((s) => s.crossProjectFilterEnabled);
+  const toggleCrossProjectFilter = useFlowStore((s) => s.toggleCrossProjectFilter);
 
   // 알럿 배너 상태
   const [showAlert, setShowAlert] = useState(false);
@@ -163,6 +167,22 @@ function FlowChart() {
     [allProjects, flowSelectedProjectId],
   );
 
+  // 기획서 API 기반 필터링된 링크
+  const specFilteredLinks = useMemo(() => {
+    if (!crossProjectFilterEnabled || !currentResult) return links;
+
+    if (crossProjectSpecApis.length === 0) return links;
+
+    const apiMatched = links.filter(
+      (link) => link.apis?.some((api) => crossProjectSpecApis.some((specApi) =>
+        api.includes(specApi) || specApi.includes(api)
+      ))
+    );
+
+    if (apiMatched.length > 0) return apiMatched;
+    return links; // 폴백: 매칭 없으면 전체 반환
+  }, [links, crossProjectFilterEnabled, currentResult, crossProjectSpecApis]);
+
   // 크로스 프로젝트 데이터 로드 (전체 모드 진입 시)
   useEffect(() => {
     if (projectMode === 'all') {
@@ -185,12 +205,25 @@ function FlowChart() {
             featureSummary: Array.isArray(p.featureSummary) ? p.featureSummary.map(String) : [],
           }));
           setAllProjects(sanitizedProjects);
+
+          // 현재 기획서의 API 경로 추출
+          if (currentResult) {
+            const specApis = new Set<string>();
+            for (const task of currentResult.tasks) {
+              if (task.relatedApis) {
+                for (const api of task.relatedApis) {
+                  if (api) specApis.add(api);
+                }
+              }
+            }
+            setCrossProjectSpecApis(Array.from(specApis));
+          }
         } catch {
           // 크로스 프로젝트 데이터 로드 실패는 무시
         }
       })();
     }
-  }, [projectMode]);
+  }, [projectMode, currentResult, setCrossProjectSpecApis]);
 
   /** "전체" 선택 시 유효성 검증 */
   const handleAllSelected = useCallback(() => {
@@ -333,7 +366,7 @@ function FlowChart() {
           </div>
 
           {crossProjectView === 'tabs' ? (
-            <CrossProjectTabs links={links} groups={groups} />
+            <CrossProjectTabs links={specFilteredLinks} groups={groups} />
           ) : (
             <div style={{ flex: 1, display: 'flex', gap: 16, padding: '0 16px 16px 16px', overflow: 'hidden' }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
@@ -343,10 +376,14 @@ function FlowChart() {
                   onGroupChange={setFlowSelectedGroup}
                   searchQuery={flowSearchQuery}
                   onSearchChange={setFlowSearchQuery}
+                  specFilterEnabled={crossProjectFilterEnabled}
+                  onSpecFilterToggle={toggleCrossProjectFilter}
+                  filteredCount={specFilteredLinks.length}
+                  totalCount={links.length}
                 />
                 <div style={{ flex: 1, borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden', background: '#FAFBFC' }}>
                   <CrossProjectFlowDiagram
-                    links={links}
+                    links={specFilteredLinks}
                     groups={groups}
                     projects={allProjects}
                     selectedGroup={flowSelectedGroup}
@@ -361,7 +398,7 @@ function FlowChart() {
                 <div style={{ width: 320, flexShrink: 0 }}>
                   <ProjectDetailSidePanel
                     project={flowSelectedProject}
-                    links={links}
+                    links={specFilteredLinks}
                     onClose={() => setFlowSelectedProjectId(null)}
                   />
                 </div>

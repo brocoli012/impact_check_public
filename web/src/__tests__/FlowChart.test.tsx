@@ -61,6 +61,8 @@ describe('FlowChart Page', () => {
       expandedNodeIds: new Set(),
       selectedNodeId: null,
       projectMode: 'individual',
+      crossProjectSpecApis: [],
+      crossProjectFilterEnabled: true,
     });
   });
 

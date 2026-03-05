@@ -33,6 +33,10 @@ interface FlowState {
   selectedNodeId: string | null;
   /** 프로젝트 모드: 개별 vs 전체 */
   projectMode: ProjectMode;
+  /** 현재 기획서에서 추출한 API 경로들 */
+  crossProjectSpecApis: string[];
+  /** 기획서 필터 ON/OFF */
+  crossProjectFilterEnabled: boolean;
 
   /** 필터 설정 */
   setFilter: (update: Partial<FlowFilterState>) => void;
@@ -50,6 +54,10 @@ interface FlowState {
   setRequirementFilter: (reqId: string | null) => void;
   /** 프로젝트 모드 설정 */
   setProjectMode: (mode: ProjectMode) => void;
+  /** 기획서 API 경로 설정 */
+  setCrossProjectSpecApis: (apis: string[]) => void;
+  /** 기획서 필터 토글 */
+  toggleCrossProjectFilter: () => void;
   /** 데이터 초기화 (프로젝트 전환 시) */
   reset: () => void;
 }
@@ -69,6 +77,8 @@ export const useFlowStore = create<FlowState>((set) => ({
   expandedNodeIds: new Set<string>(),
   selectedNodeId: null,
   projectMode: 'individual',
+  crossProjectSpecApis: [],
+  crossProjectFilterEnabled: true,
 
   setFilter: (update) =>
     set((state) => ({
@@ -107,7 +117,12 @@ export const useFlowStore = create<FlowState>((set) => ({
       filter: { ...state.filter, requirementFilter: reqId },
     })),
 
-  setProjectMode: (mode) => set({ projectMode: mode }),
+  setProjectMode: (mode) => set({ projectMode: mode, selectedNodeId: null }),
+
+  setCrossProjectSpecApis: (apis) => set({ crossProjectSpecApis: apis }),
+
+  toggleCrossProjectFilter: () =>
+    set((state) => ({ crossProjectFilterEnabled: !state.crossProjectFilterEnabled })),
 
   reset: () =>
     set({
@@ -115,5 +130,7 @@ export const useFlowStore = create<FlowState>((set) => ({
       expandedNodeIds: new Set<string>(),
       selectedNodeId: null,
       projectMode: 'individual',
+      crossProjectSpecApis: [],
+      crossProjectFilterEnabled: true,
     }),
 }));
