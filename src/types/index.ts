@@ -287,6 +287,9 @@ export interface DependencyEdge {
 // 정책 (Policy) 타입
 // ============================================================
 
+/** 정책 대상 Audience */
+export type PolicyAudience = 'planner' | 'developer' | 'both';
+
 /** 정책 정보 (policies.json 항목) */
 export interface PolicyInfo {
   /** 정책 고유 ID */
@@ -315,6 +318,16 @@ export interface PolicyInfo {
   relatedModules: string[];
   /** 추출 시각 */
   extractedAt: ISODateString;
+  /** 대상 Audience (기획자/개발자/둘다) */
+  audience?: PolicyAudience;
+  /** 기획자 관점 설명 */
+  plannerDescription?: string;
+  /** 개발자 관점 설명 */
+  developerDescription?: string;
+  /** 관련 화면 */
+  relatedScreen?: string;
+  /** 관련 기능 */
+  relatedFunction?: string;
 }
 
 // ============================================================

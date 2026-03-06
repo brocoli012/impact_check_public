@@ -3,9 +3,22 @@
  * @description TASK-132: 프로젝트 기본 정보를 배너 형태로 표시
  */
 
+import { useState, useEffect } from 'react';
 import type { ProjectInfo } from '../../types';
 import { DOMAIN_COLORS, getDomainColorIndex } from '../../utils/domainColors';
 import { safeString } from '../../utils/safeString';
+
+/** 기능 트리 항목 (feature-tree API 응답) */
+interface FeatureTreeItem {
+  screenId: string;
+  screenName: string;
+  route: string;
+  features: {
+    componentId: string;
+    name: string;
+    type: string;
+  }[];
+}
 
 interface IndexMeta {
   totalFiles: number;
@@ -22,6 +35,33 @@ interface ProjectStatusBannerProps {
 }
 
 function ProjectStatusBanner({ project, indexMeta, lastAnalysisDate }: ProjectStatusBannerProps) {
+  const [featureTree, setFeatureTree] = useState<FeatureTreeItem[]>([]);
+  const [treeExpanded, setTreeExpanded] = useState(false);
+  const [expandedScreens, setExpandedScreens] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch('/api/project/feature-tree')
+      .then(res => res.json())
+      .then(data => {
+        if (data.tree) setFeatureTree(data.tree);
+      })
+      .catch(() => {
+        // feature tree 로드 실패는 무시
+      });
+  }, [project.id]);
+
+  const toggleScreen = (screenId: string) => {
+    setExpandedScreens(prev => {
+      const next = new Set(prev);
+      if (next.has(screenId)) {
+        next.delete(screenId);
+      } else {
+        next.add(screenId);
+      }
+      return next;
+    });
+  };
+
   return (
     <div
       data-testid="project-status-banner"
@@ -116,6 +156,71 @@ function ProjectStatusBanner({ project, indexMeta, lastAnalysisDate }: ProjectSt
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* 기능 트리 (접힘/펼침) */}
+          {featureTree.length > 0 && (
+            <div className="mt-3" data-testid="feature-tree">
+              <button
+                onClick={() => setTreeExpanded(!treeExpanded)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
+                data-testid="feature-tree-toggle"
+              >
+                <svg
+                  className={`w-3.5 h-3.5 transition-transform ${treeExpanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                화면/기능 트리 ({featureTree.length}개 화면)
+              </button>
+
+              {treeExpanded && (
+                <div className="mt-2 bg-gray-50 rounded-lg p-3 space-y-1.5">
+                  {featureTree.map(screen => (
+                    <div key={screen.screenId}>
+                      <button
+                        onClick={() => toggleScreen(screen.screenId)}
+                        className="flex items-center gap-1.5 w-full text-left text-xs font-medium text-gray-700 hover:text-gray-900"
+                      >
+                        <svg
+                          className={`w-3 h-3 text-gray-400 transition-transform ${expandedScreens.has(screen.screenId) ? 'rotate-90' : ''}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        <svg className="w-3.5 h-3.5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        {screen.screenName}
+                        {screen.route && (
+                          <span className="text-[10px] text-gray-400 font-mono">{screen.route}</span>
+                        )}
+                        {screen.features.length > 0 && (
+                          <span className="text-[10px] text-gray-400">({screen.features.length})</span>
+                        )}
+                      </button>
+
+                      {expandedScreens.has(screen.screenId) && screen.features.length > 0 && (
+                        <div className="ml-6 mt-1 space-y-0.5">
+                          {screen.features.map(feature => (
+                            <div key={feature.componentId} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-300 shrink-0" />
+                              {feature.name}
+                              <span className="text-[10px] text-gray-400">({feature.type})</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

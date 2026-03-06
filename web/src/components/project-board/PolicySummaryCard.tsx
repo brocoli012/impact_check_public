@@ -16,18 +16,42 @@ function PolicySummaryCard({ policies }: PolicySummaryCardProps) {
     const categoryMap = new Map<string, number>();
     let warningCount = 0;
 
+    // audience 기반 분류 (기획자 관점)
+    const audienceCounts = { planner: 0, developer: 0, both: 0 };
+    // 기획자 관점 카테고리 분류
+    const plannerCategories = { permission: 0, process: 0, validation: 0, other: 0 };
+
     for (const policy of policies) {
       categoryMap.set(policy.category, (categoryMap.get(policy.category) || 0) + 1);
-      // 낮은 신뢰도(0.5 미만)를 경고로 간주
       if (policy.confidence < 0.5) {
         warningCount++;
       }
+
+      // audience 분류
+      const audience = policy.audience || 'developer';
+      audienceCounts[audience] = (audienceCounts[audience] || 0) + 1;
+
+      // 기획자 관점 카테고리 (category 키워드 기반)
+      const cat = policy.category.toLowerCase();
+      if (cat.includes('권한') || cat.includes('auth') || cat.includes('permission') || cat.includes('role')) {
+        plannerCategories.permission++;
+      } else if (cat.includes('프로세스') || cat.includes('process') || cat.includes('flow') || cat.includes('workflow')) {
+        plannerCategories.process++;
+      } else if (cat.includes('검증') || cat.includes('valid') || cat.includes('rule') || cat.includes('규칙')) {
+        plannerCategories.validation++;
+      } else {
+        plannerCategories.other++;
+      }
     }
+
+    const plannerRelevant = audienceCounts.planner + audienceCounts.both;
 
     return {
       total: policies.length,
       warningCount,
       categories: Array.from(categoryMap.entries()).sort((a, b) => b[1] - a[1]),
+      plannerRelevant,
+      plannerCategories,
     };
   }, [policies]);
 
@@ -45,7 +69,7 @@ function PolicySummaryCard({ policies }: PolicySummaryCardProps) {
   return (
     <div data-testid="policy-summary-card" className="bg-white rounded-lg border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-bold text-gray-900">정책 현황</h3>
+        <h3 className="text-sm font-bold text-gray-900">정책 현황 (기획자 관점)</h3>
         <Link
           to="/policies"
           className="text-xs text-purple-600 hover:text-purple-800"
@@ -54,13 +78,19 @@ function PolicySummaryCard({ policies }: PolicySummaryCardProps) {
         </Link>
       </div>
 
-      {/* KPI */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      {/* KPI - 기획자 관점 */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p className="text-2xl font-bold text-gray-900" data-testid="policy-total-count">
             {stats.total}
           </p>
           <p className="text-xs text-gray-500 mt-1">전체 정책</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-purple-600" data-testid="policy-planner-count">
+            {stats.plannerRelevant}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">기획 관련</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p
@@ -73,7 +103,38 @@ function PolicySummaryCard({ policies }: PolicySummaryCardProps) {
         </div>
       </div>
 
-      {/* 카테고리별 분포 */}
+      {/* 기획자 관점 정책 분류 */}
+      <div className="mb-3">
+        <h4 className="text-xs font-semibold text-gray-700 mb-2">정책 유형별 현황</h4>
+        <div className="grid grid-cols-2 gap-2">
+          {stats.plannerCategories.permission > 0 && (
+            <div className="flex items-center justify-between bg-blue-50 rounded px-2.5 py-1.5">
+              <span className="text-xs text-blue-700">권한 정책</span>
+              <span className="text-xs font-bold text-blue-700">{stats.plannerCategories.permission}건</span>
+            </div>
+          )}
+          {stats.plannerCategories.process > 0 && (
+            <div className="flex items-center justify-between bg-green-50 rounded px-2.5 py-1.5">
+              <span className="text-xs text-green-700">프로세스 정책</span>
+              <span className="text-xs font-bold text-green-700">{stats.plannerCategories.process}건</span>
+            </div>
+          )}
+          {stats.plannerCategories.validation > 0 && (
+            <div className="flex items-center justify-between bg-amber-50 rounded px-2.5 py-1.5">
+              <span className="text-xs text-amber-700">밸리데이션 정책</span>
+              <span className="text-xs font-bold text-amber-700">{stats.plannerCategories.validation}건</span>
+            </div>
+          )}
+          {stats.plannerCategories.other > 0 && (
+            <div className="flex items-center justify-between bg-gray-50 rounded px-2.5 py-1.5">
+              <span className="text-xs text-gray-600">기타 정책</span>
+              <span className="text-xs font-bold text-gray-600">{stats.plannerCategories.other}건</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 카테고리별 분포 (기존 유지) */}
       {stats.categories.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-gray-700 mb-2">카테고리별 분포</h4>

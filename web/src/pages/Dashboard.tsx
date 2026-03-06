@@ -11,6 +11,12 @@ import CriticalAlertBanner from '../components/dashboard/CriticalAlertBanner';
 import SupplementBanner from '../components/dashboard/SupplementBanner';
 import AnalysisSummaryCard from '../components/dashboard/AnalysisSummaryCard';
 import SpecSourcePanel from '../components/dashboard/SpecSourcePanel';
+import SectionAnchorBar from '../components/dashboard/SectionAnchorBar';
+import CurrentProblemsSection from '../components/dashboard/CurrentProblemsSection';
+import DataFlowComparison from '../components/dashboard/DataFlowComparison';
+import UserProcessChange from '../components/dashboard/UserProcessChange';
+import PolicyChangeSection from '../components/dashboard/PolicyChangeSection';
+import PlanningCheckSection from '../components/dashboard/PlanningCheckSection';
 import ProjectSelector from '../components/common/ProjectSelector';
 import EmptyResultGuide from '../components/common/EmptyResultGuide';
 import CrossProjectDiagram from '../components/cross-project/CrossProjectDiagram';
@@ -113,6 +119,22 @@ function Dashboard() {
     return currentResult.planningChecks.filter((c) => c.priority === 'high');
   }, [currentResult]);
 
+  /** SectionAnchorBar 섹션 정의 */
+  const anchorSections = useMemo(() => {
+    if (!currentResult) return [];
+    const summary = currentResult.analysisSummary;
+    return [
+      { id: 'section-background', label: '배경', visible: !!summary?.overview },
+      { id: 'section-problems', label: '현재 문제점', visible: !!(summary?.currentProblems && summary.currentProblems.length > 0) },
+      { id: 'section-requirements', label: '요구사항', visible: !!currentResult.parsedSpec },
+      { id: 'section-solution', label: '해결 방향', visible: !!(summary && summary.keyFindings.length > 0) },
+      { id: 'section-dataflow', label: '데이터 흐름', visible: !!(summary?.dataFlowChanges && summary.dataFlowChanges.length > 0) },
+      { id: 'section-process', label: '프로세스 변경', visible: !!(summary?.processChanges && summary.processChanges.length > 0) },
+      { id: 'section-policy', label: '정책 변경', visible: currentResult.policyWarnings.length > 0 },
+      { id: 'section-checks', label: '추가 확인', visible: currentResult.planningChecks.length > 0 },
+    ];
+  }, [currentResult]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -168,14 +190,64 @@ function Dashboard() {
         impactFlow={impactFlow}
       />
 
+      <KpiCards result={currentResult} />
+
+      {/* SectionAnchorBar - ScoreHeader/KpiCards 아래에 sticky */}
+      <SectionAnchorBar sections={anchorSections} />
+
+      {/* ============================================================ */}
+      {/* PRD 8섹션 구조                                                */}
+      {/* ============================================================ */}
+
+      {/* Section 1: 배경 (Overview) */}
       {currentResult.analysisSummary && (
-        <AnalysisSummaryCard summary={currentResult.analysisSummary} />
+        <div id="section-background">
+          <AnalysisSummaryCard summary={currentResult.analysisSummary} section="overview" />
+        </div>
       )}
 
-      {/* SpecSourcePanel - 기획서 원문 (parsedSpec이 있을 때만) */}
-      {currentResult.parsedSpec && (
-        <SpecSourcePanel parsedSpec={currentResult.parsedSpec} tasks={currentResult.tasks} />
+      {/* Section 2: 현재 문제점 */}
+      {currentResult.analysisSummary?.currentProblems && (
+        <CurrentProblemsSection problems={currentResult.analysisSummary.currentProblems} />
       )}
+
+      {/* Section 3: 요구사항 (SpecSourcePanel 기본 펼침) */}
+      {currentResult.parsedSpec && (
+        <div id="section-requirements">
+          <SpecSourcePanel parsedSpec={currentResult.parsedSpec} tasks={currentResult.tasks} defaultExpanded />
+        </div>
+      )}
+
+      {/* Section 4: 해결 방향 (KeyFindings + RiskAreas) */}
+      {currentResult.analysisSummary && currentResult.analysisSummary.keyFindings.length > 0 && (
+        <div id="section-solution">
+          <AnalysisSummaryCard summary={currentResult.analysisSummary} section="keyFindings" />
+        </div>
+      )}
+
+      {/* Section 5: 데이터 흐름 전/후 비교 */}
+      {currentResult.analysisSummary?.dataFlowChanges && currentResult.analysisSummary.dataFlowChanges.length > 0 && (
+        <div id="section-dataflow">
+          <DataFlowComparison dataFlowChanges={currentResult.analysisSummary.dataFlowChanges} />
+        </div>
+      )}
+
+      {/* Section 6: 사용자 프로세스 변경 */}
+      {currentResult.analysisSummary?.processChanges && currentResult.analysisSummary.processChanges.length > 0 && (
+        <div id="section-process">
+          <UserProcessChange processChanges={currentResult.analysisSummary.processChanges} />
+        </div>
+      )}
+
+      {/* Section 7: 정책 변경 */}
+      <PolicyChangeSection policyWarnings={currentResult.policyWarnings} />
+
+      {/* Section 8: 추가 확인 사항 */}
+      <PlanningCheckSection />
+
+      {/* ============================================================ */}
+      {/* 기존 보조 섹션 (ActionGuide, Charts, Confidence 등)           */}
+      {/* ============================================================ */}
 
       <ActionGuide
         grade={currentResult.grade}
@@ -185,8 +257,6 @@ function Dashboard() {
         tasks={currentResult.tasks}
         ownerNotifications={currentResult.ownerNotifications}
       />
-
-      <KpiCards result={currentResult} />
 
       <div className="grid grid-cols-3 gap-6 items-start">
         <div className="col-span-2">

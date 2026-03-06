@@ -13,9 +13,13 @@ import { useSharedEntityStore } from '../stores/sharedEntityStore';
 import ProjectSelector from '../components/common/ProjectSelector';
 import ProjectStatusBanner from '../components/project-board/ProjectStatusBanner';
 import GapHealthWidget from '../components/projects/GapHealthWidget';
+import AlertsInsightsCard from '../components/project-board/AlertsInsightsCard';
+import QuickNavGrid from '../components/project-board/QuickNavGrid';
 import AnalysisHistoryTable from '../components/project-board/AnalysisHistoryTable';
+import AnalysisTimeline from '../components/project-board/AnalysisTimeline';
 import ScoreTrendChart from '../components/project-board/ScoreTrendChart';
 import PolicySummaryCard from '../components/project-board/PolicySummaryCard';
+import ProjectNotesCard from '../components/project-board/ProjectNotesCard';
 import CompareDrawer from '../components/project-board/CompareDrawer';
 import CrossProjectDiagram, { type ProjectLink } from '../components/cross-project/CrossProjectDiagram';
 import CrossProjectSummary, { type ProjectGroup } from '../components/cross-project/CrossProjectSummary';
@@ -58,6 +62,9 @@ export default function ProjectBoard() {
 
   // 비교 Drawer 상태 (TASK-142)
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+
+  // 분석 이력 뷰 모드 (테이블 vs 타임라인) (T3-05)
+  const [historyView, setHistoryView] = useState<'table' | 'timeline'>('table');
 
   // 갭 탐지 데이터 (TASK-171)
   const [gapData, setGapData] = useState<GapCheckResult | null>(null);
@@ -266,6 +273,21 @@ export default function ProjectBoard() {
       {/* 갭 탐지 위젯 (TASK-171) */}
       <GapHealthWidget data={gapData} loading={gapLoading} />
 
+      {/* 취약점/개선점 요약 (T3-04) */}
+      <AlertsInsightsCard gapData={gapData} />
+
+      {/* 바로가기 네비게이션 (T1-08) */}
+      {projectStatus?.hasIndex && (
+        <QuickNavGrid
+          latestGrade={currentProject?.latestGrade}
+          latestScore={currentProject?.latestScore}
+          resultCount={resultList.length}
+          taskCount={currentProject?.taskCount}
+          policyCount={policies.length}
+          policyWarningCount={currentProject?.policyWarningCount}
+        />
+      )}
+
       {/* 빈 상태 2: 인덱스 없음 - 배너에서 경고 표시하고, 나머지는 미표시 */}
       {projectStatus && !projectStatus.hasIndex && currentProject && (
         <div
@@ -279,19 +301,59 @@ export default function ProjectBoard() {
 
       {/* 분석 이력 + 점수 추이 (인덱스가 있을 때만) */}
       {projectStatus?.hasIndex && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <AnalysisHistoryTable results={resultList} />
+        <>
+          {/* 뷰 토글 (T3-05) */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setHistoryView('table')}
+              className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                historyView === 'table'
+                  ? 'bg-purple-100 text-purple-700 border-purple-200 font-medium'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+              data-testid="history-view-table"
+            >
+              테이블
+            </button>
+            <button
+              onClick={() => setHistoryView('timeline')}
+              className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                historyView === 'timeline'
+                  ? 'bg-purple-100 text-purple-700 border-purple-200 font-medium'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+              data-testid="history-view-timeline"
+            >
+              타임라인
+            </button>
           </div>
-          <div>
-            <ScoreTrendChart results={resultList} />
-          </div>
-        </div>
+
+          {historyView === 'table' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <AnalysisHistoryTable results={resultList} />
+              </div>
+              <div>
+                <ScoreTrendChart results={resultList} />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <AnalysisTimeline results={resultList} />
+              <ScoreTrendChart results={resultList} />
+            </div>
+          )}
+        </>
       )}
 
-      {/* 정책 현황 */}
+      {/* 정책 현황 (T3-07: 기획자 관점) */}
       {projectStatus?.hasIndex && (
         <PolicySummaryCard policies={policies} />
+      )}
+
+      {/* 프로젝트 유의사항 (T3-06) */}
+      {currentProject && (
+        <ProjectNotesCard notes={currentProject.notes} />
       )}
 
       {/* 크로스 프로젝트 영향 */}

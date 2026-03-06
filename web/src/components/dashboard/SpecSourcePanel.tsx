@@ -20,6 +20,7 @@ import type {
 export interface SpecSourcePanelProps {
   parsedSpec: WebParsedSpec;
   tasks: Task[];
+  defaultExpanded?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -220,9 +221,9 @@ function AmbiguityRow({ text, index }: { text: string; index: number }) {
 /*  메인 컴포넌트                                                       */
 /* ------------------------------------------------------------------ */
 
-function SpecSourcePanel({ parsedSpec, tasks }: SpecSourcePanelProps) {
+function SpecSourcePanel({ parsedSpec, tasks, defaultExpanded = false }: SpecSourcePanelProps) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [activeTab, setActiveTab] = useState<TabKey>('requirements');
 
   /* ---------- 탭 정의 ---------- */

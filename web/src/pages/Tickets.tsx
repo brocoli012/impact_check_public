@@ -11,9 +11,13 @@ import { GRADE_COLORS } from '../utils/colors';
 import type { Grade, TaskType, TaskScore } from '../types';
 import TicketCard from '../components/tickets/TicketCard';
 import TicketDetail from '../components/tickets/TicketDetail';
+import TicketHierarchy from '../components/tickets/TicketHierarchy';
 import DependencyDiagram from '../components/tickets/DependencyDiagram';
 import ProjectSelector from '../components/common/ProjectSelector';
 import EmptyResultGuide from '../components/common/EmptyResultGuide';
+
+/** 뷰 모드 */
+type ViewMode = 'flat' | 'hierarchy';
 
 /** 필터 상태 */
 interface TicketFilter {
@@ -32,6 +36,8 @@ function Tickets() {
   const initialRequirement = searchParams.get('requirement');
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  const [viewMode, setViewMode] = useState<ViewMode>('hierarchy');
 
   const [filter, setFilter] = useState<TicketFilter>({
     typeFilter:
@@ -170,51 +176,77 @@ function Tickets() {
         {/* ProjectSelector */}
         <ProjectSelector />
 
-        {/* Header */}
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">
-            작업 티켓 목록
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {currentResult.specTitle}
-          </p>
-        </div>
-
-        {/* Summary */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center gap-6 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold text-gray-900">{stats.total}</span>
-              <span className="text-sm text-gray-600">총 티켓</span>
-            </div>
-            <div className="h-8 w-px bg-gray-200" />
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-blue-600">{stats.fe}</span>
-              <span className="text-sm text-gray-600">FE</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-green-600">{stats.be}</span>
-              <span className="text-sm text-gray-600">BE</span>
-            </div>
-            <div className="h-8 w-px bg-gray-200" />
-            {/* Grade distribution */}
-            {(Object.entries(stats.grades) as [Grade, number][]).map(([grade, count]) =>
-              count > 0 ? (
-                <span
-                  key={grade}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
-                  style={{
-                    backgroundColor: GRADE_COLORS[grade].bg,
-                    color: GRADE_COLORS[grade].text,
-                    border: `1px solid ${GRADE_COLORS[grade].border}`,
-                  }}
-                >
-                  {grade}: {count}
-                </span>
-              ) : null,
-            )}
+        {/* Header + View Toggle */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              작업 티켓 목록
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {currentResult.specTitle}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 shrink-0">
+            <button
+              onClick={() => setViewMode('flat')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === 'flat'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              플랫 뷰
+            </button>
+            <button
+              onClick={() => setViewMode('hierarchy')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === 'hierarchy'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              계층 뷰
+            </button>
           </div>
         </div>
+
+        {/* Summary (flat view only - hierarchy view has its own summary) */}
+        {viewMode === 'flat' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-6 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-bold text-gray-900">{stats.total}</span>
+                <span className="text-sm text-gray-600">총 티켓</span>
+              </div>
+              <div className="h-8 w-px bg-gray-200" />
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-blue-600">{stats.fe}</span>
+                <span className="text-sm text-gray-600">FE</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-green-600">{stats.be}</span>
+                <span className="text-sm text-gray-600">BE</span>
+              </div>
+              <div className="h-8 w-px bg-gray-200" />
+              {/* Grade distribution */}
+              {(Object.entries(stats.grades) as [Grade, number][]).map(([grade, count]) =>
+                count > 0 ? (
+                  <span
+                    key={grade}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                    style={{
+                      backgroundColor: GRADE_COLORS[grade].bg,
+                      color: GRADE_COLORS[grade].text,
+                      border: `1px solid ${GRADE_COLORS[grade].border}`,
+                    }}
+                  >
+                    {grade}: {count}
+                  </span>
+                ) : null,
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -316,8 +348,16 @@ function Tickets() {
           screens={currentResult.affectedScreens}
         />
 
-        {/* Ticket grid */}
-        {filteredTasks.length === 0 ? (
+        {/* Ticket content - conditional on view mode */}
+        {viewMode === 'hierarchy' ? (
+          <TicketHierarchy
+            affectedScreens={currentResult.affectedScreens}
+            filteredTasks={filteredTasks}
+            taskScoreMap={taskScoreMap}
+            selectedTaskId={selectedTaskId}
+            onSelectTask={handleSelectTask}
+          />
+        ) : filteredTasks.length === 0 ? (
           <div className="text-center text-gray-400 py-12">
             조건에 맞는 티켓이 없습니다.
           </div>

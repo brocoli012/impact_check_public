@@ -525,13 +525,81 @@ export function createApp(basePath?: string): express.Application {
     }
   });
 
+  /**
+   * GET /api/project/feature-tree - 인덱스 기반 메뉴/기능 트리 반환
+   * screens + components 데이터를 트리 구조로 변환
+   */
+  app.get('/api/project/feature-tree', async (req: Request, res: Response) => {
+    try {
+      const projectId = await ctx.getActiveProjectId(req.query.projectId as string);
+
+      if (!projectId) {
+        res.json({ tree: [], message: 'No active project' });
+        return;
+      }
+
+      const index = await indexer.loadIndex(projectId, basePath);
+
+      if (!index) {
+        res.json({ tree: [], message: 'No index found' });
+        return;
+      }
+
+      // components를 ID 기반 맵으로 변환
+      const componentMap = new Map(
+        index.components.map(c => [c.id, c])
+      );
+
+      // screens -> 트리 구조 변환
+      const tree = index.screens.map(screen => ({
+        screenId: screen.id,
+        screenName: screen.name,
+        route: screen.route,
+        features: (screen.components || [])
+          .map(compId => {
+            const comp = componentMap.get(compId);
+            if (!comp) return null;
+            return {
+              componentId: comp.id,
+              name: comp.name,
+              type: comp.type || 'component',
+            };
+          })
+          .filter(Boolean),
+      }));
+
+      res.json({ tree });
+    } catch (error) {
+      logger.error('Failed to get feature tree:', error);
+      res.status(500).json({ error: 'Failed to get feature tree' });
+    }
+  });
+
   // ============================================================
   // 정책 (Policy) API 엔드포인트
   // ============================================================
 
+  function inferAudience(policy: { name: string; category: string; description: string }): 'planner' | 'developer' | 'both' {
+    const text = `${policy.name} ${policy.category} ${policy.description}`.toLowerCase();
+    const plannerKeywords = ['permission', 'auth', 'role', 'process', 'flow', 'workflow', 'validation', 'constraint', '권한', '프로세스', '흐름', '검증', '제약'];
+    const developerKeywords = ['transaction', 'cache', 'function', 'method', 'handler', '트랜잭션', '캐시', '함수', '메서드', '핸들러'];
+    const bothKeywords = ['exception', 'error', '예외', '에러'];
+
+    const hasBoth = bothKeywords.some(kw => text.includes(kw));
+    if (hasBoth) return 'both';
+
+    const hasPlanner = plannerKeywords.some(kw => text.includes(kw));
+    const hasDeveloper = developerKeywords.some(kw => text.includes(kw));
+
+    if (hasPlanner && hasDeveloper) return 'both';
+    if (hasPlanner) return 'planner';
+    if (hasDeveloper) return 'developer';
+    return 'both';
+  }
+
   /**
    * GET /api/policies - 정책 목록 조회
-   * 쿼리 파라미터: ?category=배송 (카테고리 필터), ?search=무료 (검색)
+   * 쿼리 파라미터: ?category=배송 (카테고리 필터), ?search=무료 (검색), ?audience=planner|developer
    */
   app.get('/api/policies', async (req: Request, res: Response) => {
     try {
@@ -571,6 +639,15 @@ export function createApp(basePath?: string): express.Application {
       const tasks = latestResult?.tasks || [];
 
       let policies = allMergedPolicies;
+
+      // audience 필터 (planner | developer)
+      const audience = req.query.audience as string | undefined;
+      if (audience === 'planner' || audience === 'developer') {
+        policies = policies.filter(p => {
+          const resolved = (p as any).audience || inferAudience(p);
+          return resolved === audience || resolved === 'both';
+        });
+      }
 
       // 카테고리 필터
       const category = req.query.category as string | undefined;
@@ -655,6 +732,11 @@ export function createApp(basePath?: string): express.Application {
           ? (p as any).relatedTaskIds
           : computeRelatedTaskIds(p),
         source: (p as any).source || 'comment',
+        audience: (p as any).audience || inferAudience(p),
+        plannerDescription: (p as any).plannerDescription || undefined,
+        developerDescription: (p as any).developerDescription || undefined,
+        relatedScreen: (p as any).relatedScreen || undefined,
+        relatedFunction: (p as any).relatedFunction || undefined,
       }));
 
       const paged = limit > 0 ? mappedAll.slice(offset, offset + limit) : mappedAll;

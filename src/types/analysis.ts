@@ -369,4 +369,26 @@ export interface AnalysisSummary {
   keyFindings: string[];
   /** 위험 영역 */
   riskAreas: string[];
+  /** 현재 시스템의 문제점 목록 */
+  currentProblems?: string[];
+  /** 기획서 적용 전후 데이터 흐름 변경 */
+  dataFlowChanges?: DataFlowChange[];
+  /** 사용자 이용 프로세스 변경 */
+  processChanges?: ProcessChange[];
+}
+
+/** 데이터 흐름 변경 */
+export interface DataFlowChange {
+  area: string;
+  before: string;
+  after: string;
+  description: string;
+}
+
+/** 프로세스 변경 */
+export interface ProcessChange {
+  processName: string;
+  before: string[];
+  after: string[];
+  changedSteps: number[];
 }

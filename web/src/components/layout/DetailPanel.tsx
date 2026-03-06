@@ -4,9 +4,10 @@
  * 400px 고정 너비, 우측 슬라이드-인 애니메이션, 내부 스크롤
  */
 
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { Node } from '@xyflow/react';
 import { useResultStore } from '../../stores/resultStore';
+import { useFlowStore } from '../../stores/flowStore';
 import { GRADE_COLORS, CONFIDENCE_COLORS } from '../../utils/colors';
 import type {
   Grade,
@@ -15,6 +16,9 @@ import type {
   ScreenScore,
   SystemConfidence,
   ConfidenceWarning,
+  Task,
+  ScreenImpact,
+  PolicyChange,
 } from '../../types';
 
 interface DetailPanelProps {
@@ -36,6 +40,10 @@ function num(data: Record<string, unknown>, key: string): number | null {
 
 function DetailPanel({ node, onClose }: DetailPanelProps) {
   const currentResult = useResultStore((s) => s.currentResult);
+  const selectNode = useFlowStore((s) => s.selectNode);
+  const toggleExpand = useFlowStore((s) => s.toggleExpand);
+  const expandedNodeIds = useFlowStore((s) => s.expandedNodeIds);
+  const requirementFilter = useFlowStore((s) => s.filter.requirementFilter);
   const data = node.data as Record<string, unknown>;
 
   const label = str(data, 'label');
@@ -101,16 +109,92 @@ function DetailPanel({ node, onClose }: DetailPanelProps) {
       const lowWarning = result.lowConfidenceWarnings.find((w) => w.systemId === sysId);
       const ownerInfo = result.ownerNotifications.find((o) => o.systemId === sysId);
 
+      // Drill-down: system -> child screens
+      const childScreens = result.affectedScreens.map((screen) => ({
+        screenId: screen.screenId,
+        screenName: screen.screenName,
+        taskCount: screen.tasks.length,
+        impactLevel: screen.impactLevel,
+      }));
+
       return {
         type: 'system' as const,
         confidence,
         lowWarning,
         ownerInfo,
+        childScreens,
       };
     }
 
     return null;
   }, [currentResult, node.id, nodeType]);
+
+  // Impact highlight mode: find which tasks/policies are affected by the selected requirement
+  const impactDetails = useMemo(() => {
+    if (!requirementFilter || !currentResult) return null;
+
+    const result = currentResult;
+
+    // Find tasks related to this requirement
+    const impactedTasks: Task[] = result.tasks.filter(
+      (t) => t.sourceRequirementIds?.includes(requirementFilter),
+    );
+    const impactedTaskIds = new Set(impactedTasks.map((t) => t.id));
+
+    // Find affected screens that contain impacted tasks
+    const impactedScreens: ScreenImpact[] = result.affectedScreens.filter((s) =>
+      s.tasks.some((t) => impactedTaskIds.has(t.id)),
+    );
+
+    // Find policy changes related to impacted tasks
+    const impactedPolicies: PolicyChange[] = result.policyChanges.filter((pc) =>
+      pc.affectedFiles.some((f) =>
+        impactedTasks.some((t) => t.affectedFiles.includes(f)),
+      ),
+    );
+
+    // Check if current node is in the impact zone
+    let isCurrentNodeImpacted = false;
+    if (nodeType === 'screen') {
+      const screenId = node.id.replace('screen-', '');
+      isCurrentNodeImpacted = impactedScreens.some((s) => s.screenId === screenId);
+    } else if (nodeType === 'feature') {
+      const taskId = node.id.replace('feature-', '');
+      isCurrentNodeImpacted = impactedTaskIds.has(taskId);
+    }
+
+    if (!isCurrentNodeImpacted) return null;
+
+    // Get requirement name
+    const reqName =
+      result.parsedSpec?.requirements.find((r) => r.id === requirementFilter)?.name ??
+      requirementFilter;
+
+    return {
+      requirementName: reqName,
+      requirementId: requirementFilter,
+      impactedTasks: nodeType === 'screen'
+        ? impactedTasks.filter((t) => {
+            const screenId = node.id.replace('screen-', '');
+            const screen = impactedScreens.find((s) => s.screenId === screenId);
+            return screen?.tasks.some((st) => st.id === t.id);
+          })
+        : impactedTasks,
+      impactedPolicies,
+    };
+  }, [requirementFilter, currentResult, node.id, nodeType]);
+
+  // Navigate to a child node: select it and expand its parent if needed
+  const navigateToNode = useCallback(
+    (nodeId: string, parentScreenId?: string) => {
+      if (parentScreenId && !expandedNodeIds.has(parentScreenId)) {
+        toggleExpand(parentScreenId);
+      }
+      // Small delay to allow layout to settle after expand
+      setTimeout(() => selectNode(nodeId), 50);
+    },
+    [selectNode, toggleExpand, expandedNodeIds],
+  );
 
   const gradeColors = grade ? GRADE_COLORS[grade as Grade] : null;
 
@@ -179,6 +263,63 @@ function DetailPanel({ node, onClose }: DetailPanelProps) {
 
       {/* Content */}
       <div className="px-5 py-4 space-y-5">
+        {/* Impact highlight details (when requirement filter is active) */}
+        {impactDetails && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="text-xs font-semibold text-amber-700">
+                영향 요구사항: {impactDetails.requirementName}
+              </span>
+            </div>
+            {impactDetails.impactedTasks.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-amber-600 uppercase mb-1">영향받는 기능</p>
+                <div className="space-y-1">
+                  {impactDetails.impactedTasks.map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={() => navigateToNode(`feature-${task.id}`)}
+                      className="w-full text-left flex items-center gap-1.5 text-xs px-2 py-1 rounded hover:bg-amber-100 transition-colors"
+                    >
+                      <span className={`inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold shrink-0 ${
+                        task.type === 'FE' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                      }`}>
+                        {task.type}
+                      </span>
+                      <span className="text-amber-800 truncate">{task.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {impactDetails.impactedPolicies.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-amber-600 uppercase mb-1">변경되는 정책</p>
+                <div className="space-y-1">
+                  {impactDetails.impactedPolicies.map((pc) => (
+                    <div key={pc.id} className="text-xs text-amber-800 px-2 py-1 bg-amber-100/50 rounded">
+                      <span className="font-medium">{pc.policyName}</span>
+                      <span className="text-amber-600 ml-1">({pc.changeType})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <a
+              href={`/tickets?requirement=${impactDetails.requirementId}`}
+              className="inline-flex items-center gap-1 text-[11px] text-amber-700 hover:text-amber-900 font-medium mt-1"
+            >
+              관련 Task 보기
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </a>
+          </div>
+        )}
+
         {/* Score Breakdown - for screen/feature nodes with score data */}
         {relatedData?.type === 'screen' && relatedData.screenScore && (
           <ScoreBreakdownSection screenScore={relatedData.screenScore} />
@@ -188,12 +329,19 @@ function DetailPanel({ node, onClose }: DetailPanelProps) {
           <TaskScoreBreakdown taskScore={relatedData.taskScore} />
         )}
 
-        {/* Tasks list - for screen nodes */}
+        {/* Tasks list - for screen nodes (clickable drill-down) */}
         {relatedData?.type === 'screen' && relatedData.tasks.length > 0 && (
           <Section title="작업 항목">
-            <div className="space-y-2">
+            <div className="space-y-1">
               {relatedData.tasks.map((task) => (
-                <div key={task.id} className="flex items-start gap-2 text-xs">
+                <button
+                  key={task.id}
+                  onClick={() => {
+                    const screenId = node.id.replace('screen-', '');
+                    navigateToNode(`feature-${task.id}`, screenId);
+                  }}
+                  className="w-full text-left flex items-start gap-2 text-xs px-2 py-1.5 rounded hover:bg-gray-50 transition-colors group"
+                >
                   <span
                     className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 mt-0.5 ${
                       task.type === 'FE'
@@ -203,11 +351,14 @@ function DetailPanel({ node, onClose }: DetailPanelProps) {
                   >
                     {task.type}
                   </span>
-                  <div>
-                    <p className="text-gray-800 font-medium">{task.title}</p>
-                    <p className="text-gray-400 mt-0.5">{task.description}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-gray-800 font-medium group-hover:text-blue-600 truncate">{task.title}</p>
+                    <p className="text-gray-400 mt-0.5 line-clamp-2">{task.description}</p>
                   </div>
-                </div>
+                  <svg className="w-3 h-3 text-gray-300 group-hover:text-blue-400 shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               ))}
             </div>
           </Section>
@@ -315,6 +466,63 @@ function DetailPanel({ node, onClose }: DetailPanelProps) {
             </div>
           </Section>
         )}
+
+        {/* Drill-down: system -> child screens */}
+        {relatedData?.type === 'system' && relatedData.childScreens.length > 0 && (
+          <Section title="하위 화면 (메뉴)">
+            <div className="space-y-1">
+              {relatedData.childScreens.map((screen) => (
+                <button
+                  key={screen.screenId}
+                  onClick={() => navigateToNode(`screen-${screen.screenId}`)}
+                  className="w-full text-left flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-gray-50 border border-gray-100 transition-colors group"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-xs text-gray-800 font-medium truncate">{screen.screenName}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] text-gray-400">기능 {screen.taskCount}개</span>
+                    <svg className="w-3 h-3 text-gray-300 group-hover:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Drill-down: feature -> related policies */}
+        {relatedData?.type === 'feature' && relatedData.task && (() => {
+          const relatedPolicies = currentResult?.policyChanges.filter((pc) =>
+            pc.affectedFiles.some((f) => relatedData.task!.affectedFiles.includes(f)),
+          ) ?? [];
+          if (relatedPolicies.length === 0) return null;
+          return (
+            <Section title="관련 정책">
+              <div className="space-y-1.5">
+                {relatedPolicies.map((pc) => (
+                  <div key={pc.id} className="flex items-start gap-2 text-xs px-2 py-1.5 bg-gray-50 rounded">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 mt-0.5 ${
+                      pc.changeType === 'new' ? 'bg-green-100 text-green-700' :
+                      pc.changeType === 'remove' ? 'bg-red-100 text-red-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {pc.changeType}
+                    </span>
+                    <div>
+                      <p className="text-gray-800 font-medium">{pc.policyName}</p>
+                      <p className="text-gray-400 mt-0.5">{pc.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          );
+        })()}
 
         {/* Confidence info - for system nodes */}
         {relatedData?.type === 'system' && relatedData.confidence && (

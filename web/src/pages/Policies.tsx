@@ -1,9 +1,5 @@
-/**
- * @module web/pages/Policies
- * @description 정책 목록 페이지 - 필터 + 카드 목록 + InfiniteScroll + 상세 패널 레이아웃
- */
-
 import { useEffect, useRef, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { usePolicyStore } from '../stores/policyStore';
 import { useResultStore } from '../stores/resultStore';
 import { useProjectStore } from '../stores/projectStore';
@@ -12,7 +8,11 @@ import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import PolicyCard from '../components/policies/PolicyCard';
 import PolicyFilter from '../components/policies/PolicyFilter';
 import PolicyDetail from '../components/policies/PolicyDetail';
+import PolicyAudienceTabs from '../components/policies/PolicyAudienceTabs';
+import PlannerPolicyCard from '../components/policies/PlannerPolicyCard';
+import DeveloperPolicyCard from '../components/policies/DeveloperPolicyCard';
 import ProjectSelector from '../components/common/ProjectSelector';
+import type { PolicyAudience } from '../types';
 
 function Policies() {
   useLatestResult();
@@ -25,6 +25,7 @@ function Policies() {
     selectedCategory,
     selectedSource,
     selectedRequirement,
+    selectedAudience,
     loading,
     loadingDetail,
     loadingMore,
@@ -34,10 +35,23 @@ function Policies() {
     fetchPolicies,
     fetchMorePolicies,
     fetchPolicyDetail,
+    setSelectedAudience,
     clearSelection,
   } = usePolicyStore();
 
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
+
+  // URL 쿼리 파라미터에서 초기 audience 값 읽기
+  const [searchParams] = useSearchParams();
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    const viewParam = searchParams.get('view');
+    if (viewParam === 'planner' || viewParam === 'developer') {
+      setSelectedAudience(viewParam);
+    }
+  }, [searchParams, setSelectedAudience]);
 
   // 마운트 시 항상 정책 목록 로드 (탭 전환 후 복귀 시에도 동작)
   const mountedRef = useRef(false);
@@ -50,7 +64,7 @@ function Policies() {
 
   // activeProjectId 변경 시 재조회
   useEffect(() => {
-    if (!mountedRef.current) return; // 초기 마운트는 위 effect에서 처리
+    if (!mountedRef.current) return;
     const projectId = activeProjectId;
     fetchPolicies(projectId || undefined);
   }, [activeProjectId, fetchPolicies]);
@@ -70,9 +84,19 @@ function Policies() {
   const requirements = currentResult?.parsedSpec?.requirements;
   const tasks = currentResult?.tasks;
 
-  // 필터링된 정책 목록
+  // audience별 정책 분류 (필터 전)
+  const isMatchAudience = useCallback((policy: { audience?: PolicyAudience }, audience: PolicyAudience) => {
+    const a = policy.audience || 'both';
+    return a === audience || a === 'both';
+  }, []);
+
+  const plannerPolicies = useMemo(() => policies.filter((p) => isMatchAudience(p, 'planner')), [policies, isMatchAudience]);
+  const developerPolicies = useMemo(() => policies.filter((p) => isMatchAudience(p, 'developer')), [policies, isMatchAudience]);
+
+  // 필터링된 정책 목록 (audience + 기타 필터 적용)
   const filteredPolicies = useMemo(() => {
-    let filtered = policies;
+    // audience 필터 적용
+    let filtered = policies.filter((p) => isMatchAudience(p, selectedAudience));
 
     // 소스 필터
     if (selectedSource) {
@@ -85,11 +109,9 @@ function Policies() {
         .filter((t) => t.sourceRequirementIds?.includes(selectedRequirement))
         .map((t) => t.id);
       filtered = filtered.filter((p) => {
-        // 1) API에서 받은 relatedTaskIds로 먼저 체크
         if (p.relatedTaskIds && p.relatedTaskIds.length > 0) {
           return p.relatedTaskIds.some((tid) => relatedTaskIds.includes(tid));
         }
-        // 2) 폴백: 정책의 affectedFiles와 해당 tasks의 affectedFiles 교집합 체크
         const matchedTasks = tasks.filter((t) => relatedTaskIds.includes(t.id));
         for (const task of matchedTasks) {
           if (
@@ -102,7 +124,6 @@ function Policies() {
             return true;
           }
         }
-        // 3) 정책 카테고리/이름에서 키워드 매칭
         const policyText =
           `${p.name} ${p.description} ${p.category}`.toLowerCase();
         const matchedTaskTexts = matchedTasks.map(
@@ -135,7 +156,7 @@ function Policies() {
     }
 
     return filtered;
-  }, [policies, selectedRequirement, tasks, selectedCategory, selectedSource, searchQuery]);
+  }, [policies, selectedAudience, isMatchAudience, selectedRequirement, tasks, selectedCategory, selectedSource, searchQuery]);
 
   const handlePolicyClick = (policyId: string) => {
     const projectId = activeProjectId || useProjectStore.getState().activeProjectId;
@@ -144,21 +165,63 @@ function Policies() {
     }
   };
 
+  const renderPolicyCard = (policy: typeof policies[number]) => {
+    const isSelected = selectedPolicy?.id === policy.id;
+    const onClick = () => handlePolicyClick(policy.id);
+
+    if (selectedAudience === 'planner') {
+      return (
+        <PlannerPolicyCard
+          key={policy.id}
+          policy={policy}
+          isSelected={isSelected}
+          onClick={onClick}
+        />
+      );
+    }
+    if (selectedAudience === 'developer') {
+      return (
+        <DeveloperPolicyCard
+          key={policy.id}
+          policy={policy}
+          isSelected={isSelected}
+          onClick={onClick}
+        />
+      );
+    }
+    return (
+      <PolicyCard
+        key={policy.id}
+        policy={policy}
+        isSelected={isSelected}
+        onClick={onClick}
+      />
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* ProjectSelector */}
       <ProjectSelector />
 
-      {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">
-          정책 목록
-        </h2>
-        {currentResult && (
-          <p className="text-sm text-gray-500 mt-1">
-            {currentResult.specTitle}
-          </p>
-        )}
+      {/* Header + Audience Tabs */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">
+            정책 목록
+          </h2>
+          {currentResult && (
+            <p className="text-sm text-gray-500 mt-1">
+              {currentResult.specTitle}
+            </p>
+          )}
+        </div>
+        <PolicyAudienceTabs
+          activeView={selectedAudience}
+          onViewChange={setSelectedAudience}
+          plannerCount={plannerPolicies.length}
+          developerCount={developerPolicies.length}
+        />
       </div>
 
       {/* Error banner */}
@@ -176,7 +239,7 @@ function Policies() {
         tasks={tasks}
       />
 
-      {/* Loading state - 초기 로딩 시에만 표시 (데이터가 있으면 숨김) */}
+      {/* Loading state */}
       {loading && policies.length === 0 && (
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
@@ -186,7 +249,7 @@ function Policies() {
         </div>
       )}
 
-      {/* Main content area - 데이터가 있으면 로딩 중에도 유지 */}
+      {/* Main content area */}
       {(!loading || policies.length > 0) && (
         <div className="flex gap-6">
           {/* Left: Policy card list */}
@@ -210,14 +273,7 @@ function Policies() {
             ) : (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredPolicies.map((policy) => (
-                    <PolicyCard
-                      key={policy.id}
-                      policy={policy}
-                      isSelected={selectedPolicy?.id === policy.id}
-                      onClick={() => handlePolicyClick(policy.id)}
-                    />
-                  ))}
+                  {filteredPolicies.map(renderPolicyCard)}
                 </div>
 
                 {/* InfiniteScroll sentinel */}

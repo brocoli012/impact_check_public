@@ -5,7 +5,7 @@
  */
 
 import { create } from 'zustand';
-import type { Policy, PolicyDetail } from '../types';
+import type { Policy, PolicyDetail, PolicyAudience } from '../types';
 import { useProjectStore } from './projectStore';
 
 /** 한 번에 로드할 정책 수 */
@@ -27,6 +27,8 @@ interface PolicyState {
   selectedSource: string | null;
   /** 선택된 요구사항 필터 */
   selectedRequirement: string | null;
+  /** 선택된 audience 필터 */
+  selectedAudience: PolicyAudience;
   /** 로딩 상태 */
   loading: boolean;
   /** 초기 데이터 로드 완료 여부 (재조회 시 loading 억제용) */
@@ -58,6 +60,8 @@ interface PolicyState {
   setSelectedSource: (source: string | null) => void;
   /** 요구사항 필터 설정 */
   setSelectedRequirement: (reqId: string | null) => void;
+  /** audience 필터 설정 */
+  setSelectedAudience: (audience: PolicyAudience) => void;
   /** 선택 초기화 */
   clearSelection: () => void;
   /** 데이터 초기화 (프로젝트 전환 시) */
@@ -71,6 +75,11 @@ function mapPolicy(p: any): Policy {
     affectedFiles: p.affectedFiles || [p.file].filter(Boolean),
     relatedTaskIds: p.relatedTaskIds || [],
     source: p.source || 'comment',
+    audience: p.audience || 'both',
+    plannerDescription: p.plannerDescription,
+    developerDescription: p.developerDescription,
+    relatedScreen: p.relatedScreen,
+    relatedFunction: p.relatedFunction,
   };
 }
 
@@ -83,6 +92,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
   selectedCategory: null,
   selectedSource: null,
   selectedRequirement: null,
+  selectedAudience: 'planner',
   loading: false,
   initialLoaded: false,
   loadingDetail: false,
@@ -201,6 +211,8 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
 
   setSelectedRequirement: (reqId: string | null) => set({ selectedRequirement: reqId }),
 
+  setSelectedAudience: (audience: PolicyAudience) => set({ selectedAudience: audience }),
+
   clearSelection: () => set({ selectedPolicy: null }),
 
   reset: () => set({
@@ -211,6 +223,7 @@ export const usePolicyStore = create<PolicyState>()((set, get) => ({
     selectedCategory: null,
     selectedSource: null,
     selectedRequirement: null,
+    selectedAudience: 'planner',
     loading: false,
     initialLoaded: false,
     loadingDetail: false,

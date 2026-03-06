@@ -200,6 +200,9 @@ export interface ChecklistData {
   items: ChecklistItem[];
 }
 
+/** 정책 대상 Audience */
+export type PolicyAudience = 'planner' | 'developer' | 'both';
+
 /** 정책 (Policy) - 인덱싱된 정책 규칙 */
 export interface Policy {
   id: string;
@@ -210,6 +213,11 @@ export interface Policy {
   affectedFiles: string[];
   relatedTaskIds: string[];
   source: string;
+  audience?: PolicyAudience;
+  plannerDescription?: string;
+  developerDescription?: string;
+  relatedScreen?: string;
+  relatedFunction?: string;
 }
 
 /** 정책 상세 (Policy Detail) */
@@ -389,6 +397,28 @@ export interface AnalysisSummary {
   overview: string;
   keyFindings: string[];
   riskAreas: string[];
+  /** 현재 시스템의 문제점 목록 */
+  currentProblems?: string[];
+  /** 기획서 적용 전후 데이터 흐름 변경 */
+  dataFlowChanges?: DataFlowChange[];
+  /** 사용자 이용 프로세스 변경 */
+  processChanges?: ProcessChange[];
+}
+
+/** 데이터 흐름 변경 */
+export interface DataFlowChange {
+  area: string;
+  before: string;
+  after: string;
+  description: string;
+}
+
+/** 프로세스 변경 */
+export interface ProcessChange {
+  processName: string;
+  before: string[];
+  after: string[];
+  changedSteps: number[];
 }
 
 // ============================================================
@@ -455,4 +485,6 @@ export interface ProjectInfo {
   featureSummary?: string[];
   /** 요약 데이터 출처 */
   summarySource?: 'auto' | 'manual' | 'mixed';
+  /** 메모/노트 목록 */
+  notes?: string[];
 }

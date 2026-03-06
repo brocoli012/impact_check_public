@@ -20,12 +20,12 @@ import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
 
 import { LINK_TYPE_COLORS, LINK_TYPE_LABELS } from '../../utils/linkTypeConstants';
-import { safeString } from '../../utils/safeString';
 import { ProjectFlowNode, type ProjectFlowNodeData } from './ProjectFlowNode';
 import EdgeTooltip from './EdgeTooltip';
 import type { ProjectLink } from './CrossProjectDiagram';
 import type { ProjectGroup } from './CrossProjectSummary';
 import type { ProjectInfo } from '../../types';
+import { useSharedEntityStore } from '../../stores/sharedEntityStore';
 
 /** 커스텀 노드 타입 등록 */
 const nodeTypes = {
@@ -66,6 +66,8 @@ function CrossProjectFlowDiagram({
 }: CrossProjectFlowDiagramProps) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [edgeHover, setEdgeHover] = useState<EdgeHoverState | null>(null);
+  const sharedTables = useSharedEntityStore((s) => s.tables);
+  const sharedEvents = useSharedEntityStore((s) => s.events);
 
   // 필터 적용: 그룹 + 검색
   const filteredProjectIds = useMemo(() => {
@@ -187,6 +189,8 @@ function CrossProjectFlowDiagram({
       const dagreNode = g.node(projectId);
       const project = projectMap.get(projectId);
 
+      const isHighlighted = !connectedIds || connectedIds.nodeIds.has(projectId);
+
       const nodeData: ProjectFlowNodeData = {
         label: project?.name ?? projectId,
         projectId,
@@ -195,7 +199,7 @@ function CrossProjectFlowDiagram({
         screenCount: project?.resultCount ?? 0,
         apiCount: project?.taskCount ?? 0,
         latestGrade: project?.latestGrade ?? null,
-        dimmed: false, // hover 하이라이트는 CSS로 처리 (BUG-009)
+        dimmed: !isHighlighted,
       };
 
       return {
@@ -209,32 +213,81 @@ function CrossProjectFlowDiagram({
       };
     });
 
-    // 엣지 생성 - hover 하이라이트는 CSS로 처리 (BUG-009)
+    // Build shared entity detail map for edge labels
+    const pairDetails = new Map<string, string[]>();
+    for (const table of sharedTables) {
+      if (table.projects.length >= 2) {
+        for (let i = 0; i < table.projects.length; i++) {
+          for (let j = i + 1; j < table.projects.length; j++) {
+            const key1 = `${table.projects[i]}||${table.projects[j]}`;
+            const key2 = `${table.projects[j]}||${table.projects[i]}`;
+            const detail = `DB: ${table.name}`;
+            if (!pairDetails.has(key1)) pairDetails.set(key1, []);
+            if (!pairDetails.has(key2)) pairDetails.set(key2, []);
+            pairDetails.get(key1)!.push(detail);
+            pairDetails.get(key2)!.push(detail);
+          }
+        }
+      }
+    }
+    for (const event of sharedEvents) {
+      const allProj = [...event.publishers, ...event.subscribers];
+      const uniqueProj = [...new Set(allProj)];
+      if (uniqueProj.length >= 2) {
+        for (let i = 0; i < uniqueProj.length; i++) {
+          for (let j = i + 1; j < uniqueProj.length; j++) {
+            const key1 = `${uniqueProj[i]}||${uniqueProj[j]}`;
+            const key2 = `${uniqueProj[j]}||${uniqueProj[i]}`;
+            const detail = `Event: ${event.name}`;
+            if (!pairDetails.has(key1)) pairDetails.set(key1, []);
+            if (!pairDetails.has(key2)) pairDetails.set(key2, []);
+            pairDetails.get(key1)!.push(detail);
+            pairDetails.get(key2)!.push(detail);
+          }
+        }
+      }
+    }
+
+    // 엣지 생성
     const flowEdges: Edge[] = filteredLinks.map((link) => {
       const color = LINK_TYPE_COLORS[link.type] || '#94A3B8';
-      const typeLabel = LINK_TYPE_LABELS[link.type] || safeString(link.type);
+      const typeLabel = LINK_TYPE_LABELS[link.type] || link.type;
+
+      const isHighlighted = !connectedIds || connectedIds.edgeIds.has(link.id);
+
+      // Build detailed edge label with connection reasons
+      const pairKey = `${link.source}||${link.target}`;
+      const details = pairDetails.get(pairKey) ?? [];
+      const apiDetails = link.apis?.map((a) => `API: ${a}`) ?? [];
+      const allReasons = [...new Set([...apiDetails, ...details])];
+      const reasonSuffix = allReasons.length > 0
+        ? `\n${allReasons.slice(0, 2).join(', ')}${allReasons.length > 2 ? ` +${allReasons.length - 2}` : ''}`
+        : '';
+      const fullLabel = `${typeLabel}${reasonSuffix}`;
 
       return {
         id: link.id,
         source: link.source,
         target: link.target,
-        label: typeLabel,
+        label: fullLabel,
         labelStyle: {
           fontSize: 10,
           fill: color,
           fontWeight: 600,
+          opacity: isHighlighted ? 1 : 0.2,
         },
         style: {
           stroke: color,
-          strokeWidth: 2,
-          transition: 'opacity 0.2s ease',
+          strokeWidth: isHighlighted ? 2.5 : 1.5,
+          opacity: isHighlighted ? 1 : 0.15,
+          transition: 'opacity 0.2s ease, stroke-width 0.2s ease',
         },
-        animated: link.autoDetected,
+        animated: link.autoDetected && isHighlighted,
       };
     });
 
     return { nodes: flowNodes, edges: flowEdges };
-  }, [filteredLinks, filteredProjectIds, projectMap]);
+  }, [filteredLinks, filteredProjectIds, projectMap, connectedIds, sharedTables, sharedEvents]);
 
   // 노드 클릭 핸들러
   const handleNodeClick: NodeMouseHandler = useCallback(
@@ -284,27 +337,6 @@ function CrossProjectFlowDiagram({
     setEdgeHover(null);
   }, []);
 
-  // Hover 하이라이트를 CSS로 처리 - 노드 객체 재생성 방지 (BUG-009)
-  // NOTE: useMemo는 early return 전에 호출해야 함 (Rules of Hooks - BUG-011)
-  const hoverCss = useMemo(() => {
-    if (nodes.length === 0 || !connectedIds) return null;
-    const scope = '[data-testid="cross-project-flow-diagram"]';
-    const nodeSel = Array.from(connectedIds.nodeIds)
-      .map(id => `${scope} .react-flow__node[data-id="${id}"]`)
-      .join(',');
-    const edgeSel = connectedIds.edgeIds.size > 0
-      ? Array.from(connectedIds.edgeIds)
-          .map(id => `${scope} [data-testid="rf__edge-${id}"]`)
-          .join(',')
-      : null;
-    return `
-      ${scope} .react-flow__node { opacity: 0.3 !important; transition: opacity 0.2s ease !important; }
-      ${nodeSel} { opacity: 1 !important; }
-      ${scope} .react-flow__edge { opacity: 0.15 !important; transition: opacity 0.2s ease !important; }
-      ${edgeSel ? `${edgeSel} { opacity: 1 !important; }` : ''}
-    `;
-  }, [connectedIds, nodes.length]);
-
   if (nodes.length === 0) {
     return (
       <div
@@ -325,7 +357,6 @@ function CrossProjectFlowDiagram({
 
   return (
     <div data-testid="cross-project-flow-diagram" style={{ height: '100%', width: '100%', position: 'relative' }}>
-      {hoverCss && <style>{hoverCss}</style>}
       <ReactFlow
         nodes={nodes}
         edges={edges}
