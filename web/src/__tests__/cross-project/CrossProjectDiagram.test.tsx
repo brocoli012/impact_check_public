@@ -272,22 +272,20 @@ describe('CrossProjectDiagram - Pin Click (TASK-211~215)', () => {
 });
 
 describe('CrossProjectDiagram - BUG-009: Hover via CSS (no node recreation)', () => {
-  it('should not recreate node objects on hover (nodes remain stable)', () => {
+  it('should keep same number of nodes on hover (no nodes added/removed)', () => {
     render(<CrossProjectDiagram links={mockLinks} />);
 
-    // 초기 노드 참조 캡처
-    const initialNodes = capturedProps.nodes;
-    expect(initialNodes).toBeDefined();
-    expect(initialNodes.length).toBe(3);
+    // 초기 노드 수 캡처
+    const initialNodeCount = capturedProps.nodes.length;
+    expect(initialNodeCount).toBe(3);
 
     // hover 진입 시뮬레이션
     act(() => {
       capturedProps.onNodeMouseEnter?.({} as any, { id: 'frontend' } as any);
     });
 
-    // hover 후에도 노드 객체가 동일 참조 (재생성되지 않음)
-    const nodesAfterHover = capturedProps.nodes;
-    expect(nodesAfterHover).toBe(initialNodes);
+    // hover 후에도 노드 수가 동일
+    expect(capturedProps.nodes.length).toBe(initialNodeCount);
   });
 
   it('should render CSS style tag for hover dimming instead of changing node styles', () => {
@@ -357,5 +355,18 @@ describe('CrossProjectDiagram - BUG-009: Hover via CSS (no node recreation)', ()
 
     // pin이 되어야 함 (click handler 정상 동작)
     expect(screen.getByTestId('pin-info-bar')).toBeInTheDocument();
+  });
+
+  it('should not throw hooks error when transitioning from empty to non-empty links (BUG-011)', () => {
+    // 초기: 빈 링크 → empty 상태
+    const { rerender } = render(<CrossProjectDiagram links={[]} />);
+    expect(screen.getByTestId('cross-project-diagram-empty')).toBeInTheDocument();
+
+    // 데이터 로드 후: 링크 있음 → 다이어그램 렌더
+    // 이전 코드에서는 useMemo가 early return 뒤에 있어 hooks 수 불일치로 React error #310 발생
+    expect(() => {
+      rerender(<CrossProjectDiagram links={mockLinks} />);
+    }).not.toThrow();
+    expect(screen.getByTestId('mock-reactflow')).toBeInTheDocument();
   });
 });

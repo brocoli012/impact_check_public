@@ -218,17 +218,10 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
     };
   }, [pinnedNodeId, links, isEmpty]);
 
-  if (isEmpty) {
-    return (
-      <div data-testid="cross-project-diagram-empty" className="text-sm text-gray-400 py-8 text-center">
-        등록된 프로젝트 의존성이 없습니다
-      </div>
-    );
-  }
-
   // Hover 하이라이트를 CSS로 처리 - 노드 객체 재생성 방지 (BUG-009)
+  // NOTE: useMemo는 early return 전에 호출해야 함 (Rules of Hooks - BUG-011)
   const hoverCss = useMemo(() => {
-    if (pinnedNodeId || !hoveredNodeId) return null;
+    if (isEmpty || pinnedNodeId || !hoveredNodeId) return null;
     const nodeIds = new Set<string>([hoveredNodeId]);
     const edgeIds = new Set<string>();
     links.forEach((link, idx) => {
@@ -253,7 +246,15 @@ function CrossProjectDiagram({ links, onNodeClick }: CrossProjectDiagramProps) {
       ${scope} .react-flow__edge { opacity: 0.15 !important; transition: opacity 0.2s ease !important; }
       ${edgeSel ? `${edgeSel} { opacity: 1 !important; }` : ''}
     `;
-  }, [hoveredNodeId, pinnedNodeId, links]);
+  }, [hoveredNodeId, pinnedNodeId, links, isEmpty]);
+
+  if (isEmpty) {
+    return (
+      <div data-testid="cross-project-diagram-empty" className="text-sm text-gray-400 py-8 text-center">
+        등록된 프로젝트 의존성이 없습니다
+      </div>
+    );
+  }
 
   return (
     <div data-testid="cross-project-diagram">

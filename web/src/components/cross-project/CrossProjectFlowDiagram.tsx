@@ -284,6 +284,27 @@ function CrossProjectFlowDiagram({
     setEdgeHover(null);
   }, []);
 
+  // Hover 하이라이트를 CSS로 처리 - 노드 객체 재생성 방지 (BUG-009)
+  // NOTE: useMemo는 early return 전에 호출해야 함 (Rules of Hooks - BUG-011)
+  const hoverCss = useMemo(() => {
+    if (nodes.length === 0 || !connectedIds) return null;
+    const scope = '[data-testid="cross-project-flow-diagram"]';
+    const nodeSel = Array.from(connectedIds.nodeIds)
+      .map(id => `${scope} .react-flow__node[data-id="${id}"]`)
+      .join(',');
+    const edgeSel = connectedIds.edgeIds.size > 0
+      ? Array.from(connectedIds.edgeIds)
+          .map(id => `${scope} [data-testid="rf__edge-${id}"]`)
+          .join(',')
+      : null;
+    return `
+      ${scope} .react-flow__node { opacity: 0.3 !important; transition: opacity 0.2s ease !important; }
+      ${nodeSel} { opacity: 1 !important; }
+      ${scope} .react-flow__edge { opacity: 0.15 !important; transition: opacity 0.2s ease !important; }
+      ${edgeSel ? `${edgeSel} { opacity: 1 !important; }` : ''}
+    `;
+  }, [connectedIds, nodes.length]);
+
   if (nodes.length === 0) {
     return (
       <div
@@ -301,26 +322,6 @@ function CrossProjectFlowDiagram({
       </div>
     );
   }
-
-  // Hover 하이라이트를 CSS로 처리 - 노드 객체 재생성 방지 (BUG-009)
-  const hoverCss = useMemo(() => {
-    if (!connectedIds) return null;
-    const scope = '[data-testid="cross-project-flow-diagram"]';
-    const nodeSel = Array.from(connectedIds.nodeIds)
-      .map(id => `${scope} .react-flow__node[data-id="${id}"]`)
-      .join(',');
-    const edgeSel = connectedIds.edgeIds.size > 0
-      ? Array.from(connectedIds.edgeIds)
-          .map(id => `${scope} [data-testid="rf__edge-${id}"]`)
-          .join(',')
-      : null;
-    return `
-      ${scope} .react-flow__node { opacity: 0.3 !important; transition: opacity 0.2s ease !important; }
-      ${nodeSel} { opacity: 1 !important; }
-      ${scope} .react-flow__edge { opacity: 0.15 !important; transition: opacity 0.2s ease !important; }
-      ${edgeSel ? `${edgeSel} { opacity: 1 !important; }` : ''}
-    `;
-  }, [connectedIds]);
 
   return (
     <div data-testid="cross-project-flow-diagram" style={{ height: '100%', width: '100%', position: 'relative' }}>
