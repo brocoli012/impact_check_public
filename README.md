@@ -56,6 +56,29 @@ kic 불러줘
 
 > 💡 **참고**: 설치 후 최초 실행 시 의존성 설치(`npm install`)와 빌드(`npm run build`)가 자동으로 진행됩니다. 약 1~2분 소요될 수 있습니다.
 
+### Mermaid MCP (다이어그램 시각화)
+
+차트/다이어그램 시각화를 위해 claude-mermaid MCP 설치가 필요합니다:
+
+```bash
+npm install -g claude-mermaid
+```
+
+설치 후 `~/.claude/settings.json`에 MCP 설정을 추가하세요:
+
+```json
+{
+  "mcpServers": {
+    "claude-mermaid": {
+      "command": "claude-mermaid",
+      "args": []
+    }
+  }
+}
+```
+
+> 💡 Mermaid MCP가 설치되면 영향도 다이어그램, 의존성 그래프, 변경 범위 시각화 등을 브라우저에서 실시간 렌더링하고 SVG/PNG로 내보낼 수 있습니다.
+
 ---
 
 ## 사용 방법
