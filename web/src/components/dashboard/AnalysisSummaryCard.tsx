@@ -4,6 +4,7 @@
  */
 
 import type { AnalysisSummary } from '../../types';
+import RiskAreaDisplay from './RiskAreaDisplay';
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                              */
@@ -64,24 +65,11 @@ function AnalysisSummaryCard({ summary, section = 'all' }: AnalysisSummaryCardPr
         </div>
       )}
 
-      {/* Risk Areas - only shown with keyFindings or all */}
+      {/* Risk Areas - only shown with keyFindings or all (REQ-018-A2: supports string | RiskArea) */}
       {showKeyFindings && hasRiskAreas && (
         <div data-testid="summary-risk-areas">
           <h4 className="text-sm font-semibold text-gray-900 mb-2">위험 영역</h4>
-          <div className="bg-red-50 rounded-lg p-3">
-            <ul className="space-y-1.5">
-              {summary.riskAreas.map((risk, index) => (
-                <li
-                  key={index}
-                  className="flex items-start gap-2 text-sm text-gray-700"
-                  data-testid={`risk-area-${index}`}
-                >
-                  <span className="mt-1.5 w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden="true" />
-                  <span>{risk}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <RiskAreaDisplay riskAreas={summary.riskAreas} />
         </div>
       )}
     </div>

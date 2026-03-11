@@ -318,9 +318,9 @@ describe('Dashboard REQ-009 Integration', () => {
       expect(screen.getByTestId('key-finding-0')).toHaveTextContent('발견 1');
       expect(screen.getByTestId('key-finding-1')).toHaveTextContent('발견 2');
 
-      // risk areas
+      // risk areas (REQ-018-A2: RiskAreaDisplay uses string-risk-N testids for string items)
       expect(screen.getByTestId('summary-risk-areas')).toBeInTheDocument();
-      expect(screen.getByTestId('risk-area-0')).toHaveTextContent('위험 영역 A');
+      expect(screen.getByTestId('string-risk-0')).toHaveTextContent('위험 영역 A');
     });
 
     it('should not render AnalysisSummaryCard when analysisSummary is absent', async () => {

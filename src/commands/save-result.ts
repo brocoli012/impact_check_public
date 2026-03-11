@@ -14,8 +14,9 @@ import { CrossProjectManager } from '../core/cross-project/cross-project-manager
 import { DetectResult } from '../core/cross-project/types';
 import { Indexer } from '../core/indexing/indexer';
 import { validateImpactResult } from '../utils/validators';
-import { readJsonFile, getImpactDir } from '../utils/file';
+import { readJsonFile, getImpactDir, ensureDir } from '../utils/file';
 import { logger } from '../utils/logger';
+import { ReviewDocumentGenerator } from '../core/review/review-generator';
 
 /**
  * SaveResultCommand - 분석 결과 저장 명령어
@@ -124,6 +125,25 @@ export class SaveResultCommand implements Command {
         }
       }
 
+      // === 후처리 hook: 리뷰 결과서 자동 생성 (REQ-018-A1) ===
+      const skipReview = this.args.includes('--skip-review');
+      if (skipReview) {
+        logger.info('[후처리] 리뷰 결과서 생성 건너뜀 (--skip-review)');
+      } else {
+        try {
+          const reviewResult = this.generateReviewHook(result, resolvedProjectId);
+          if (reviewResult) {
+            logger.success(`[후처리] 리뷰 결과서 자동 생성 완료`);
+            console.log(`  > 파일: ${reviewResult.filePath}`);
+            console.log(`  > 섹션: ${reviewResult.sectionCount}개`);
+          }
+        } catch (hookErr) {
+          const hookMsg = hookErr instanceof Error ? hookErr.message : String(hookErr);
+          logger.warn(`[후처리] 리뷰 결과서 생성 실패 (분석 결과는 저장됨): ${hookMsg}`);
+          logger.info('수동으로 생성하려면: /impact generate-review');
+        }
+      }
+
       return {
         code: ResultCode.SUCCESS,
         message: `Result saved: ${savedId}`,
@@ -186,6 +206,29 @@ export class SaveResultCommand implements Command {
     }
 
     return result;
+  }
+
+  /**
+   * 리뷰 결과서 자동 생성 후처리 hook (REQ-018-A1)
+   * @returns 생성 결과 또는 null
+   */
+  private generateReviewHook(
+    result: ConfidenceEnrichedResult,
+    projectId: string,
+  ): { filePath: string; sectionCount: number } | null {
+    const generator = new ReviewDocumentGenerator({ projectId });
+    const reviewDoc = generator.generate(result);
+
+    // Generate output path
+    const docsDir = path.join(getImpactDir(), 'docs');
+    ensureDir(docsDir);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const outputPath = path.join(docsDir, `${projectId}-review-${timestamp}.md`);
+
+    fs.writeFileSync(outputPath, reviewDoc.markdown, 'utf-8');
+
+    const sectionCount = reviewDoc.sections.filter(s => s.success).length;
+    return { filePath: outputPath, sectionCount };
   }
 
   /**

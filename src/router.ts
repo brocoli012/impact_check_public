@@ -27,6 +27,8 @@ import { ResultStatusCommand } from './commands/result-status';
 import { GapCheckCommand } from './commands/gap-check';
 import { UpdateCommand } from './commands/update';
 import { StatusCommand } from './commands/status';
+import { GenerateReviewCommand } from './commands/generate-review';
+import { PolicyDocCommand } from './commands/policy-doc';
 
 /** 알 수 없는 명령어 에러 */
 export class UnknownCommandError extends Error {
@@ -77,6 +79,8 @@ const COMMANDS: Record<string, CommandConstructor> = {
   'gap-check': GapCheckCommand,
   'update': UpdateCommand,
   'status': StatusCommand,
+  'generate-review': GenerateReviewCommand,
+  'policy-doc': PolicyDocCommand,
 } as const;
 
 /**

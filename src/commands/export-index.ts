@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import { Command, CommandResult, ResultCode } from '../types/common';
 import { ConfigManager } from '../config/config-manager';
 import { Indexer } from '../core/indexing/indexer';
+import { PolicyDocManager } from '../core/review/policy-doc-manager';
 import { summarizeIndex } from '../utils/index-summarizer';
 import { logger } from '../utils/logger';
 
@@ -59,7 +60,21 @@ export class ExportIndexCommand implements Command {
       }
 
       // 요약 또는 전체
-      const output = isFull ? codeIndex : summarizeIndex(codeIndex);
+      const output: Record<string, unknown> = isFull ? { ...codeIndex } : { ...summarizeIndex(codeIndex) };
+
+      // 문서화된 정책 로드 (PolicyDocManager)
+      try {
+        const policyDocManager = new PolicyDocManager();
+        const documentedPolicies = policyDocManager.list();
+        output.documentedPolicies = documentedPolicies;
+        logger.debug(`Loaded ${documentedPolicies.length} documented policies for export.`);
+      } catch (policyErr) {
+        // 에러 격리: 정책 로딩 실패가 export-index 전체를 실패시키지 않음
+        const policyErrMsg = policyErr instanceof Error ? policyErr.message : String(policyErr);
+        logger.warn(`정책 문서 로딩 실패 (무시됨): ${policyErrMsg}`);
+        output.documentedPolicies = [];
+      }
+
       const jsonStr = JSON.stringify(output, null, 2);
 
       // 출력

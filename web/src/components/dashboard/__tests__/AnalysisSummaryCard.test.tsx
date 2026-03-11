@@ -108,7 +108,7 @@ describe('AnalysisSummaryCard', () => {
     });
   });
 
-  /* ---------- riskAreas 표시 ---------- */
+  /* ---------- riskAreas 표시 (REQ-018-A2: RiskAreaDisplay 사용) ---------- */
   describe('riskAreas 목록 표시', () => {
     it('riskAreas 목록이 올바르게 표시된다 (2개)', () => {
       const summary = getFullSummary();
@@ -118,16 +118,18 @@ describe('AnalysisSummaryCard', () => {
       expect(section).toBeInTheDocument();
       expect(section).toHaveTextContent('위험 영역');
 
+      // REQ-018-A2: RiskAreaDisplay uses string-risk-N testids for string items
       for (let i = 0; i < summary.riskAreas.length; i++) {
-        const item = screen.getByTestId(`risk-area-${i}`);
-        expect(item).toHaveTextContent(summary.riskAreas[i]);
+        const item = screen.getByTestId(`string-risk-${i}`);
+        expect(item).toHaveTextContent(summary.riskAreas[i] as string);
       }
     });
 
     it('riskAreas 항목에 빨간색 점이 표시된다', () => {
       render(<AnalysisSummaryCard summary={getFullSummary()} />);
 
-      const item = screen.getByTestId('risk-area-0');
+      // REQ-018-A2: RiskAreaDisplay uses string-risk-N testids for string items
+      const item = screen.getByTestId('string-risk-0');
       const dot = item.querySelector('span[aria-hidden="true"]');
       expect(dot).not.toBeNull();
       expect(dot!.className).toContain('bg-red-500');

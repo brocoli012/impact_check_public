@@ -118,6 +118,34 @@ export function validateImpactResult(data: unknown): ValidationResult {
           message: 'analysisSummary.overview must be a non-empty string',
         });
       }
+
+      // REQ-018-A2: riskAreas 유니온 타입 검증 (string | RiskArea)[]
+      if (Array.isArray(as_['riskAreas'])) {
+        for (const item of as_['riskAreas'] as unknown[]) {
+          if (typeof item === 'string') continue; // 레거시 호환
+          if (typeof item === 'object' && item !== null) {
+            const riskObj = item as Record<string, unknown>;
+            if (!riskObj['description'] || typeof riskObj['description'] !== 'string') {
+              errors.push({
+                field: 'analysisSummary.riskAreas[]',
+                message: 'RiskArea 객체는 description(string) 필드가 필수입니다.',
+              });
+            }
+            if (!riskObj['impact'] || typeof riskObj['impact'] !== 'string' ||
+                !['low', 'medium', 'high', 'critical'].includes(riskObj['impact'] as string)) {
+              errors.push({
+                field: 'analysisSummary.riskAreas[]',
+                message: 'RiskArea 객체는 impact 필드가 필수이며 low/medium/high/critical 중 하나여야 합니다.',
+              });
+            }
+          } else {
+            errors.push({
+              field: 'analysisSummary.riskAreas[]',
+              message: 'riskAreas 항목은 string 또는 RiskArea 객체여야 합니다.',
+            });
+          }
+        }
+      }
     }
   }
 

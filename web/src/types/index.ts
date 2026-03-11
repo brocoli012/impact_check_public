@@ -392,11 +392,39 @@ export interface WebBusinessRule {
   relatedFeatures: string[];
 }
 
+// ============================================================
+// [REQ-018-A2] 구조화된 리스크 항목
+// ============================================================
+
+/** 구조화된 리스크 항목 (REQ-018-A2) */
+export interface RiskArea {
+  /** 리스크 ID */
+  id: string;
+  /** 리스크 설명 */
+  description: string;
+  /** 영향도 */
+  impact: 'low' | 'medium' | 'high' | 'critical';
+  /** 완화 방안 */
+  mitigation: string;
+  /** 관련 프로젝트 ID 목록 */
+  relatedProjects: string[];
+  /** 관련 태스크 ID 목록 */
+  relatedTasks?: string[];
+  /** 리스크 카테고리 */
+  category?: 'technical' | 'data-integrity' | 'performance' | 'dependency' | 'business';
+}
+
+/** RiskArea 타입 가드 (REQ-018-A2) */
+export function isRiskAreaObject(item: string | RiskArea): item is RiskArea {
+  return typeof item === 'object' && item !== null && 'description' in item && 'impact' in item;
+}
+
 /** 분석 요약 */
 export interface AnalysisSummary {
   overview: string;
   keyFindings: string[];
-  riskAreas: string[];
+  /** 위험 영역 - 하위 호환: string[] | RiskArea[] | 혼합 (REQ-018-A2) */
+  riskAreas: (string | RiskArea)[];
   /** 현재 시스템의 문제점 목록 */
   currentProblems?: string[];
   /** 기획서 적용 전후 데이터 흐름 변경 */
