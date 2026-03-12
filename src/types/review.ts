@@ -143,6 +143,84 @@ export const SECTION_NAMES: Record<ReviewSectionType, string> = {
 export const ALL_SECTION_TYPES: ReviewSectionType[] = Object.keys(SECTION_NAMES) as ReviewSectionType[];
 
 // ============================================================
+// 릴리즈 노트 자동 생성 타입
+// ============================================================
+
+/** 릴리즈 노트 생성 옵션 */
+export interface ReleaseNoteOptions {
+  /** 버전 문자열 (예: "REQ-019 릴리스") */
+  version?: string;
+  /** 배포일 (YYYY-MM-DD, 기본값: 오늘) */
+  date?: string;
+  /** 이전 버전 문자열 */
+  previousVersion?: string;
+  /** 이전 커밋 해시 */
+  previousCommit?: string;
+  /** 현재 커밋 해시 (기본값: HEAD) */
+  currentCommit?: string;
+  /** 출력 파일 경로 */
+  outputPath?: string;
+  /** QA 현황 포함 여부 */
+  includeQA?: boolean;
+  /** dry-run 모드 (출력만 하고 파일 저장 안 함) */
+  dryRun?: boolean;
+}
+
+/** 개별 커밋 정보 */
+export interface CommitInfo {
+  /** 커밋 해시 (short) */
+  hash: string;
+  /** 커밋 메시지 */
+  message: string;
+  /** 커밋 날짜 (ISO 형식) */
+  date: string;
+  /** 변경된 파일 목록 */
+  files: string[];
+}
+
+/** 커밋 분류 결과 */
+export interface CategorizedChanges {
+  /** 신규 기능 (feat: 커밋) */
+  features: CommitInfo[];
+  /** 개선 (improve/enhance/refactor 커밋) */
+  improvements: CommitInfo[];
+  /** 버그 수정 (fix/bug 커밋) */
+  bugfixes: CommitInfo[];
+  /** 기타 커밋 */
+  others: CommitInfo[];
+}
+
+/** 릴리즈 노트에 포함할 변경 항목 */
+export interface ReleaseNoteChangeItem {
+  /** 순번 */
+  index: number;
+  /** 기능명 */
+  name: string;
+  /** 유형: 신규 | 개선 | 수정 | 삭제 */
+  type: '신규' | '개선' | '수정' | '삭제';
+  /** 핵심 변경 설명 */
+  description: string;
+  /** 관련 커밋 해시 목록 */
+  commits: string[];
+}
+
+/** 릴리즈 노트 입력 데이터 (git log 파싱 결과) */
+export interface ReleaseNoteInput {
+  /** 분류된 커밋 */
+  categorized: CategorizedChanges;
+  /** 전체 커밋 목록 */
+  allCommits: CommitInfo[];
+  /** 시작 커밋 */
+  fromCommit: string;
+  /** 종료 커밋 */
+  toCommit: string;
+  /** 새로운/변경된 명령어 목록 */
+  newCommands: string[];
+  /** 잠재적 파괴 변경 목록 */
+  breakingChanges: string[];
+}
+
+// ============================================================
 // 정책 문서 관리 타입 (REQ-018-A3)
 // ============================================================
 

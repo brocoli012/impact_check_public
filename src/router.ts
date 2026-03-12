@@ -29,6 +29,7 @@ import { UpdateCommand } from './commands/update';
 import { StatusCommand } from './commands/status';
 import { GenerateReviewCommand } from './commands/generate-review';
 import { PolicyDocCommand } from './commands/policy-doc';
+import { ReleaseNoteCommand } from './commands/release-note';
 
 /** 알 수 없는 명령어 에러 */
 export class UnknownCommandError extends Error {
@@ -81,6 +82,7 @@ const COMMANDS: Record<string, CommandConstructor> = {
   'status': StatusCommand,
   'generate-review': GenerateReviewCommand,
   'policy-doc': PolicyDocCommand,
+  'release-note': ReleaseNoteCommand,
 } as const;
 
 /**

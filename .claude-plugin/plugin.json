@@ -5,8 +5,8 @@
   "author": {
     "name": "brocoli012"
   },
-  "homepage": "https://github.com/brocoli012/impact_check_public",
-  "repository": "https://github.com/brocoli012/impact_check_public",
+  "homepage": "https://github.com/brocoli012/impact_checker",
+  "repository": "https://github.com/brocoli012/impact_checker",
   "license": "MIT",
   "keywords": ["impact-analysis", "code-analysis", "spec-analysis", "ticket-generation"]
 }

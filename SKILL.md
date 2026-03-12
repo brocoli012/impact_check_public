@@ -29,6 +29,7 @@ commands:
   - /impact status
   - /impact generate-review
   - /impact policy-doc
+  - /impact release-note
 ---
 
 # Kurly Impact Checker
@@ -116,6 +117,16 @@ commands:
 - `show <id>`: 개별 정책 문서 상세 조회
 - `remove <id>`: 정책 문서 삭제
 실행: node {skill_dir}/dist/index.js policy-doc <subcommand> [options]
+
+### /impact release-note [--from <commit>] [--to <commit>] [--version <ver>] [--output <path>] [--dry-run]
+git log를 분석하여 릴리즈 노트를 자동 생성합니다. 커밋 메시지를 파싱하여 신규 기능, 개선, 버그 수정으로 분류하고 구조화된 Markdown 문서를 생성합니다.
+- `--from <commit>`: 시작 커밋 (기본: 마지막 태그)
+- `--to <commit>`: 종료 커밋 (기본: HEAD)
+- `--version <ver>`: 버전 문자열 (예: "REQ-020 릴리스")
+- `--output <path>`: 출력 파일 경로 (기본: `~/.impact/docs/release-notes/kic-update-{date}.md`)
+- `--dry-run`: 미리보기만 (파일 저장 안 함)
+- `--no-qa`: QA 현황 섹션 제외
+실행: node {skill_dir}/dist/index.js release-note [--from <commit>] [--to <commit>] [--version <ver>] [--output <path>] [--dry-run]
 
 ### /impact policy-check [--policy <name>] [--change <description>]
 정책 영향도를 분석합니다. 옵션 없이 실행하면 전체 정책 현황 요약을 표시합니다.
@@ -933,6 +944,28 @@ AI 어노테이션 보강 완료:
 | 업데이트 확인 | `node {skill_dir}/dist/index.js update --check` | "업데이트", "최신 버전" |
 | 업데이트 적용 | `node {skill_dir}/dist/index.js update --force` | "업데이트 해줘" |
 | 상태 요약 | `node {skill_dir}/dist/index.js status` | "상태", "현황", "status" |
+| 릴리즈 노트 생성 | `node {skill_dir}/dist/index.js release-note` | "릴리즈 노트", "배포 노트", "변경 사항 정리", "release note" |
+| 릴리즈 노트 미리보기 | `node {skill_dir}/dist/index.js release-note --dry-run` | "릴리즈 노트 미리보기", "변경 사항 확인" |
+
+### 배포 프로토콜
+
+기능 개선/버그 수정 후 커밋/푸시 전에 다음을 수행합니다:
+
+1. `/impact release-note --dry-run` 실행하여 릴리즈 노트 미리보기
+2. 생성된 릴리즈 노트 내용 확인
+3. `/impact release-note` 실행하여 릴리즈 노트 파일 저장
+4. 커밋 및 푸시 진행
+
+```bash
+# 미리보기
+node {skill_dir}/dist/index.js release-note --dry-run --from <이전커밋>
+
+# 저장
+node {skill_dir}/dist/index.js release-note --from <이전커밋> --version "REQ-XXX 릴리스"
+
+# 특정 경로에 저장
+node {skill_dir}/dist/index.js release-note --from <이전커밋> --output ~/Desktop/release-note.md
+```
 
 ### 분석 결과 응답 형식
 
